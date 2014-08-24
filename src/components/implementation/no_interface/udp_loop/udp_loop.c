@@ -171,11 +171,11 @@ from_data_new(td_t td)
 {
 	int from, to, amnt;
 	char *buf;
+	cbuf_t cb;
 
 	from = td;
 	while (1) {
-		int ret;
-		cbuf_t cb;
+		int ret;		
 
 		buf = cbuf_alloc(BUFF_SZ, &cb);
 		assert(buf);
@@ -189,10 +189,10 @@ from_data_new(td_t td)
 			printc("read from fd %d produced %d.\n", from, amnt);
 			BUG();
 		}
-		cbuf_free(buf);
+		cbuf_free(cb);
 	}
 done:
-	cbuf_free(buf);
+	cbuf_free(cb);
 	return;
 close:
 	from_trelease(cos_spd_id(), from);
@@ -204,12 +204,13 @@ to_data_new(struct tor_conn *tc)
 {
 	int from, to, amnt;
 	char *buf;
+    cbuf_t cb;
 
 	from = tc->from;
 	to   = tc->to;
 	while (1) {
 		int ret;
-		cbuf_t cb;
+		
 
 		if (!(buf = cbuf_alloc(BUFF_SZ, &cb))) BUG();
 		/* printc("connmgr reads https\n"); */
@@ -228,10 +229,10 @@ to_data_new(struct tor_conn *tc)
 			       ret, amnt, to);
 			goto close;
 		}
-		cbuf_free(buf);
+		cbuf_free(cb);
 	}
 done:
-	cbuf_free(buf);
+	cbuf_free(cb);
 	return;
 close:
 	mapping_remove(from, to, tc->feid, tc->teid);

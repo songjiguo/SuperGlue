@@ -286,7 +286,6 @@ tmem_grant(struct spd_tmem_info *sti)
 			tmem_update_stats_block(sti, cos_get_thd_id());
 		}
 		/* DOUT("In tmem_grant:: mem in %d set to relinquish, %d waiting\n", sti->spdid, cos_get_thd_id()); */
-		printc("In tmem_grant:: mem in %d set to relinquish, %d waiting\n", sti->spdid, cos_get_thd_id());
 
 		/* 
 		 * gap: relinquish is NOT really used right now to

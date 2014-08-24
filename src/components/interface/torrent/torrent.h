@@ -19,6 +19,7 @@ typedef enum {
 	TOR_WRITE = 0x1,
 	TOR_READ  = 0x2,
 	TOR_SPLIT = 0x4,
+	TOR_NONPERSIST = 0x8,
 	TOR_RW    = TOR_WRITE | TOR_READ, 
 	TOR_ALL   = TOR_RW    | TOR_SPLIT /* 0 is a synonym */
 } tor_flags_t;
@@ -29,6 +30,7 @@ int tmerge(spdid_t spdid, td_t td, td_t td_into, char *param, int len);
 int tread(spdid_t spdid, td_t td, int cbid, int sz);
 int treadp(spdid_t spdid, td_t td, int *off, int *sz);
 int twrite(spdid_t spdid, td_t td, int cbid, int sz);
+int twritep(spdid_t spdid, td_t td, int cbid, int sz);
 int trmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, char *retval, unsigned int max_rval_len);
 int twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen);
 
@@ -49,7 +51,7 @@ tread_pack(spdid_t spdid, td_t td, char *data, int len)
         }
 	memcpy(data, d, ret);
 free:
-	cbuf_free(d);	
+	cbuf_free(cb);
 	return ret;
 }
 
@@ -65,7 +67,7 @@ twrite_pack(spdid_t spdid, td_t td, char *data, int len)
 
 	memcpy(d, data, len);
 	ret = twrite(spdid, td, cb, len);
-	cbuf_free(d);
+	cbuf_free(cb);
 	
 	return ret;
 }

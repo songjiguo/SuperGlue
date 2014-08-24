@@ -197,6 +197,12 @@ rd_reflection(int cap)
 
 	return;
 }
+#else
+static void
+rd_reflection(int cap)
+{
+	return;
+}
 #endif
 
 static struct rec_data_lk *
@@ -219,17 +225,22 @@ done:
 	return rd;
 }
 
-CSTUB_FN_ARGS_1(unsigned long, __lock_component_alloc, spdid_t, spdid)
+CSTUB_FN(unsigned long, __lock_component_alloc) (struct usr_inv_cap *uc,
+						 spdid_t spdid)
+{
+	long fault = 0;
+	unsigned long ret;
 
 redo:
-CSTUB_ASM_1(__lock_component_alloc, spdid)
 
-       if (unlikely (fault)){
-	       CSTUB_FAULT_UPDATE();
-       	       goto redo;
-       }
-
-CSTUB_POST
+	CSTUB_INVOKE(ret, fault, uc, 1, spdid);		
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
+	
+	return ret;
+}
 
 
 /************************************/
@@ -240,19 +251,23 @@ CSTUB_POST
    lock_component_alloc will get a server side lock id every time
    client side id should always be uniquex 
 */
-CSTUB_FN_ARGS_1(unsigned long, lock_component_alloc, spdid_t, spdid)
+CSTUB_FN(unsigned long, lock_component_alloc) (struct usr_inv_cap *uc,
+					       spdid_t spdid)
+{
+	long fault;
+	unsigned long ret;
 
         struct rec_data_lk *rd = NULL;
 	unsigned long ser_lkid, cli_lkid;
 redo:
-CSTUB_ASM_1(lock_component_alloc, spdid)
-
-       if (unlikely (fault)){
-	       CSTUB_FAULT_UPDATE();
-       	       goto redo;
-       }
-
-       if ((ser_lkid = ret) > 0) {
+	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
+	
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
+	
+	if ((ser_lkid = ret) > 0) {
 		// if does exist, we need an unique client id. Otherwise, create it
 		if (unlikely(rdlk_lookup(ser_lkid))) {
 			cli_lkid = get_unique();
@@ -263,93 +278,112 @@ CSTUB_ASM_1(lock_component_alloc, spdid)
 		// always ensure that cli_lkid is unique
 		rd = rdlk_alloc(cli_lkid);
 		assert(rd);
-
+		
 		rd_cons(rd, cos_spd_id(), cli_lkid, ser_lkid, 0);
 		INIT_LIST(&rd->blkthd, next, prev);
 		ret = cli_lkid;
 	}
-
-CSTUB_POST
+	
+	return ret;
+}
 
 
 // usually the lock is not freed once created
-CSTUB_FN_ARGS_2(int, lock_component_free, spdid_t, spdid, unsigned long, lock_id)
+CSTUB_FN(int, lock_component_free) (struct usr_inv_cap *uc,
+				    spdid_t spdid, unsigned long lock_id)
+{
+	long fault = 0;
+	int ret;
 
         struct rec_data_lk *rd = NULL;
-
         rd = update_rd(lock_id, uc->cap_no);
 	if (!rd) {
 		printc("try to free a non-tracking lock\n");
 		return -1;
 	}
+	
+	CSTUB_INVOKE(ret, fault, uc, 2 , spdid, rd->s_lkid);
+	
+	if (unlikely(fault)) {
+		CSTUB_FAULT_UPDATE();
+	}
 
-CSTUB_ASM_2(lock_component_free, spdid, rd->s_lkid)
-
-       if (unlikely(fault)){
-	       CSTUB_FAULT_UPDATE();
-       }
-
-CSTUB_POST
+	return ret;
+}
 
 /* pretake still needs trying to contend the lock, so use goto redo */
 
-CSTUB_FN_ARGS_3(int, lock_component_pretake, spdid_t, spdid, unsigned long, lock_id, unsigned short int, thd)
-
+CSTUB_FN(int, lock_component_pretake) (struct usr_inv_cap *uc,
+				       spdid_t spdid, unsigned long lock_id, 
+				       unsigned short int thd)
+{
+	long fault = 0;
+	int ret;
+	
         struct rec_data_lk *rd = NULL;
 redo:
-printc("lock cli: pretake calling update_rd %d\n", cos_get_thd_id());
+	printc("lock cli: pretake calling update_rd %d\n", cos_get_thd_id());
         rd = update_rd(lock_id, uc->cap_no);
 	if (!rd) {
 		printc("try to pretake a non-tracking lock\n");
 		return -1;
 	}
-
-CSTUB_ASM_3(lock_component_pretake, spdid, rd->s_lkid, thd)
-
-       if (unlikely(fault)){
-	       printc("lock cli pretak: found fault \n");
-	       CSTUB_FAULT_UPDATE();
-       	       goto redo;
-       }
-
-CSTUB_POST
+	
+	CSTUB_INVOKE(ret, fault, uc, 3, spdid, rd->s_lkid, thd);
+	
+	if (unlikely(fault)){
+		printc("lock cli pretak: found fault \n");
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
+	
+	return ret;
+}
 
 /* track the block thread on each thread stack. No need to goto redo
  * since ret = 0 will force it to contend again with other threads
  */
 
-CSTUB_FN_ARGS_3(int, lock_component_take, spdid_t, spdid, unsigned long, lock_id, unsigned short int, thd)
+CSTUB_FN(int, lock_component_take) (struct usr_inv_cap *uc,
+				    spdid_t spdid, 
+				    unsigned long lock_id, unsigned short int thd)
+{
+	long fault = 0;
+	int ret;
 
 	struct blocked_thd blk_thd;
 	struct rec_data_lk *rd = NULL;
-
+	
         rd = update_rd(lock_id, uc->cap_no);   // call call booter instead
 	if (!rd) {
 		printc("try to take a non-tracking lock\n");
 		return -1;
 	}
-       rdlk_addblk(rd, &blk_thd);       
-
-CSTUB_ASM_3(lock_component_take, spdid, rd->s_lkid, thd)
-
-       if (unlikely (fault)){
-	       CSTUB_FAULT_UPDATE();
-               /* this will force contending the lock again */
-	       ret = 0; 
-       }
-       /*  remove current thd from blocking list since the
-	   fault occurs either before the current thd blocked
-	   (invoke scheduler) or after woken up (return from
-	   scheduler). So it should not staty on the blocking
-	   list after fault occurs */
-       REM_LIST(&blk_thd, next, prev);
-
-CSTUB_POST
-
-
+	rdlk_addblk(rd, &blk_thd);       
+	
+	CSTUB_INVOKE(ret, fault, uc, 3, spdid, rd->s_lkid, thd);
+	
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		/* this will force contending the lock again */
+		ret = 0; 
+	}
+	/*  remove current thd from blocking list since the
+	    fault occurs either before the current thd blocked
+	    (invoke scheduler) or after woken up (return from
+	    scheduler). So it should not staty on the blocking
+	    list after fault occurs */
+	REM_LIST(&blk_thd, next, prev);
+	
+	return ret;
+}
 
 /* There is no need to goto redo since reflection will wake up all threads from lock spd */
-CSTUB_FN_ARGS_2(int, lock_component_release, spdid_t, spdid, unsigned long, lock_id)
+CSTUB_FN(int, lock_component_release) (struct usr_inv_cap *uc,
+				       spdid_t spdid, unsigned long lock_id)
+{
+	long fault = 0;
+	int ret;
 
         struct rec_data_lk *rd = NULL;
 
@@ -359,10 +393,11 @@ CSTUB_FN_ARGS_2(int, lock_component_release, spdid_t, spdid, unsigned long, lock
 		return -1;
 	}
 
-CSTUB_ASM_2(lock_component_release, spdid, rd->s_lkid)
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_lkid);
 
-       if (unlikely (fault)){
-	       CSTUB_FAULT_UPDATE();
-       }
-
-CSTUB_POST
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+	}
+	
+	return ret;
+}

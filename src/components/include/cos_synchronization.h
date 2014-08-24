@@ -72,6 +72,7 @@ restart:
 		 * needed.  */
 		if (unlikely(owner)) {
 			int ret;
+
 			ret = lock_take_contention(l, &result, &prev_val, owner);
 			if (ret < 0) return ret;
 			/* try to take the lock again */
@@ -95,9 +96,7 @@ __lock_release(cos_lock_t *l, int smp) {
 		assert(sizeof(union cos_lock_atomic_struct) == sizeof(u32_t));
 		prev_val.v = l->atom.v; /* local copy of lock */
 		/* If we're here, we better own the lock... */
-		if (unlikely(prev_val.c.owner != curr)) {
-			BUG();
-		}
+		if (unlikely(prev_val.c.owner != curr)) BUG();
 		if (unlikely(prev_val.c.contested)) {
 			return lock_release_contention(l, &prev_val);
 		}

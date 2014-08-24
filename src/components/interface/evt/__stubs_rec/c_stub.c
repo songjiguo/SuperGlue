@@ -5,7 +5,33 @@
  1. virtual page allocated in malloc is increasing always (FIX later)
  2. thread woken up through reflection does not invoke trigger to update the state
      (add evt_update_status api to evt, but when to call this?)
-*/
+     
+  This interface is different from lock/sched/mm... since an event can
+  be triggered from a completely different component. create, wait and
+  free have to be done by the same component/interface, but trigger
+  can be from the same component or a different one. See evt_trigger 
+
+!!!! Here is an issue: if the event is triggered by a different thread
+     in a different component, how do we ensure that next time,
+     evt_trigger will pass the correct id to evt manager?  
+     
+     Solution 1: a separate spd that maintains the mapping of client
+     and server id. Need call this spd every time .... not good
+
+     Solution 2: in the place where evt is created, ensure only the
+     correct server side id is passed ... need check all places that
+     call evt_create and those cached evt id ... not good
+
+     Solution 3: track the client id and server id over the server
+     side interface. After the fault (all previous records will be
+     gone, but we only care about newly created server id), ensure
+     that a new evt id is created first and tracked/updated at the
+     server side. (this should be ensure since only lower thd triggers
+     the higher thd). Also need pass both cli and ser id to track.
+     Solution 3 seems a general solution for the case that there are
+     client and server id, and the same object state can be changed
+     over different client interfaces.  -- > see s_cstub.c
+ */
 
 #include <cos_component.h>
 #include <cos_debug.h>
@@ -187,46 +213,61 @@ update_rd(int evtid, int par_evtid, int cap)
         struct rec_data_evt *rd = NULL;
 
         rd = rdevt_lookup(evtid);
-	if (unlikely(!rd)) goto done;
+	if (unlikely(!rd)) {
+		/* rd = rdevt_alloc(evtid); */
+		/* assert(rd);	 */
+		/* rd_cons(rd, cos_spd_id(), evtid, evtid, 0, cos_get_thd_id()); */
+		/* INIT_LIST(&rd->blkthd, next, prev); */
+		
+		goto done;
+	}
 	if (likely(rd->fcnt == fcounter)) goto done;
 	rd->fcnt = fcounter;
 done:	
 	return rd;
 }
 
-CSTUB_FN_ARGS_1(unsigned long, __evt_create, spdid_t, spdid)
-
+CSTUB_FN(unsigned long, __evt_create) (struct usr_inv_cap *uc,
+				       spdid_t spdid)
+{
+	long fault = 0;
+	unsigned long ret;
 redo:
-CSTUB_ASM_1(__evt_create, spdid)
-       struct rec_data_evt *rd = NULL;
-
-       if (unlikely (fault)){
-	       CSTUB_FAULT_UPDATE();
-	       assert(0);
-       	       goto redo;
-       }
-
-CSTUB_POST
+	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
+	struct rec_data_evt *rd = NULL;
+	
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		assert(0);
+		goto redo;
+	}
+	
+	return ret;
+}
 
 
 /************************************/
 /******  client stub functions ******/
 /************************************/
 
-CSTUB_FN_ARGS_1(long, evt_create, spdid_t, spdid)
+CSTUB_FN(long, evt_create) (struct usr_inv_cap *uc,
+			    spdid_t spdid)
+{
+	long fault = 0;
+	long ret;
 
         struct rec_data_evt *rd = NULL;
         unsigned long ser_eid, cli_eid;
 redo:
 /* printc("evt cli: evt_create %d\n", cos_get_thd_id()); */
-CSTUB_ASM_1(evt_create, spdid)
+	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 
-       if (unlikely (fault)){
-	       CSTUB_FAULT_UPDATE();
-       	       goto redo;
-       }
-
-       if ((ser_eid = ret) > 0) {
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
+	
+	if ((ser_eid = ret) > 0) {
 		// if does exist, we need an unique id. Otherwise, create it
 		if (unlikely(rdevt_lookup(ser_eid))) {
 			cli_eid = get_unique();
@@ -236,35 +277,44 @@ CSTUB_ASM_1(evt_create, spdid)
 		}
 		rd = rdevt_alloc(cli_eid);
 		assert(rd);
-
+		
 		rd_cons(rd, cos_spd_id(), cli_eid, ser_eid, 0, cos_get_thd_id());
 		INIT_LIST(&rd->blkthd, next, prev);
 		ret = cli_eid;
 	}
 
-CSTUB_POST
+	return ret;
+}
 
-CSTUB_FN_ARGS_3(long, evt_split, spdid_t, spdid, long, parent_evt, int, grp)
-
+CSTUB_FN(long, evt_split) (struct usr_inv_cap *uc,
+			   spdid_t spdid, long parent_evt, int grp)
+{
+	long fault = 0;
+	long ret;
+	
         struct rec_data_evt *rd = NULL;
 redo:
 
-CSTUB_ASM_3(evt_split, spdid, parent_evt, grp)
+	CSTUB_INVOKE(ret, fault, uc, 3, spdid, parent_evt, grp);
+	
+	if (unlikely (fault)){
+		if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
+			printc("set cap_fault_cnt failed\n");
+			BUG();
+		}
+		fcounter++;
+		goto redo;
+	}
+	
+	return ret;
+}
 
-       if (unlikely (fault)){
-	       if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-		       printc("set cap_fault_cnt failed\n");
-		       BUG();
-	       }
-	       
-       	       fcounter++;
-       	       goto redo;
-       }
 
-CSTUB_POST
-
-
-CSTUB_FN_ARGS_2(long, evt_wait, spdid_t, spdid, long, extern_evt)
+CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
+			  spdid_t spdid, long extern_evt)
+{
+	long fault = 0;
+	long ret;
 
 	struct blocked_thd blk_thd;
         struct rec_data_evt *rd = NULL;
@@ -276,18 +326,21 @@ CSTUB_FN_ARGS_2(long, evt_wait, spdid_t, spdid, long, extern_evt)
 	}
         rdevt_addblk(rd, &blk_thd);
 
-/* printc("evt cli: evt_wait %d\n", cos_get_thd_id()); */
-CSTUB_ASM_2(evt_wait, spdid, rd->s_evtid)
-
+	printc("evt cli: evt_wait %d (combined id %p)\n", cos_get_thd_id(), (void *)((extern_evt << 16) | rd->s_evtid));
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, (extern_evt << 16) | rd->s_evtid);
+	
         if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
-		/* Only thd of event_create should re-create the event
-		   since group id is the creator (ownership) */
+		/* Only the thread who called event_create should
+		   re-create the event since group id is the creator
+		   (ownership) In the case other function failed, the
+		   blocked waiting thread will be woken up and detect
+		   the fault when returns back from scheduler.*/
 		rd->s_evtid = __evt_create(cos_spd_id());
 		/* evt_update_status(cos_spd_id(), rd->s_evtid); */
-
-		/* printc("evt cli: evt_wait fault %d (create event %d again)\n",  */
-		/*        cos_get_thd_id(), rd->s_evtid); */
+		
+		printc("evt cli: evt_wait fault %d (create event %d again ofr cli evt %d)\n",
+		       cos_get_thd_id(), rd->s_evtid, extern_evt);
 		/* This will assume an event has occurred, no need to
 		 * block wait. In the worst case, the processing
 		 * thread will deal an event that does not happen
@@ -301,35 +354,43 @@ CSTUB_ASM_2(evt_wait, spdid, rd->s_evtid)
         }
         REM_LIST(&blk_thd, next, prev);
 
-CSTUB_POST
+	return ret;
+}
 
-
-CSTUB_FN_ARGS_2(int, evt_trigger, spdid_t, spdid, long, extern_evt)
+CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
+			    spdid_t spdid, long extern_evt)
+{
+	long fault = 0;
+	int ret;
 
         struct rec_data_evt *rd = NULL;
 
         rd = update_rd(extern_evt, 0, uc->cap_no);
-	if (!rd) {
-		printc("try to trigger a non-existing tor\n");
-		return -1;
-	}
-
-/* printc("evt cli: evt_trigger %d\n", cos_get_thd_id()); */
-CSTUB_ASM_2(evt_trigger, spdid, rd->s_evtid)
-
-       if (unlikely (fault)){
-               /* when fault occurs, all threads will be reflected and
-		  woken up so it looks like an event trigger
-		  anyway. No need to repeat trigger
+        /* evt_trigger can be invoked from a different client. So do
+	 * not check return value of update_rd */
+	/* if (!rd) CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt); */
+	/* else     CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid); */
+        /* printc("evt cli: evt_trigger %d\n", cos_get_thd_id()); */
+	/* CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid); */
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
+	
+	if (unlikely (fault)){
+		/* when fault occurs, all threads will be reflected and
+		   woken up so it looks like an event trigger
+		   anyway. No need to repeat trigger
 		*/
-	       CSTUB_FAULT_UPDATE();
-	       ret = 0;
-       }
+		CSTUB_FAULT_UPDATE();
+		ret = 0;
+	}
+	
+	return ret;
+}
 
-CSTUB_POST
-
-
-CSTUB_FN_ARGS_2(int, evt_free, spdid_t, spdid, long, extern_evt)
+CSTUB_FN(int, evt_free) (struct usr_inv_cap *uc,
+			 spdid_t spdid, long extern_evt)
+{
+	long fault = 0;
+	int ret;
 
         struct rec_data_evt *rd = NULL;
 
@@ -338,11 +399,13 @@ CSTUB_FN_ARGS_2(int, evt_free, spdid_t, spdid, long, extern_evt)
 		printc("try to free a non-existing evt\n");
 		return -1;
 	}
+	rdevt_dealloc(rd);
 /* printc("evt cli: evt_free %d\n", cos_get_thd_id()); */
-CSTUB_ASM_2(evt_free, spdid, rd->s_evtid)
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
+	
+	if (unlikely (fault)) {
+		CSTUB_FAULT_UPDATE();
+	}
 
-       if (unlikely (fault)) {
-	       CSTUB_FAULT_UPDATE();
-       }
-
-CSTUB_POST
+	return ret;
+}

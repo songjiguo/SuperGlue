@@ -253,12 +253,12 @@ from_data_new(struct tor_conn *tc)
 {
 	int from, to, amnt;
 	char *buf;
+    cbuf_t cb;
 
 	from = tc->from;
 	to   = tc->to;
 	while (1) {
 		int ret;
-		cbuf_t cb;
 
 		buf = cbuf_alloc(BUFF_SZ, &cb);
 		assert(buf);
@@ -300,11 +300,11 @@ from_data_new(struct tor_conn *tc)
 		connmgr_twrite_cnt++;
 #endif
 
-		cbuf_free(buf);
+		cbuf_free(cb);
 		evt_trigger(cos_spd_id(), tc->teid);  // Jiguo
 	}
 done:
-	cbuf_free(buf);
+	cbuf_free(cb);
 	return;
 close:
 	mapping_remove(from, to, tc->feid, tc->teid);
@@ -331,6 +331,7 @@ to_data_new(struct tor_conn *tc)
 {
 	int from, to, amnt;
 	char *buf;
+	cbuf_t cb;
 
 	from = tc->from;
 	to   = tc->to;
@@ -351,8 +352,6 @@ to_data_new(struct tor_conn *tc)
 
 	while (1) {
 		int ret;
-		cbuf_t cb;
-
 
 		if (!(buf = cbuf_alloc(BUFF_SZ, &cb))) BUG();
 		/* printc("connmgr reads https\n"); */
@@ -381,7 +380,7 @@ to_data_new(struct tor_conn *tc)
 			goto close;
 		}
 		connmgr_from_twrite_cnt++;
-		cbuf_free(buf);
+		cbuf_free(cb);
 	}
 
 #ifdef DEBUG_TO_DATA
@@ -395,7 +394,7 @@ to_data_new(struct tor_conn *tc)
 #endif
 
 done:
-	cbuf_free(buf);
+	cbuf_free(cb);
 	return;
 close:
 	mapping_remove(from, to, tc->feid, tc->teid);

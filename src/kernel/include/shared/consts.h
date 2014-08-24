@@ -45,8 +45,7 @@ struct pt_regs {
 #endif
 
 #define MAX_SERVICE_DEPTH 31
-#define MAX_NUM_THREADS 40
-//#define MAX_NUM_THREADS 15  	/* reduce the number of thread, help recovery */
+#define MAX_NUM_THREADS 128
 /* Stacks are 2 * page_size (expressed in words) */
 #define MAX_STACK_SZ    (PAGE_SIZE/4) /* a page */
 #define COS_STACK_SZ    (MAX_STACK_SZ*4)
@@ -60,7 +59,8 @@ struct pt_regs {
 #define MAX_SCHED_HIER_DEPTH 4
 
 #define MAX_NUM_SPDS   64
-#define MAX_STATIC_CAP 1024
+#define MAX_STATIC_CAP 256
+#define MAX_NUM_ACAP 256
 
 #define PAGE_MASK    (~(PAGE_SIZE-1))
 #define PGD_SHIFT    22
@@ -99,15 +99,15 @@ struct pt_regs {
 
 #define COS_NUM_ATOMIC_SECTIONS 10
 
-#define COS_MAX_MEMORY 4*1024
+#define COS_MAX_MEMORY (128*1024) /* vas extents now support up to 254MB */ 
 
 #include "../asm_ipc_defs.h"
 
 #define KERN_BASE_ADDR 0xc0000000 //CONFIG_PAGE_OFFSET
 
-#define CHAR_PER_INT sizeof(int) / sizeof(char)
+#define CHAR_PER_INT (sizeof(int) / sizeof(char))
 #define PARAMS_PER_INV 4
-#define CHAR_PER_INV CHAR_PER_INT * PARAMS_PER_INV
+#define CHAR_PER_INV (CHAR_PER_INT * PARAMS_PER_INV)
 
 #define CPUID_OFFSET_IN_THREAD_INFO 4
 #define THREAD_SIZE_LINUX 8192

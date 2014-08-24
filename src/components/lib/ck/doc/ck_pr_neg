@@ -27,48 +27,65 @@
 .Dd April 7, 2013
 .Dt ck_pr_neg 3
 .Sh NAME
-.Nm ck_pr_neg
-.Nd atomic negation operation
+.Nm ck_pr_neg_ptr ,
+.Nm ck_pr_neg_ptr_zero ,
+.Nm ck_pr_neg_double ,
+.Nm ck_pr_neg_double_zero ,
+.Nm ck_pr_neg_char ,
+.Nm ck_pr_neg_char_zero ,
+.Nm ck_pr_neg_uint ,
+.Nm ck_pr_neg_uint_zero ,
+.Nm ck_pr_neg_int ,
+.Nm ck_pr_neg_int_zero ,
+.Nm ck_pr_neg_64 ,
+.Nm ck_pr_neg_64_zero ,
+.Nm ck_pr_neg_32 ,
+.Nm ck_pr_neg_32_zero ,
+.Nm ck_pr_neg_16 ,
+.Nm ck_pr_neg_16_zero ,
+.Nm ck_pr_neg_8 ,
+.Nm ck_pr_neg_8_zero
+.Nd atomic negation operations
 .Sh LIBRARY
 Concurrency Kit (libck, \-lck)
 .Sh SYNOPSIS
 .In ck_pr.h
 .Ft void
 .Fn ck_pr_neg_ptr "void *target"
-.Ft bool
-.Fn ck_pr_neg_ptr_zero "void *target"
+.Ft void
+.Fn ck_pr_neg_ptr_zero "void *target" "bool *z"
 .Ft void
 .Fn ck_pr_neg_double "double *target"
-.Ft bool
-.Fn ck_pr_neg_double_zero "double *target"
+.Ft void
+.Fn ck_pr_neg_double_zero "double *target" "bool *z"
 .Ft void
 .Fn ck_pr_neg_char "char *target"
-.Ft bool
-.Fn ck_pr_neg_char_zero "char *target"
+.Ft void
+.Fn ck_pr_neg_char_zero "char *target" "bool *z"
 .Ft void
 .Fn ck_pr_neg_uint "unsigned int *target"
-.Ft bool
-.Fn ck_pr_neg_uint_zero "unsigned int *target"
+.Ft void
+.Fn ck_pr_neg_uint_zero "unsigned int *target" "bool *z"
 .Ft void
 .Fn ck_pr_neg_int "int *target"
-.Ft bool
-.Fn ck_pr_neg_int_zero "int *target"
+.Ft void
+.Fn ck_pr_neg_int_zero "int *target" "bool *z"
 .Ft void
 .Fn ck_pr_neg_64 "uint64_t *target"
-.Ft bool
-.Fn ck_pr_neg_64_zero "uint64_t *target"
+.Ft void
+.Fn ck_pr_neg_64_zero "uint64_t *target" "bool *z"
 .Ft void
 .Fn ck_pr_neg_32 "uint32_t *target"
-.Ft bool
-.Fn ck_pr_neg_32_zero "uint32_t *target"
+.Ft void
+.Fn ck_pr_neg_32_zero "uint32_t *target" "bool *z"
 .Ft void
 .Fn ck_pr_neg_16 "uint16_t *target"
-.Ft bool
-.Fn ck_pr_neg_16_zero "uint16_t *target"
+.Ft void
+.Fn ck_pr_neg_16_zero "uint16_t *target" "bool *z"
 .Ft void
 .Fn ck_pr_neg_8 "uint8_t *target"
-.Ft bool
-.Fn ck_pr_neg_8_zero "uint8_t *target"
+.Ft void
+.Fn ck_pr_neg_8_zero "uint8_t *target" "bool *z"
 .Sh DESCRIPTION
 The 
 .Fn ck_pr_neg 3
@@ -76,8 +93,10 @@ family of functions atomically negate the value pointed to
 by
 .Fa target .
 .Sh RETURN VALUES
-The ck_pr_neg_zero functions return true if the result
-of the negation operation was 0. They return false otherwise.
+The ck_pr_neg_zero functions set the value pointed to by
+.Fa z
+if the result of the negation operation was 0. They set the
+pointed to value to false otherwise.
 .Sh SEE ALSO
 .Xr ck_pr_fence_load 3 ,
 .Xr ck_pr_fence_load_depends 3 ,

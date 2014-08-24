@@ -66,7 +66,7 @@ print_str(char *s, unsigned int len)
 #endif
 
 #ifdef COS_PRINT_DMESG
-//	cos_print(buf_ptr, len);
+	cos_print(buf_ptr, len);
 #endif
 
 	return 0;

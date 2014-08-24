@@ -18,7 +18,7 @@ extern void *valloc_alloc(spdid_t spdid, spdid_t dest, unsigned long npages);
 #include <cos_list.h>
 #include <ck_ring_cos.h>
 
-#define MEAS_WITH_LOG
+//#define MEAS_WITH_LOG
 //#define MEAS_WITHOUT_LOG
 
 /* event entry in the ring buffer (per event) */

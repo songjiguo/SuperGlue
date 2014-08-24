@@ -20,6 +20,7 @@ void cos_init_memory(void)
 			printk("cos: ERROR -- could not allocate page for cos memory\n");
 		}
 		cos_pages[i].addr = (paddr_t)chal_va2pa(r);
+		// Jiguo: init FT?
 		cos_pages[i].rt_spdid = 0;
 		cos_pages[i].rt_vaddr = (vaddr_t) 0;
 	}

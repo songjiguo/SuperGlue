@@ -39,7 +39,7 @@ void mm_test2_34()
 			/* printc("andy: addr %p\n", addr[0]); */
 			d_addr  = mm_test3();
 			if (!d_addr) BUG();
-			if (d_addr != mman_alias_page(cos_spd_id(), s_addr, cos_spd_id()+1, d_addr)) BUG();
+			if (d_addr != mman_alias_page(cos_spd_id(), s_addr, cos_spd_id()+1, d_addr, MAPPING_RW)) BUG();
 		} else {
 #ifdef ONE2FIVE
 			s_addr = addr[1];
@@ -49,7 +49,7 @@ void mm_test2_34()
 			/* printc("andy: addr %p\n", addr[0]); */
 			d_addr  = mm_test4();
 			if (!d_addr) BUG();
-			if (d_addr != mman_alias_page(cos_spd_id(), s_addr, cos_spd_id()+2, d_addr)) BUG();
+			if (d_addr != mman_alias_page(cos_spd_id(), s_addr, cos_spd_id()+2, d_addr, MAPPING_RW)) BUG();
 		}
 	}
 

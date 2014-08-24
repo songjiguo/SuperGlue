@@ -135,8 +135,8 @@ int __sg_sched_reflect(spdid_t spd, int src_spd, int cnt)
 
 	assert(src_spd);
 	cos_sched_lock_take();
-	/* printc("scheduler server side stub (thd %d)\n", cos_get_thd_id()); */
-	/* printc("passed reflection: spd %d src_spd %d\n", spd, src_spd); */
+	printc("scheduler server side stub (thd %d)\n", cos_get_thd_id());
+	printc("passed reflection: spd %d src_spd %d\n", spd, src_spd);
 
 	rd = rdblk_lookup(src_spd);
 	if (!rd) goto done;  // if there is no thread blocked from src_spd, return

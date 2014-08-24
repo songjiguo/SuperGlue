@@ -27,6 +27,10 @@
 #define LINUX_CORE             (NUM_CPU - 1)
 #define NUM_CPU_COS            (NUM_CPU > 1 ? NUM_CPU - 1 : 1) /* how many cores Composite owns */
 
+/* NUM_CPU_SOCKETS defined in cpu_ghz.h. The information is used for
+ * intelligent IPI distribution. */
+#define NUM_CORE_PER_SOCKET    (NUM_CPU / NUM_CPU_SOCKETS)
+
 // cos kernel settings
 #define COS_PRINT_MEASUREMENTS 1
 #define COS_PRINT_SCHED_EVENTS 1
@@ -48,14 +52,14 @@
  * but before the runscript.
  */
 /* print out to the shell? */
-/* #define COS_PRINT_SHELL   1 */
+#define COS_PRINT_SHELL   1
 /* how much should we buffer before sending an event to the shell? */
 #define COS_PRINT_BUF_SZ  128
 /* how large should the shared memory region be that will buffer print data? */
 #define COS_PRINT_MEM_SZ  (4096)
 
 /* print out to dmesg? */
-#define COS_PRINT_DMESG 1
+/* #define COS_PRINT_DMESG 1 */
 
 /**** Fault Tolerance Option ****/
 /* Note: A separate python script needs run to switch different

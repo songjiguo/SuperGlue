@@ -167,13 +167,14 @@ ck_ht_map_probe_next(struct ck_ht_map *map, size_t offset, ck_ht_hash_t h, size_
 {
 	ck_ht_hash_t r;
 	size_t stride;
+	unsigned long level = (unsigned long)probes >> CK_HT_BUCKET_SHIFT;
 
-	(void)probes;
-	r.value = h.value >> map->step;
+	r.value = (h.value >> map->step) >> level;
 	stride = (r.value & ~CK_HT_BUCKET_MASK) << 1
 		     | (r.value & CK_HT_BUCKET_MASK);
 
-	return (offset + (stride | CK_HT_BUCKET_LENGTH)) & map->mask;
+	return (offset + level +
+	    (stride | CK_HT_BUCKET_LENGTH)) & map->mask;
 }
 
 bool
@@ -217,14 +218,7 @@ ck_ht_map_probe_wr(struct ck_ht_map *map,
 	size_t offset, i, j;
 	uint64_t probes = 0;
 
-#ifndef CK_HT_PP
-	uint64_t d = 0;
-	uint64_t d_prime = 0;
-retry:
-#endif
-
 	offset = h.value & map->mask;
-
 	for (i = 0; i < map->probe_limit; i++) {
 		/*
 		 * Probe on a complete cache line first. Scan forward and wrap around to
@@ -277,17 +271,6 @@ retry:
 #else
 				if (cursor->hash != h.value)
 					continue;
-
-				if (probe_limit == NULL) {
-					d_prime = ck_pr_load_64(&map->deletions);
-
-					/*
-					 * It is possible that the slot was
-					 * replaced, initiate a re-probe.
-					 */
-					if (d != d_prime)
-						goto retry;
-				}
 #endif
 
 				pointer = ck_ht_entry_key(cursor);
@@ -532,7 +515,7 @@ restart:
 				struct ck_ht_entry *cursor = bucket + ((j + offset) & (CK_HT_BUCKET_LENGTH - 1));
 
 				probes++;
-				if (cursor->key == CK_HT_KEY_EMPTY) {
+				if (CK_CC_LIKELY(cursor->key == CK_HT_KEY_EMPTY)) {
 					*cursor = *previous;
 					update->n_entries++;
 
@@ -579,14 +562,14 @@ ck_ht_remove_spmc(ck_ht_t *table,
 
 	if (table->mode == CK_HT_MODE_BYTESTRING) {
 		candidate = ck_ht_map_probe_wr(map, h, &snapshot, &priority,
-				ck_ht_entry_key(entry),
-				ck_ht_entry_key_length(entry),
-				&probes, &probes_wr);
+		    ck_ht_entry_key(entry),
+		    ck_ht_entry_key_length(entry),
+		    &probes, &probes_wr);
 	} else {
 		candidate = ck_ht_map_probe_wr(map, h, &snapshot, &priority,
-				(void *)entry->key,
-				sizeof(entry->key),
-				&probes, &probes_wr);
+		    (void *)entry->key,
+		    sizeof(entry->key),
+		    &probes, &probes_wr);
 	}
 
 	/* No matching entry was found. */
@@ -679,14 +662,14 @@ ck_ht_set_spmc(ck_ht_t *table,
 
 		if (table->mode == CK_HT_MODE_BYTESTRING) {
 			candidate = ck_ht_map_probe_wr(map, h, &snapshot, &priority,
-					ck_ht_entry_key(entry),
-					ck_ht_entry_key_length(entry),
-					&probes, &probes_wr);
+			    ck_ht_entry_key(entry),
+			    ck_ht_entry_key_length(entry),
+			    &probes, &probes_wr);
 		} else {
 			candidate = ck_ht_map_probe_wr(map, h, &snapshot, &priority,
-					(void *)entry->key,
-					sizeof(entry->key),
-					&probes, &probes_wr);
+			    (void *)entry->key,
+			    sizeof(entry->key),
+			    &probes, &probes_wr);
 		}
 
 		if (priority != NULL) {
@@ -792,14 +775,14 @@ ck_ht_put_spmc(ck_ht_t *table,
 
 		if (table->mode == CK_HT_MODE_BYTESTRING) {
 			candidate = ck_ht_map_probe_wr(map, h, &snapshot, &priority,
-					ck_ht_entry_key(entry),
-					ck_ht_entry_key_length(entry),
-					&probes, &probes_wr);
+			    ck_ht_entry_key(entry),
+			    ck_ht_entry_key_length(entry),
+			    &probes, &probes_wr);
 		} else {
 			candidate = ck_ht_map_probe_wr(map, h, &snapshot, &priority,
-					(void *)entry->key,
-					sizeof(entry->key),
-					&probes, &probes_wr);
+			    (void *)entry->key,
+			    sizeof(entry->key),
+			    &probes, &probes_wr);
 		}
 
 		if (candidate != NULL || priority != NULL)
@@ -856,3 +839,4 @@ ck_ht_destroy(struct ck_ht *table)
 }
 
 #endif /* CK_F_HT */
+

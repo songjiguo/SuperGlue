@@ -397,7 +397,7 @@ static unsigned long getsym(bfd *obj, char* symbol)
 	return 0;
 }
 
-#define DEBUG
+//#define DEBUG
 #ifdef DEBUG
 static void print_syms(bfd *obj)
 {
@@ -636,7 +636,7 @@ static int
 load_service(struct service_symbs *ret_data, unsigned long lower_addr, unsigned long size)
 {
 	bfd *obj, *objout;
-	int sect_sz, offset;
+	int sect_sz, offset, tot_static_mem = 0;
 	void *ret_addr;
 	char *service_name = ret_data->obj; 
 	struct cobj_header *h;
@@ -665,13 +665,10 @@ load_service(struct service_symbs *ret_data, unsigned long lower_addr, unsigned 
 		bfd_perror("object open failure");
 		return -1;
 	}
-
 	if(!bfd_check_format(obj, bfd_object)){
 		printl(PRINT_DEBUG, "Not an object file!\n");
 		return -1;
 	}
-
-	print_syms(obj);
 	/* 
 	 * Initialize some section info (note that only sizes of
 	 * sections are relevant now, as we haven't yet linked in
@@ -734,6 +731,7 @@ load_service(struct service_symbs *ret_data, unsigned long lower_addr, unsigned 
 		 * file, then map in ro
 		 */
 		assert(tot_sz);
+		tot_static_mem = tot_sz;
 		ret_addr = mmap((void*)start_addr, tot_sz,
 				PROT_EXEC | PROT_READ | PROT_WRITE,
 				MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
@@ -756,6 +754,7 @@ load_service(struct service_symbs *ret_data, unsigned long lower_addr, unsigned 
 		int i;
 
 		for (i = 0 ; csg(i)->secid < MAXSEC_S ; i++) {
+			tot_static_mem += csg(i)->len;
 			if (csg(i)->cobj_flags & COBJ_SECT_ZEROS) continue;
 			size += csg(i)->len;
 		}
@@ -793,9 +792,7 @@ load_service(struct service_symbs *ret_data, unsigned long lower_addr, unsigned 
 	 * proper memory locations.
 	 */
 	genscript(1);
-	printl(PRINT_DEBUG, "1\n");
 	run_linker(service_name, tmp_exec);
-	printl(PRINT_DEBUG, "2\n");
 //	unlink(script);
 	objout = bfd_openr(tmp_exec, "elf32-i386");
 	if(!objout){
@@ -861,7 +858,7 @@ load_service(struct service_symbs *ret_data, unsigned long lower_addr, unsigned 
 	       service_name, tmp_exec, script);
 	unlink(tmp_exec);
 
-	return 0;
+	return tot_static_mem;
 }
 
 /* FIXME: should modify code to use
@@ -1078,7 +1075,8 @@ static int for_each_symb_type(bfd *obj, int symb_type, observer_t o, void *obs_d
 		    ||
 		    (symb_type & EXPORTED_SYMB_TYPE &&
 		    symbol_table[i]->flags & BSF_FUNCTION &&
-		    symbol_table[i]->flags & BSF_GLOBAL)) {
+		    ((symbol_table[i]->flags & BSF_GLOBAL) || 
+		     (symbol_table[i]->flags & BSF_WEAK)))) {
 			if ((*o)(symbol_table[i], obs_data)) {
 				return -1;
 			}
@@ -1724,17 +1722,19 @@ static void gen_stubs_and_link(char *gen_stub_prog, struct service_symbs *servic
 static int load_all_services(struct service_symbs *services)
 {
 	unsigned long service_addr = BASE_SERVICE_ADDRESS;
+	long sz;
 
 //	service_addr += DEFAULT_SERVICE_SIZE;
 
 	while (services) {
-		if (load_service(services, service_addr, DEFAULT_SERVICE_SIZE)) {
-			return -1;
-		}
+		sz = load_service(services, service_addr, DEFAULT_SERVICE_SIZE);
+		if (!sz) return -1;
 
 		service_addr += DEFAULT_SERVICE_SIZE;
-		/* note this works for the llbooter too */
-		if (strstr(services->obj, BOOT_COMP)) { 
+		/* note this works for the llbooter and root memory manager too */
+		if (strstr(services->obj, BOOT_COMP) || strstr(services->obj, LLBOOT_COMP)) { // Booter needs larger VAS
+			service_addr += 15*DEFAULT_SERVICE_SIZE;
+		} else if (strstr(services->obj, INITMM) || sz > DEFAULT_SERVICE_SIZE) {
 			service_addr += 3*DEFAULT_SERVICE_SIZE;
 		}
 
@@ -2681,11 +2681,14 @@ void set_prio(void);
 
 void set_curr_affinity(u32_t cpu)
 {
+	int ret;
 	cpu_set_t s;
 	CPU_ZERO(&s);
 	assert(cpu <= NUM_CPU - 1);
 	CPU_SET(cpu, &s);
-	sched_setaffinity(0, 1, &s);
+	ret = sched_setaffinity(0, sizeof(cpu_set_t), &s);
+	assert(ret == 0);
+
 	return;
 }
 
@@ -2701,7 +2704,7 @@ static void setup_kernel(struct service_symbs *services)
 
 	pid_t pid;
 	pid_t children[NUM_CPU];
-	int cntl_fd = 0, i, cpuid, ret;;
+	int cntl_fd = 0, i, cpuid, ret;
 	unsigned long long start, end;
 	
 	set_curr_affinity(0);
@@ -2795,7 +2798,8 @@ static void setup_kernel(struct service_symbs *services)
 
 	/* Access comp0 to make sure it is present in the page tables */
 	var = *((int *)SERVICE_START);
-	cos_create_thd(cntl_fd, &thd);
+	ret = cos_create_thd(cntl_fd, &thd);
+	assert(ret == 0);
 	fn = (int (*)(void))get_symb_address(&s->exported, "spd0_main");
 	/* We call fn to init the low level booter first! Init
 	 * function will return to here and create processes for other
@@ -2803,7 +2807,7 @@ static void setup_kernel(struct service_symbs *services)
 	assert(fn);
 	fn();
 	pid = getpid();
-	for (i = 1; i < NUM_CPU - 1; i++) {
+	for (i = 1; i < NUM_CPU_COS; i++) {
 		printf("Parent(pid %d): forking for core %d.\n", getpid(), i);
 		cpuid = i;
 		pid = fork();
@@ -2822,7 +2826,8 @@ static void setup_kernel(struct service_symbs *services)
 		 * tables
 		 */
 		var = *((int *)SERVICE_START);
-		cos_create_thd(cntl_fd, &thd);
+		ret = cos_create_thd(cntl_fd, &thd);
+		assert(ret == 0);
 	} else { /* The parent should give other processes a chance to
 		  * run. They need to migrate to their cores. */
 		sleep(1);
@@ -3082,7 +3087,7 @@ int main(int argc, char *argv[])
 		goto dealloc_exit;
 	}
 
-	//print_kern_symbs(services);
+//	print_kern_symbs(services);
 
 	setup_kernel(services);
 

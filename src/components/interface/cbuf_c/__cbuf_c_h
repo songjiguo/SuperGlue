@@ -29,7 +29,7 @@ int cbuf_c_delete(spdid_t spdid, int cbid);
 int cbuf_c_retrieve(spdid_t spdid, int cbid, int len);
 vaddr_t cbuf_c_register(spdid_t spdid, long cbid);
 
-int cbuf_c_introspect_all(spdid_t spdid, int iter);/* return cbid with the right order if it does exist*/
+int cbuf_c_introspect(spdid_t spdid, int iter);/* return cbid with the right order if it does exist*/
 int cbuf_c_claim(spdid_t spdid, int cbid);     /* spd wants to own the cbuf, 0 means owner changes  */
 
 /* CbufMgr API that works with Cbuf_policy*/

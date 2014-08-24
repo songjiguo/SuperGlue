@@ -64,6 +64,7 @@ tsplit(spdid_t spdid, td_t tid, char *param, int len,
 	if (tid != td_root) return -EINVAL;
 	ntd = parent_tsplit(cos_spd_id(), tid, param, len, tflags, evtid);
 	if (ntd <= 0) ERR_THROW(ntd, err);
+
 	t = tor_alloc((void*)ntd, tflags);
 	if (!t) ERR_THROW(-ENOMEM, err);
 	ret = t->td;
@@ -118,7 +119,7 @@ twrite(spdid_t spdid, td_t td, int cbid, int sz)
 	memcpy(nbuf, buf, sz);
 	ret = parent_twrite(cos_spd_id(), ntd, ncbid, sz);
 	ip_twrite_cnt++;
-	cbuf_free(nbuf);
+	cbuf_free(ncbid);
 done:
 	return ret;
 }
@@ -153,7 +154,7 @@ tread(spdid_t spdid, td_t td, int cbid, int sz)
 	memcpy(buf, nbuf, ret);
 free:
 	/* cbufp_deref(ncbid); */  // should keep this cbufp alive in netif for FT purpose?  Jiguo
-	cbuf_free(nbuf);
+	cbuf_free(ncbid);
 done:
 	return ret;
 }

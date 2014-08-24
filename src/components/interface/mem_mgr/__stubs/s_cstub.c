@@ -52,17 +52,18 @@ static inline void *
 __page_get(void)
 {
 	void *hp = cos_get_vas_page();
+
 	struct frame *f = frame_alloc();
 
 	assert(hp && f);
 	frame_ref(f);
 	f->nmaps  = -1; 	 /* belongs to us... */
 	f->c.addr = (vaddr_t)hp; /* ...at this address */
-	if (cos_mmap_cntl(COS_MMAP_GRANT, 0, cos_spd_id(), (vaddr_t)hp, frame_index(f))) {
-		printc("grant @ %p for frame %d\n", hp, frame_index(f));
+	if (cos_mmap_cntl(COS_MMAP_GRANT, MAPPING_RW, cos_spd_id(), (vaddr_t)hp, frame_index(f))) {
+		printc("mm interface: grant @ %p for frame %d\n", hp, frame_index(f));
 		BUG();
 	}
-	printc("grant @ %p for frame %d\n", hp, frame_index(f));
+	/* printc("grant @ %p for frame %d\n", hp, frame_index(f)); */
 	return hp;
 }
 
@@ -141,8 +142,8 @@ rdpage_alloc(struct rec_data_spd *rd, vaddr_t addr)
 	INIT_LIST(rd_page, next, prev);
 	ADD_END_LIST(&rd->pages, rd_page, next, prev);
 	
-	/* printc("tracking....page %p (spd %d, by thd %d)\n",  */
-	/*        (void *)addr, rd->spdid, cos_get_thd_id()); */
+	printc("tracking....page %p (spd %d, by thd %d)\n",
+	       (void *)addr, rd->spdid, cos_get_thd_id());
 
 	/* /\* cvect_add(&rec_page_vect, rd_page, addr >> PAGE_SHIFT); *\/ */
 done:
@@ -184,8 +185,8 @@ int __sg_mman_release_page(spdid_t spd, vaddr_t addr, int arg)
 	rd_page = FIRST_LIST(&rd->pages, next, prev);
 	assert(rd_page);
 	REM_LIST(rd_page, next, prev);
-	printc("mem_normal release: pages %p @ %p\n", (void *)rd_page->addr, (void *)rd_page);
-	printc("mem_normal release: ser side removing from list\n");
+	/* printc("mem_normal release: pages %p @ %p\n", (void *)rd_page->addr, (void *)rd_page); */
+	/* printc("mem_normal release: ser side removing from list\n"); */
 
 	cos_sched_lock_release();
 #endif
@@ -248,7 +249,7 @@ vaddr_t __sg_mman_reflect(spdid_t spd, int src_spd, int cnt)
 		for (rd_page = FIRST_LIST(rd_page_list, next, prev);
 		     rd_page != rd_page_list;
 		     rd_page = FIRST_LIST(rd_page, next, prev)){
-			printc("(cnt)saved pages %p @ %p\n", (void *)rd_page->addr, (void *)rd_page);
+			printc("(cnt)saved pages %p @ %p (thd %d)\n", (void *)rd_page->addr, (void *)rd_page, cos_get_thd_id());
 			ret++;
 		}
 	} else {

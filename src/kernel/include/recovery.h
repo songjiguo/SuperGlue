@@ -193,8 +193,8 @@ switch_thd_fault_detect(struct thread *next)
 
 	if (tif->curr_fault.cnt != n_spd->fault.cnt) 
 	{
-		/* printk("thread %d curr_fault cnt %d\n", thd_get_id(next), tif->curr_fault.cnt); */
-		/* printk("spd %d fault cnt %d\n", spd_get_index(n_spd), n_spd->fault.cnt); */
+		printk("thread %d curr_fault cnt %d\n", thd_get_id(next), tif->curr_fault.cnt);
+		printk("spd %d fault cnt %d\n", spd_get_index(n_spd), n_spd->fault.cnt);
 		return 1;
 	}
 	else return 0;
@@ -348,9 +348,9 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 		printk("check if reflection counter\n");
 		if (cap_entry->destination->reflection.cnt 
 		    == cap_entry->destination->fault.cnt) {
-			/* printk("(1)d_spd->reflection.cnt %d d_spd->fault.cnt %d\n", */
-			/*        cap_entry->destination->reflection.cnt , */
-			/*        cap_entry->destination->fault.cnt); */
+			printk("(1)d_spd->reflection.cnt %d d_spd->fault.cnt %d\n",
+			       cap_entry->destination->reflection.cnt ,
+			       cap_entry->destination->fault.cnt);
 			cap_entry->destination->reflection.cnt++;
 			ret = 1;
 		}

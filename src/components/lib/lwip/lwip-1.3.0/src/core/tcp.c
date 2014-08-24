@@ -344,7 +344,7 @@ tcp_accept_null(void *arg, struct tcp_pcb *pcb, err_t err)
  *             tpcb = tcp_listen(tpcb);
  */
 struct tcp_pcb *
-tcp_listen_with_backlog(struct tcp_pcb *pcb, int backlog)
+tcp_listen_with_backlog(struct tcp_pcb *pcb, u8_t backlog)
 {
   struct tcp_pcb_listen *lpcb;
 
@@ -375,7 +375,6 @@ tcp_listen_with_backlog(struct tcp_pcb *pcb, int backlog)
 #if TCP_LISTEN_BACKLOG
   lpcb->accepts_pending = 0;
   lpcb->backlog = (backlog ? backlog : 1);
-  lpcb->backlog = 8192;
 #endif /* TCP_LISTEN_BACKLOG */
   TCP_REG(&tcp_listen_pcbs.listen_pcbs, lpcb);
   return (struct tcp_pcb *)lpcb;

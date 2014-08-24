@@ -12,9 +12,9 @@ typedef enum {
 
 // The following APIs have fault tolerance support
 long evt_split(spdid_t spdid, long parent_evt, int grp);
-long evt_create(spdid_t spdid);
 void evt_free(spdid_t spdid, long extern_evt);
 long evt_wait(spdid_t spdid, long extern_evt);
+long evt_wait_n(spdid_t spdid, long extern_evt, int n);
 int evt_trigger(spdid_t spdid, long extern_evt);
 
 // The following APIs have no fault tolerance support

@@ -342,6 +342,6 @@ mpd_init(void)
 void
 cos_init(void *d)
 {
-	/* mpd_init(); */
+	mpd_init();
 }
 

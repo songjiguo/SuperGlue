@@ -44,14 +44,13 @@ int cos_sched_process_events(sched_evt_visitor_t fn, unsigned int proc_amnt)
 	while (proc_amnt > 0) {
 		struct sched_thd *t;
 		u32_t v, v_new, *v_ptr;
-		
 
 		if (per_core_sched[cos_cpuid()].cos_curr_evt >= NUM_SCHED_EVTS) {
 			printc("cos curr evt %u", per_core_sched[cos_cpuid()].cos_curr_evt);
 			assert(0);
 			return -1;//return per_core_sched[cos_cpuid()].cos_curr_evt;
 		}
-
+		
 		evt = &PERCPU_GET(cos_sched_notifications)->cos_events[per_core_sched[cos_cpuid()].cos_curr_evt];
 		v_ptr = &COS_SCHED_EVT_VALS(evt);
 		do {
@@ -67,16 +66,13 @@ int cos_sched_process_events(sched_evt_visitor_t fn, unsigned int proc_amnt)
 
 			/* Lets try and avoid the compiler error due to union wierdness */
 			assert(!(v_new & 0xFFFF));
-			/* ret = cos_cmpxchg(v_ptr, (long)v, (long)v_new); */
-		} while (unlikely(!cos_cas((unsigned long *)v_ptr, (long)v, (long)v_new)));
-		/* } while (ret != (long)v_new); */
-
+			ret = cos_cmpxchg(v_ptr, (long)v, (long)v_new);
+		} while (ret != (long)v_new);
 		/* get and reset cpu consumption */
 		do {
 			cpu = evt->cpu_consumption;
-			/* ret = cos_cmpxchg(&evt->cpu_consumption, (long)cpu, 0); */
-		} while (unlikely(!cos_cas((unsigned long *)&evt->cpu_consumption, (long)cpu, 0)));
-		/* } while (ret != 0); */
+			ret = cos_cmpxchg(&evt->cpu_consumption, (long)cpu, 0);
+		} while (ret != 0);
 
 		if ((cpu || flags) && per_core_sched[cos_cpuid()].cos_curr_evt) {
 			t = sched_evt_to_thd(per_core_sched[cos_cpuid()].cos_curr_evt);
@@ -88,7 +84,6 @@ int cos_sched_process_events(sched_evt_visitor_t fn, unsigned int proc_amnt)
 		proc_amnt--;
 		if (0 == id) break;
 		per_core_sched[cos_cpuid()].cos_curr_evt = id;
-		
 	}
 	return 0;
 }
@@ -105,32 +100,13 @@ void cos_sched_set_evt_urgency(u8_t evt_id, u16_t urgency)
 	evt = &PERCPU_GET(cos_sched_notifications)->cos_events[evt_id];
 	ptr = &COS_SCHED_EVT_VALS(evt);
 
-	/* /\* Need to do this atomically with cmpxchg as next and flags */
-	/*  * are in the same word as the urgency. */
-	/*  *\/ */
-	/* while (1) { */
-	/* 	old = *ptr; */
-	/* 	new = old; */
-	/* 	/\*  */
-	/* 	 * FIXME: Seems as though GCC cannot handle this with */
-	/* 	 * -O2; not picking up the alias for some odd reason: */
-	/* 	 * */
-	/* 	 * se = (struct cos_se_values*)&new; */
-	/* 	 * se->urgency = urgency; */
-	/* 	 *\/ */
-	/* 	new &= 0xFFFF; */
-	/* 	new |= urgency<<16; */
-		
-	/* 	if (cos_cmpxchg(ptr, (long)old, (long)new) == (long)new) break; */
-	/* } */
-
 	/* Need to do this atomically with cmpxchg as next and flags
 	 * are in the same word as the urgency.
 	 */
-	do {
+	while (1) {
 		old = *ptr;
 		new = old;
-		/*
+		/* 
 		 * FIXME: Seems as though GCC cannot handle this with
 		 * -O2; not picking up the alias for some odd reason:
 		 *
@@ -140,8 +116,8 @@ void cos_sched_set_evt_urgency(u8_t evt_id, u16_t urgency)
 		new &= 0xFFFF;
 		new |= urgency<<16;
 		
-		/* if (cos_cmpxchg(ptr, (long)old, (long)new) == (long)new) break; */
-	} while(unlikely(!cos_cas((unsigned long *)ptr, (long)old, (long)new)));
+		if (cos_cmpxchg(ptr, (long)old, (long)new) == (long)new) break;
+	}
 
 	return;
 }

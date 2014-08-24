@@ -10,12 +10,14 @@
 
 #include <ec3_ser2.h>
 
+// test evt: 10 and 13, 11 and 12
+
 static int low = 13;
 static int mid = 12;
 static int hig = 11;
 
-#define EXAMINE_LOCK
-//#define EXAMINE_EVT
+//#define EXAMINE_LOCK
+#define EXAMINE_EVT
 
 #ifdef EXAMINE_LOCK
 
@@ -89,7 +91,6 @@ cos_init(void)
 {
 	printc("thd %d is trying to init lock\n", cos_get_thd_id());
 	LOCK_INIT();
-	/* INTERFACE_LOCK_INIT(); */
 	printc("after init LOCK\n");
 }
 
@@ -98,36 +99,36 @@ cos_init(void)
 
 #ifdef EXAMINE_EVT
 
-long evt1, evt2;
+// evt id is 2
 
-static int test_num = 0;
-
+long evt1;
+static int test_num1 = 0;
+static int test_num2 = 0;
 static void try_hp(void)
 {
-	printc("thread h : %d is creating evts\n", cos_get_thd_id());
+	printc("(ser1) thread h : %d is creating evts\n", cos_get_thd_id());
 	evt1 = evt_create(cos_spd_id());
-	/* evt2 = evt_create(cos_spd_id()); */
 	assert(evt1 > 0);	
 
-	while(test_num++ < 10) {
-		printc("thread h : %d waiting for event %ld\n", cos_get_thd_id(), evt1);
+	while(test_num1++ < 10) {
+		printc("(ser 1) thread h : %d waiting for event %ld (%d time)\n", 
+		       cos_get_thd_id(), evt1, test_num1);
+
 		evt_wait(cos_spd_id(), evt1);
-		printc("thread h : %d is processing event %ld\n", cos_get_thd_id(), evt1);
+		printc("(ser 1) thread h : %d is processing event %ld (%d time)\n", 
+		       cos_get_thd_id(), evt1, test_num1);
 	}
 
-	printc("thread h : %d is free evts\n", cos_get_thd_id());
+	printc("(ser1) thread h : %d frees event %ld\n", cos_get_thd_id(), evt1);
 	evt_free(cos_spd_id(), evt1);
-	/* evt_free(cos_spd_id(), evt2); */
 
 	return;
 }
 
 static void try_mp(void)
 {
-	// 11 times will make sure all events triggered
-	// 6 is only for partially triggering
-	while(test_num < 6) {
-		printc("(ser1)thd m : %d is triggering event %ld (%d time)\n", cos_get_thd_id(), evt1, test_num);
+	while(test_num2++ < 6) {
+		printc("(ser1)thd m : %d is triggering event %ld (%d time)\n", cos_get_thd_id(), evt1, test_num2);
 		if (evt_trigger(cos_spd_id(), evt1)) assert(0);
 	}
 	
@@ -136,11 +137,15 @@ static void try_mp(void)
 
 vaddr_t ec3_ser1_test(void)
 {
-	printc("\nSer1 test start\n\n");
-	if (cos_get_thd_id() == hig) try_hp();
+	if (cos_get_thd_id() == hig) {
+		printc("\n<<< Ser1 event test start in spd %d ... >>>>\n\n", cos_get_thd_id());
+		try_hp();
+	}
 	if (cos_get_thd_id() == mid) try_mp();
 
-	printc("\nSer1 test done\n\n");
+	if (cos_get_thd_id() == hig) {
+		printc("\n<<< ... Ser1 event test done in spd %d >>>>\n\n", cos_get_thd_id());
+	}
 
 	return 0;
 }

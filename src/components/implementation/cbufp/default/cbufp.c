@@ -23,6 +23,7 @@
  * The main data-structures tracked in this component.
  * 
  * cbufp_comp_info is the per-component data-structure that tracks the
+ * page shared with the component to return garbage-collected cbufs, the
  * cbufs allocated to the component, and the data-structures for
  * tracking where the cbuf_metas are associated with the cbufs.
  * 
@@ -84,12 +85,14 @@ struct cbufp_bin {
 
 struct cbufp_comp_info {
 	spdid_t spdid;
+	struct cbufp_shared_page *csp;
+	vaddr_t dest_csp;
 	int nbin;
 	struct cbufp_bin cbufs[CBUFP_MAX_NSZ];
 	struct cbufp_meta_range *cbuf_metas;
 };
 
-#define printl(s) printc(s)
+#define printl(s) //printc(s)
 cos_lock_t cbufp_lock;
 #define CBUFP_LOCK_INIT() lock_static_init(&cbufp_lock);
 #define CBUFP_TAKE()      do { if (lock_take(&cbufp_lock))    BUG(); } while(0)
@@ -145,6 +148,14 @@ cbufp_meta_add(struct cbufp_comp_info *comp, u32_t cbid, struct cbuf_meta *m, va
 	return cmr;
 }
 
+static void
+cbufp_comp_info_init(spdid_t spdid, struct cbufp_comp_info *cci)
+{
+	memset(cci, 0, sizeof(*cci));
+	cci->spdid = spdid;
+	cvect_add(&components, cci, spdid);
+}
+
 static struct cbufp_comp_info *
 cbufp_comp_info_get(spdid_t spdid)
 {
@@ -152,11 +163,9 @@ cbufp_comp_info_get(spdid_t spdid)
 
 	cci = cvect_lookup(&components, spdid);
 	if (!cci) {
-		cci = malloc(sizeof(struct cbufp_comp_info));
+		cci = malloc(sizeof(*cci));
 		if (!cci) return NULL;
-		memset(cci, 0, sizeof(struct cbufp_comp_info));
-		cci->spdid = spdid;
-		cvect_add(&components, cci, spdid);
+		cbufp_comp_info_init(spdid, cci);
 	}
 	return cci;
 }
@@ -200,7 +209,7 @@ cbufp_alloc_map(spdid_t spdid, vaddr_t *daddr, void **page, int size)
 	for (off = 0 ; off < size ; off += PAGE_SIZE) {
 		vaddr_t d = dest + off;
 		if (d != 
-		    (mman_alias_page(cos_spd_id(), ((vaddr_t)p) + off, spdid, d))) {
+		    (mman_alias_page(cos_spd_id(), ((vaddr_t)p) + off, spdid, d, MAPPING_RW))) {
 			assert(0);
 			/* TODO: roll back the aliases, etc... */
 			valloc_free(cos_spd_id(), spdid, (void *)dest, 1);
@@ -224,7 +233,7 @@ cbufp_referenced(struct cbufp_info *cbi)
 		struct cbuf_meta *meta = m->m;
 
 		if (meta) {
-			if (meta->nfo.c.flags & CBUFM_IN_USE) return 1;
+			if (meta->nfo.c.refcnt) return 1;
 			sent  += meta->owner_nfo.c.nsent;
 			recvd += meta->owner_nfo.c.nrecvd;
 		}
@@ -265,13 +274,13 @@ cbufp_free_unmap(spdid_t spdid, struct cbufp_info *cbi)
 	cbufp_references_clear(cbi);
 	do {
 		assert(m->m);
-		assert(!(m->m->nfo.c.flags & CBUFM_IN_USE));
+		assert(!m->m->nfo.c.refcnt);
 		/* TODO: fix race here with atomic instruction */
 		memset(m->m, 0, sizeof(struct cbuf_meta));
 
 		m = FIRST_LIST(m, next, prev);
 	} while (m != &cbi->owner);
-	
+
 	/* Unmap all of the pages from the clients */
 	for (off = 0 ; off < cbi->size ; off += PAGE_SIZE) {
 		mman_revoke_page(cos_spd_id(), (vaddr_t)ptr + off, 0);
@@ -361,9 +370,12 @@ cbufp_create(spdid_t spdid, int size, long cbid)
 	 * Update the meta with the correct addresses and flags!
 	 */
 	memset(meta, 0, sizeof(struct cbuf_meta));
-	meta->nfo.c.flags |= CBUFM_IN_USE | CBUFM_TOUCHED | 
+	meta->nfo.c.flags |= CBUFM_TOUCHED | 
 		             CBUFM_OWNER  | CBUFM_WRITABLE;
 	meta->nfo.c.ptr    = cbi->owner.addr >> PAGE_ORDER;
+	meta->sz           = cbi->size >> PAGE_ORDER;
+	if (meta->nfo.c.refcnt == CBUFP_REFCNT_MAX) assert(0);
+	meta->nfo.c.refcnt++;
 	ret = cbid;
 done:
 	CBUFP_RELEASE();
@@ -373,6 +385,41 @@ free:
 	cmap_del(&cbufs, cbid);
 	free(cbi);
 	goto done;
+}
+
+/*
+ * Allocate and map the garbage-collection list used for cbufp_collect()
+ */
+vaddr_t
+cbufp_map_collect(spdid_t spdid)
+{
+	struct cbufp_comp_info *cci;
+	vaddr_t ret = (vaddr_t)NULL;
+
+	printl("cbufp_map_collect\n");
+
+	CBUFP_TAKE();
+	cci = cbufp_comp_info_get(spdid);
+	if (unlikely(!cci)) goto done;
+
+	/* if the mapped page exists already, just return it. */
+	if (cci->dest_csp) {
+		ret = cci->dest_csp;
+		goto done;
+	}
+
+	assert(sizeof(struct cbufp_shared_page) <= PAGE_SIZE);
+	/* alloc/map is leaked. Where should it be freed/unmapped? */
+	if (cbufp_alloc_map(spdid, &cci->dest_csp, (void**)&cci->csp, PAGE_SIZE)) goto done;
+	ret = cci->dest_csp;
+
+	/* initialize a continuous ck ring */
+	assert(cci->csp->ring.size == 0);
+	CK_RING_INIT(cbufp_ring, &cci->csp->ring, NULL, CSP_BUFFER_SIZE);
+
+done:
+	CBUFP_RELEASE();
+	return ret;
 }
 
 /*
@@ -390,23 +437,23 @@ free:
  * number of available cbufs.
  */
 int
-cbufp_collect(spdid_t spdid, int size, long cbid)
+cbufp_collect(spdid_t spdid, int size)
 {
-	long *buf;
-	int off = 0;
 	struct cbufp_info *cbi;
 	struct cbufp_comp_info *cci;
+	struct cbufp_shared_page *csp;
 	struct cbufp_bin *bin;
-	int ret = -EINVAL;
+	int ret = 0;
 
 	printl("cbufp_collect\n");
 
-	buf = cbuf2buf(cbid, PAGE_SIZE);
-	if (!buf) return -1;
-
 	CBUFP_TAKE();
 	cci = cbufp_comp_info_get(spdid);
-	if (!cci) ERR_THROW(-ENOMEM, done);
+	if (unlikely(!cci)) ERR_THROW(-ENOMEM, done);
+	csp = cci->csp;
+	if (unlikely(!csp)) ERR_THROW(-EINVAL, done);
+
+	assert(csp->ring.size == CSP_BUFFER_SIZE);
 
 	/* 
 	 * Go through all cbufs we own, and report all of them that
@@ -420,13 +467,13 @@ cbufp_collect(spdid_t spdid, int size, long cbid)
 	do {
 		if (!cbi) break;
 		if (!cbufp_referenced(cbi)) {
+			struct cbufp_ring_element el = { .cbid = cbi->cbid };
 			cbufp_references_clear(cbi);
-			buf[off++] = cbi->cbid;
-			if (off == PAGE_SIZE/sizeof(int)) break;
+			if (!CK_RING_ENQUEUE_SPSC(cbufp_ring, &csp->ring, &el)) break;
+			if (++ret == CSP_BUFFER_SIZE) break;
 		}
 		cbi = FIRST_LIST(cbi, next, prev);
 	} while (cbi != bin->c);
-	ret = off;
 done:
 	CBUFP_RELEASE();
 	return ret;
@@ -501,7 +548,7 @@ cbufp_retrieve(spdid_t spdid, int cbid, int size)
 	assert(page);
 	for (off = 0 ; off < size ; off += PAGE_SIZE) {
 		if (dest+off != 
-		    (mman_alias_page(cos_spd_id(), ((vaddr_t)page)+off, spdid, dest+off))) {
+		    (mman_alias_page(cos_spd_id(), ((vaddr_t)page)+off, spdid, dest+off, MAPPING_READ))) {
 			assert(0);
 			valloc_free(cos_spd_id(), spdid, (void *)dest, 1);
 		}
@@ -509,7 +556,7 @@ cbufp_retrieve(spdid_t spdid, int cbid, int size)
 
 	meta->nfo.c.flags |= CBUFM_TOUCHED;
 	meta->nfo.c.ptr    = map->addr >> PAGE_ORDER;
-	meta->sz           = cbi->size;
+	meta->sz           = cbi->size >> PAGE_ORDER;
 	ret                = 0;
 done:
 	CBUFP_RELEASE();

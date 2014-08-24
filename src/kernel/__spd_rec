@@ -212,6 +212,8 @@ static void spd_init_all(struct spd *spds)
 		spds[i].freelist_next = (i == (MAX_NUM_SPDS-1)) ? NULL : &spds[i+1];
 		spds[i].ncaps = 0;
 		spd_init_capabilities(spds[i].caps);
+
+		// Jiguo: FT tracking threads (best efforts and hrt)
 		spds[i].scheduler_hrt_threads = NULL;
 		spds[i].scheduler_bes_threads = NULL;
 	}
@@ -327,7 +329,8 @@ struct spd *spd_alloc(unsigned short int num_caps, struct usr_inv_cap *user_cap_
 
 	for (i = 0 ; i < MAX_SPD_VAS_LOCATIONS ; i++) spd->location[i].size = 0;
 
-	init_spd_fault_cnt(spd);  // Jiguo: for FT
+    // Jiguo: for FT
+	init_spd_fault_cnt(spd);  
 	init_spd_reflect_cnt(spd);
 
 	return spd;
@@ -464,7 +467,7 @@ err:
 
 struct spd *spd_get_by_index(int idx)
 {
-	if (idx >= MAX_NUM_SPDS) {
+	if (idx >= MAX_NUM_SPDS || idx < 0) {
 		return NULL;
 	}
 	if (spd_is_free(idx)) return NULL;
@@ -608,6 +611,7 @@ unsigned int spd_add_static_cap_extended(struct spd *owner_spd, struct spd *trus
 	new_cap->invocation_cnt = 0;
 	new_cap->il = isolation_level;
 
+	// Jiguo: FT cap counter
 	init_cap_fault_cnt(new_cap);
 
 	new_cap->dest_entry_instruction = stubs->ST_serv_entry = ST_serv_entry;

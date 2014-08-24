@@ -70,5 +70,7 @@ Instances of the defined cohort type can be declared as:
 .Xr CK_COHORT_INIT 3 ,
 .Xr CK_COHORT_LOCK 3 ,
 .Xr CK_COHORT_UNLOCK 3 ,
+.Xr CK_COHORT_LOCKED 3 ,
+.Xr CK_COHORT_TRYLOCK 3 ,
 .Pp
 Additional information available at http://concurrencykit.org/

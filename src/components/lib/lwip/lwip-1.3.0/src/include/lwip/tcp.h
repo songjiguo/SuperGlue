@@ -95,8 +95,7 @@ err_t            tcp_connect (struct tcp_pcb *pcb, struct ip_addr *ipaddr,
                               struct tcp_pcb *tpcb,
                               err_t err));
 
-/* struct tcp_pcb * tcp_listen_with_backlog(struct tcp_pcb *pcb, u8_t backlog); */
-struct tcp_pcb * tcp_listen_with_backlog(struct tcp_pcb *pcb, int backlog);
+struct tcp_pcb * tcp_listen_with_backlog(struct tcp_pcb *pcb, u8_t backlog);
 #define          tcp_listen(pcb) tcp_listen_with_backlog(pcb, TCP_DEFAULT_LISTEN_BACKLOG)
 
 void             tcp_abort   (struct tcp_pcb *pcb);
@@ -437,10 +436,8 @@ struct tcp_pcb_listen {
   err_t (* accept)(void *arg, struct tcp_pcb *newpcb, err_t err);
 #endif /* LWIP_CALLBACK_API */
 #if TCP_LISTEN_BACKLOG
-  /* u8_t backlog; */
-  /* u8_t accepts_pending; */
-  int backlog;
-  int accepts_pending;
+  u8_t backlog;
+  u8_t accepts_pending;
 #endif /* TCP_LISTEN_BACKLOG */
 };
 

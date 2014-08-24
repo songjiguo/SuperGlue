@@ -29,10 +29,11 @@
 #include <sched.h>
 
 /* #define TEST_EVT_CREATE */
-/* #define TEST_EVT_SPLIT */
 /* #define TEST_EVT_WAIT */
 /* #define TEST_EVT_TRIGGER */
-#define TEST_EVT_FREE
+/* #define TEST_EVT_FREE */
+
+/* #define TEST_EVT_SPLIT */  // not support this yet
 
 //#define ACT_LOG
 #ifdef ACT_LOG
@@ -158,7 +159,7 @@ long evt_create(spdid_t spdid)
 	struct evt_grp *g;
 	struct evt *e;
 	int ret = -ENOMEM;
-	
+
 	lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_CREATE)
@@ -185,6 +186,7 @@ long evt_create(spdid_t spdid)
 		if (NULL == e) goto err;
 	}
 	e->extern_id = mapping_create(e);
+	e->n_received = 0;
 	if (0 > e->extern_id) goto free_evt_err;
 	ret = e->extern_id;
 done:
@@ -299,8 +301,9 @@ err:
 
 static int test_num = 0;
 
-/* Wait for a specific event */
-int evt_wait(spdid_t spdid, long extern_evt)
+/* volatile int bid = 0; */
+
+int __evt_wait(spdid_t spdid, long extern_evt, int n)
 {
 	struct evt *e;
 
@@ -308,36 +311,63 @@ int evt_wait(spdid_t spdid, long extern_evt)
 		int ret;
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT)
-	if (spdid == 11 && cos_get_thd_id() == 10 && test_num++ > 5) {
-		printc("trigger fault in evt_wait: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
-		assert(0);
-	}
+		if (spdid == 11 && cos_get_thd_id() == 10 && test_num++ > 5) {
+			printc("trigger fault in evt_wait (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
+			assert(0);
+		}
 #endif
+		
+		printc("22222 (extern evt id %ld)\n", extern_evt);
 		lock_take(&evt_lock);
 		e = mapping_find(extern_evt);
 		if (NULL == e) goto err;
+		printc("333333\n");
 		if (0 > (ret = __evt_read(e))) goto err;
+		printc("444444\n");
 		ACT_RECORD(ACT_WAIT, spdid, e->extern_id, cos_get_thd_id(), 0);
+		e->n_wait = n;
+		e->core_id = cos_cpuid();
+		if (ret == 1) e->n_received = 0;
 		lock_release(&evt_lock);
 		if (1 == ret) {
+			printc("555555\n");
 			assert(extern_evt == e->extern_id);
 			return 0;
 		} else {
 			ACT_RECORD(ACT_SLEEP, spdid, e->extern_id, cos_get_thd_id(), 0);
+
+			/* We can use acaps to block / wakeup, which
+			 * can avoid calling scheduler. But it's like
+			 * a hack. */
+			printc("block 666666\n");
 			if (0 > sched_block(cos_spd_id(), 0)) BUG();
 			/* printc("thread %d wakes up from block\n", cos_get_thd_id()); */
 		}
 	}
+
 err:
 	lock_release(&evt_lock);
 	return -1; 
+}
+
+/* Wait for a specific event */
+int evt_wait(spdid_t spdid, long extern_evt)
+{
+	printc("1111\n");
+	return __evt_wait(spdid, extern_evt, 1);
+}
+
+/* Wait for a specific event */
+int evt_wait_n(spdid_t spdid, long extern_evt, int n)
+{
+	return __evt_wait(spdid, extern_evt, n);
 }
 
 int evt_trigger(spdid_t spdid, long extern_evt)
 {
 	struct evt *e;
 	int ret = 0;
-
+	cpuid_t core;
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER)
 	if (spdid == 11 && cos_get_thd_id() == 13) {
@@ -349,13 +379,18 @@ int evt_trigger(spdid_t spdid, long extern_evt)
 	lock_take(&evt_lock);
 
 	e = mapping_find(extern_evt);
-	if (NULL == e) goto err;
+	if (NULL == e) {
+		printc("can not find event. Return.");
+		goto err;
+	}
 
 	ACT_RECORD(ACT_TRIGGER, spdid, e->extern_id, cos_get_thd_id(), 0);
+	core = e->core_id;
 	/* Trigger an event being waited for? */
 	if (0 != (ret = __evt_trigger(e))) {
 		lock_release(&evt_lock);
 		ACT_RECORD(ACT_WAKEUP, spdid, e->extern_id, cos_get_thd_id(), ret);
+
 		if (sched_wakeup(cos_spd_id(), ret)) BUG();
 	} else {
 		lock_release(&evt_lock);

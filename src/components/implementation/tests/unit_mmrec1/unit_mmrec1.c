@@ -65,7 +65,7 @@ alias_test()
 
 		/* printc("s_addr %p d_addr %p\n", addr, d_addr[i]); */
 		/* rdtscll(start); */
-		if (d_addr[i]!= mman_alias_page(cos_spd_id(), addr, cos_spd_id()+1, d_addr[i])) BUG();
+		if (d_addr[i]!= mman_alias_page(cos_spd_id(), addr, cos_spd_id()+1, d_addr[i], MAPPING_RW)) BUG();
 		/* rdtscll(end); */
 		/* printc("cost %llu\n", end - start); */
 		
@@ -114,7 +114,7 @@ all_in_one()
 	for (i = 0; i<PAGE_NUM; i++) {
 		/* rdtscll(start); */
 		mman_get_page(cos_spd_id(), s_addr[i], 0);
-		mman_alias_page(cos_spd_id(), s_addr[i], cos_spd_id()+1, d_addr[i]);
+		mman_alias_page(cos_spd_id(), s_addr[i], cos_spd_id()+1, d_addr[i], MAPPING_RW);
 		mman_revoke_page(cos_spd_id(), s_addr[i], 0);
 
 		/* rdtscll(end); */

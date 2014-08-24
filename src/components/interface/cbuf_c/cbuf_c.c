@@ -130,7 +130,7 @@ __cbuf_2buf_miss(int cbid, int len, int tmem)
 	else      ret = cbufp_retrieve(cos_spd_id(), cbid, len);
 	CBUF_TAKE();
 	if (unlikely(ret < 0                                   ||
-		     mc->sz < len                              ||
+		     mc->sz < (len >> PAGE_ORDER)              ||
 		     (tmem && !(mc->nfo.c.flags & CBUFM_TMEM)) || 
 		     (!tmem && mc->nfo.c.flags & CBUFM_TMEM))) {
 		return -1;
@@ -145,51 +145,60 @@ static inline int
 __cbufp_alloc_slow(int cbid, int size, int *len, int *error)
 {
 	int amnt = 0, i;
-	cbuf_t cb;
-	int *cbs;
-
+	static struct cbufp_shared_page *csp = NULL;
 
 	assert(cbid <= 0);
 	if (cbid == 0) {
 		struct cbuf_meta *cm;
-
-		cbs    = cbuf_alloc(PAGE_SIZE, &cb);
-		assert(cbs);
-		cbs[0] = 0;
+		struct cbufp_ring_element el;
+		if (!csp) csp = (struct cbufp_shared_page*)cbufp_map_collect(cos_spd_id());
 		/* Do a garbage collection */
-		amnt = cbufp_collect(cos_spd_id(), size, cb);
+		amnt = cbufp_collect(cos_spd_id(), size);
 		if (amnt < 0) {
 			*error = 1;
 			return -1;
 		}
+		assert((unsigned)amnt <= CSP_BUFFER_SIZE);
 
 		CBUF_TAKE();
-		cbid = cbs[0];
-		/* own the cbuf we just collected */
+
 		if (amnt > 0) {
-			cm = cbuf_vect_lookup_addr(cbid_to_meta_idx(cbid), 0);
-			assert(cm);
-			/* (should be atomic) */
-			cm->nfo.c.flags |= CBUFM_IN_USE | CBUFM_TOUCHED; 
+			if (CK_RING_DEQUEUE_SPSC(cbufp_ring, &csp->ring, &el)) {
+				cbid = el.cbid;
+				/* own the cbuf we just collected */
+				cm = cbuf_vect_lookup_addr(cbid_to_meta_idx(cbid), 0);
+				assert(cm);
+				/* (should be atomic) */
+				cm->nfo.c.flags |= CBUFM_TOUCHED;
+				if(cm->nfo.c.refcnt == CBUFP_REFCNT_MAX) {
+					assert(0);
+				}
+				cm->nfo.c.refcnt++;
+			} else {
+				/* Someone stole the cbufs I collected! */
+				amnt = 0;
+			}
 		}
 		/* ...add the rest back into freelists */
 		for (i = 1 ; i < amnt ; i++) {
 			struct cbuf_alloc_desc *d, *fl;
 			struct cbuf_meta *meta;
-			int idx = cbid_to_meta_idx(cbs[i]);
-			u32_t page;
-			void *data;
+			int idx;
+			int cb;
+
+			if (!CK_RING_DEQUEUE_SPSC(cbufp_ring, &csp->ring, &el)) break;
+			cb = el.cbid;
+			idx = cbid_to_meta_idx(cb);
 
 			assert(idx > 0);
 			meta = cbuf_vect_lookup_addr(idx, 0);
 			d    = __cbuf_alloc_lookup(meta->nfo.c.ptr);
-			assert(d && d->cbid == cbs[i]);
+			assert(d && d->cbid == cb);
 			fl   = d->flhead;
 			assert(fl);
 			ADD_LIST(fl, d, next, prev);
 		}
 		CBUF_RELEASE();
-		cbuf_free(cbs);
 	}
 	/* Nothing collected...allocate a new cbufp! */
 	if (amnt == 0) {
@@ -214,7 +223,6 @@ __cbuf_alloc_slow(int size, int *len, int tmem)
 	int cbid;
 	int cnt;
 
-	/* printc("on the cbuf slow alloc path (thd %d)\n", cos_get_thd_id()); */
 	cnt = cbid = 0;
 	do {
 		int error = 0;
@@ -244,7 +252,7 @@ __cbuf_alloc_slow(int size, int *len, int tmem)
 	assert(cbid);
 	cm   = cbuf_vect_lookup_addr(cbid_to_meta_idx(cbid), tmem);
 	assert(cm && cm->nfo.c.ptr);
-	assert(cm && cm->nfo.c.flags & CBUFM_IN_USE);
+	assert(cm && cm->nfo.c.refcnt);
 	assert(!tmem || cm->owner_nfo.thdid);
 	addr = (void*)(cm->nfo.c.ptr << PAGE_ORDER);
 	assert(addr);

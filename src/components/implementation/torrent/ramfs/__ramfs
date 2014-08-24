@@ -22,7 +22,6 @@ struct fsobj root;
 #define LOCK() if (lock_take(&fs_lock)) BUG();
 #define UNLOCK() if (lock_release(&fs_lock)) BUG();
 
-
 #define MIN_DATA_SZ 256
 
 td_t 
@@ -134,7 +133,6 @@ tread(spdid_t spdid, td_t td, int cbid, int sz)
 	memcpy(buf, fso->data + t->offset, ret);
 	/* printc("read buf -- %s\n", buf); */
 	t->offset += ret;
-	
 done:	
 	UNLOCK();
 	return ret;

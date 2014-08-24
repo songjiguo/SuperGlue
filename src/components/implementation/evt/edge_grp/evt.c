@@ -72,14 +72,6 @@ __evt_alloc(evt_t t, long parent, spdid_t spdid)
 	e->grp  = p;
 	e->creator = spdid;
 	if (p) {
-		/* // debug : add connection event to the head */
-		/* if (p->iachildren) { */
-		/* 	if (cos_get_thd_id() == 20) { */
-		/* 		ADD_LIST(p->iachildren, e, next, prev); */
-		/* 	} else ADD_END_LIST(p->iachildren, e, next, prev); */
-			
-		/* } else               p->iachildren = e; */
-
 		if (p->iachildren) ADD_LIST(p->iachildren, e, next, prev);
 		else               p->iachildren = e;
 	}
@@ -96,14 +88,13 @@ done:
 static int
 __evt_free(spdid_t spdid, long eid)
 {
-	struct evt *e, *c, *f, *g;
+	struct evt *e, *c, *f;
 
 	e = cmap_lookup(&evt_map, eid);
 	if (!e)                  return -EINVAL;
 	if (e->creator != spdid) return -EACCES;
 	if (e->bthd)             return -EAGAIN;
 
-	/* Remove any children we may have (if we are a group) */
 	if (e->iachildren) {
 		f = c = FIRST_LIST(e->iachildren, next, prev);
 		do {
@@ -120,20 +111,8 @@ __evt_free(spdid_t spdid, long eid)
 		} while (f != (c = FIRST_LIST(e->tchildren, next, prev)));
 		e->tchildren = NULL;
 	}
-
-	/* remove ourselves from any groups that we are in */
-	g = e->grp;
-	if (g->iachildren == e) {
-		if (EMPTY_LIST(e, next, prev)) g->iachildren = NULL;
-		else               g->iachildren = FIRST_LIST(e, next, prev);
-	}
-	if (g->tchildren == e) {
-		if (EMPTY_LIST(e, next, prev)) g->tchildren = NULL;
-		else               g->tchildren = FIRST_LIST(e, next, prev);
-	}
+	
 	REM_LIST(e, next, prev);
-
-	/* and remove ourselves from the component's indexing data-structures and free */
 	cmap_del(&evt_map, eid);
 	cslab_free_evt(e);
 
@@ -152,7 +131,6 @@ __evt_trigger(spdid_t spdid, long eid)
 {
 	struct evt *e, *g, *t = NULL;
 
-	/* printc("thread %d in __evt_trigger with eid %d\n",cos_get_thd_id(), eid); */
 	e = cmap_lookup(&evt_map, eid);
 	/* can't trigger groups */
 	if (!e || e->type != EVT_NORMAL) return -EINVAL;
@@ -174,7 +152,7 @@ __evt_trigger(spdid_t spdid, long eid)
 	if (t->status & EVT_BLOCKED) {
 		u16_t tid = t->bthd;
 		assert(tid);
-		/* printc("__evt_trigger: eid %d with thd %d\n", t->eid, t->bthd); */
+
 		t->status &= ~EVT_BLOCKED;
 		t->bthd    = 0;
 		return tid;
@@ -196,7 +174,6 @@ __evt_wait(spdid_t spdid, long eid)
 {
 	struct evt *e, *g, *c, *t;
 
-	/* if (cos_get_thd_id() != 20) printc("thd %d is in __evt_wait\n", cos_get_thd_id()); */
 	e = cmap_lookup(&evt_map, eid);
 	if (!e)                  return -EINVAL;
 	if (e->bthd)             return -EAGAIN; /* another thread already blocked? */
@@ -236,10 +213,9 @@ __evt_wait(spdid_t spdid, long eid)
 		}
 		if (g->iachildren) ADD_LIST(g->iachildren, r, next, prev);
 		else               g->iachildren = r;
-
+		
 		if (!more) break;
 	}
-	/* printc("__evt_wait: eid %d with thd %d\n", t->eid, t->bthd); */
 	return t->eid;
 } 
 
@@ -268,6 +244,11 @@ void evt_free(spdid_t spdid, long evt_id)
 	return; // ret;
 }
 
+long evt_wait_n(spdid_t spdid, long evt_id, int n) {
+	assert(0);
+	return -1;
+}
+
 long evt_wait(spdid_t spdid, long evt_id)
 {
 	long ret;
@@ -275,7 +256,6 @@ long evt_wait(spdid_t spdid, long evt_id)
 	do {
 		lock_take(&evt_lock);
 		ret = __evt_wait(spdid, evt_id);
-		/* printc("leaving evt wait 2 ret %d\n", ret); */
 		lock_release(&evt_lock);
 		if (!ret && 0 > sched_block(cos_spd_id(), 0)) BUG();
 	} while (!ret);
@@ -290,7 +270,6 @@ evt_trigger(spdid_t spdid, long evt_id)
 	lock_take(&evt_lock);
 	ret = __evt_trigger(spdid, evt_id);
 	lock_release(&evt_lock);
-	/* printc("evtgp: ret %d trigger and wakeup by thd %d\n", ret, cos_get_thd_id()); */
 	if (ret && sched_wakeup(cos_spd_id(), ret)) BUG();
 	return 0;
 }
@@ -301,20 +280,7 @@ evt_trigger(spdid_t spdid, long evt_id)
  * trigger) */
 int evt_update_status(spdid_t spdid, long extern_evt)
 {
-/* 	struct evt *e; */
-/* 	int ret = 0; */
 
-/* 	lock_take(&evt_lock); */
-
-/* 	e = cmap_lookup(&evt_map, eid); */
-/* 	if (NULL == e) goto err; */
-
-/* 	__evt_trigger(e); */
-/* 	lock_release(&evt_lock); */
-/* 	return 0; */
-/* err: */
-/* 	lock_release(&evt_lock); */
-/* 	return -1; */
 	return 0;
 }
 

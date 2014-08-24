@@ -85,7 +85,6 @@ static int     init_mem_access[] = {1, 0, 0};
 static int     init_mem_amnt[]   = {0, 0, 0};  // 128 pages for LL_LOG, 0 for default (evenly)
 static int     nmmgrs = 0;
 static int     frame_frontier    = 0; /* which physical frames have we used? */
-
 static int     allocated_mem    = 0; // Jiguo: any already allocated memory before mmgr    
 
 typedef void (*crt_thd_fn_t)(void);
@@ -105,8 +104,7 @@ typedef void (*crt_thd_fn_t)(void);
 
 /* We'll do all of our own initialization... */
 static int
-sched_create_thread_default(spdid_t spdid, u32_t sched_param_0, 
-			    u32_t sched_param_1, unsigned int desired_thd)
+sched_create_thread_default(spdid_t spdid, u32_t v1, u32_t v2, u32_t v3)
 { return 0; }
 
 static void
@@ -160,8 +158,8 @@ llboot_thd_done(void)
 			llboot->sched_offset++;
 			comp_boot_nfo[s].initialized = 1;
 			
-			/* printc("core %ld: booter init_thd upcalling into spdid %d.\n", cos_cpuid(), (unsigned int)s); */
-			cos_upcall(s); /* initialize the component! */
+			printc("core %ld: booter init_thd upcalling into spdid %d.\n", cos_cpuid(), (unsigned int)s);
+			cos_upcall(s, 0); /* initialize the component! */
 			BUG();
 		}
 		/* Done initializing; reboot!  If we are here, then
@@ -174,8 +172,7 @@ llboot_thd_done(void)
 		while (1) cos_switch_thread(llboot->alpha, 0);
 		BUG();
 	}
-
-
+	
 	while (1) {
 		int     pthd = llboot->prev_thd;
 		spdid_t rspd = llboot->recover_spd;
@@ -192,7 +189,7 @@ llboot_thd_done(void)
 			assert(pthd);
 			llboot->recover_spd = 0;
 
-			cos_upcall_args(op, rspd, arg); /* This will escape from the loop */
+			cos_upcall(rspd, arg); /* This will escape from the loop */
 			assert(0);
 		} else {		/* ...done reinitializing...resume */
 #ifdef MEAS_RECOVERY
@@ -295,7 +292,7 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 		rdtscll(start);
 #endif
 		if (reboot) recovery_upcall(cos_spd_id(), COS_UPCALL_REBOOT, spdid, 0);
-		else recovery_upcall(cos_spd_id(), COS_UPCALL_BOOTSTRAP, spdid, 0);
+		else recovery_upcall(cos_spd_id(), COS_UPCALL_THD_CREATE, spdid, 0);
 
 #ifdef MEAS_REC_SCHE
 		rdtscll(end);
@@ -335,8 +332,8 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	 * it to restart the component!  This might even be the
 	 * initial thread.
 	 */
-	if (reboot && cos_get_thd_id() == 4) cos_upcall_args(COS_UPCALL_REBOOT, spdid, 0);
-	else cos_upcall(spdid); 	/* FIXME: give back stack... */
+	if (reboot && cos_get_thd_id() == 4) cos_upcall_args(COS_UPCALL_REBOOT, spdid,0);
+	else cos_upcall(spdid, 0); 	/* FIXME: give back stack... */
 	printc("should not be here\n");
 	BUG();
 
@@ -373,10 +370,11 @@ fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	}
 	/* printc("<< LL fault notification 2 (tid %d)>>\n", tid); */
 
-	if (tid == cos_timer_thd) cos_upcall_args(COS_UPCALL_BRAND_EXEC, spdid, 0);
-	if (tid == cos_idle_thd)  cos_upcall_args(COS_UPCALL_IDLE, spdid, 0);
+	// Jiguo: still need these, but comment for merging purpose
+	/* if (tid == cos_timer_thd) cos_upcall_args(COS_UPCALL_BRAND_EXEC, spdid, 0); */
+	/* if (tid == cos_idle_thd)  cos_upcall_args(COS_UPCALL_IDLE, spdid, 0); */
 	if (tid == llboot->init_thd)      llboot_thd_done();
-	cos_upcall(flags);	/* upcall to ths dest spd (home spd), for other threads */
+	cos_upcall(flags, 0);	/* upcall to ths dest spd (home spd), for other threads */
 
 	assert(0);
 	return 0;
@@ -404,22 +402,22 @@ static inline int
 __vpage2frame(vaddr_t addr) { return (addr - init_hp) / PAGE_SIZE; }
 
 static vaddr_t
-__mman_get_page(spdid_t spd, vaddr_t addr, int flags)
+__local_mman_get_page(spdid_t spd, vaddr_t addr, int flags)
 {
-	if (cos_mmap_cntl(COS_MMAP_GRANT, 0, cos_spd_id(), addr, frame_frontier++)) BUG();
+	if (cos_mmap_cntl(COS_MMAP_GRANT, flags, cos_spd_id(), addr, frame_frontier++)) BUG();
 	if (!init_hp) init_hp = addr;
 	return addr;
 }
 
 static vaddr_t
-__mman_alias_page(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr)
+__local_mman_alias_page(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr, int flags)
 {
 	int fp;
 
 	assert(init_hp);
 	fp = __vpage2frame(s_addr);
 	assert(fp >= 0);
-	if (cos_mmap_cntl(COS_MMAP_GRANT, 0, d_spd, d_addr, fp)) BUG();
+	if (cos_mmap_cntl(COS_MMAP_GRANT, flags, d_spd, d_addr, fp)) BUG();
 	return d_addr;
 }
 
@@ -439,9 +437,9 @@ static inline void boot_create_init_thds(void)
 	if (cos_sched_cntl(COS_SCHED_EVT_REGION, 0, (long)PERCPU_GET(cos_sched_notifications))) BUG();
 
 	llboot->alpha        = cos_get_thd_id();
-	llboot->recovery_thd = cos_create_thread((int)llboot_ret_thd, (int)0, 0);
+	llboot->recovery_thd = cos_create_thread(cos_spd_id(), 0, 0);
 	assert(llboot->recovery_thd >= 0);
-	llboot->init_thd     = cos_create_thread((int)llboot_ret_thd, 0, 0);
+	llboot->init_thd     = cos_create_thread(cos_spd_id(), 0, 0);
 	printc("Core %ld, Low-level booter created threads:\n\t"
 	       "%d: alpha\n\t%d: recov\n\t%d: init\n",
 	       cos_cpuid(), llboot->alpha, 
@@ -480,12 +478,13 @@ boot_deps_run_all(void)
 void 
 cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
-	/* printc("core %ld: <<cos_upcall_fn as %d (type %d, CREATE=%d, DESTROY=%d, FAULT=%d)>>\n", */
-	/*        cos_cpuid(), cos_get_thd_id(), t, COS_UPCALL_CREATE, COS_UPCALL_DESTROY, COS_UPCALL_UNHANDLED_FAULT); */
+	printc("core %ld: <<cos_upcall_fn thd %d (type %d, CREATE=%d, DESTROY=%d, FAULT=%d)>>\n",
+	       cos_cpuid(), cos_get_thd_id(), t, COS_UPCALL_THD_CREATE, COS_UPCALL_DESTROY, COS_UPCALL_UNHANDLED_FAULT);
+	printc("test %d\n", COS_THD_INIT_REGION_SIZE);
 	switch (t) {
-	case COS_UPCALL_CREATE:
+	case COS_UPCALL_THD_CREATE:
 		llboot_ret_thd();
-		((crt_thd_fn_t)arg1)();
+//		((crt_thd_fn_t)arg1)();
 		break;
 	case COS_UPCALL_DESTROY:
 		llboot_thd_done();
@@ -494,7 +493,8 @@ cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		printc("Core %ld: Fault detected by the llboot component in thread %d: "
 		       "Major system error.\n", cos_cpuid(), cos_get_thd_id());
 	default:
-		while (1) ;
+		printc("Core %ld: thread %d in llboot receives undefined upcall.\n", 
+		       cos_cpuid(), cos_get_thd_id());
 		return;
 	}
 
@@ -539,7 +539,7 @@ sched_child_get_evt(spdid_t spdid, struct sched_child_evt *e, int idle, unsigned
 int 
 sched_child_cntl_thd(spdid_t spdid) 
 {
-	if (unlikely(cos_sched_introspect(COS_SCHED_HAS_PARENT, spdid, 0))) return 0;
+	/* if (unlikely(cos_sched_introspect(COS_SCHED_HAS_PARENT, spdid, 0))) return 0; */
 	if (cos_sched_cntl(COS_SCHED_PROMOTE_CHLD, 0, spdid)) {BUG(); while(1);}
 	/* printc("Grant thd %d to sched %d\n", cos_get_thd_id(), spdid); */
 	if (cos_sched_cntl(COS_SCHED_GRANT_SCHED, cos_get_thd_id(), spdid)) BUG();
