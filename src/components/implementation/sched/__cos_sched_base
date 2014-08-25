@@ -379,11 +379,11 @@ static int sched_switch_thread_target(int flags, report_evt_t evt, struct sched_
 			cos_sched_process_events(evt_callback, 0);
 		}
 
-		// Jiguo: debug   still any pending left
-		cos_sched_process_events(evt_callback, 0);
-		if (cos_sched_pending_event()) {
-			assert(0);
-		}
+		/* // Jiguo: debug web server to check still any pending left */
+		/* cos_sched_process_events(evt_callback, 0); */
+		/* if (cos_sched_pending_event()) { */
+		/* 	assert(0); */
+		/* } */
 
 		if (!target) {
 			/* 

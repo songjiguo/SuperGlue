@@ -142,8 +142,8 @@ rdpage_alloc(struct rec_data_spd *rd, vaddr_t addr)
 	INIT_LIST(rd_page, next, prev);
 	ADD_END_LIST(&rd->pages, rd_page, next, prev);
 	
-	printc("tracking....page %p (spd %d, by thd %d)\n",
-	       (void *)addr, rd->spdid, cos_get_thd_id());
+	/* printc("tracking....page %p (spd %d, by thd %d)\n", */
+	/*        (void *)addr, rd->spdid, cos_get_thd_id()); */
 
 	/* /\* cvect_add(&rec_page_vect, rd_page, addr >> PAGE_SHIFT); *\/ */
 done:
@@ -261,7 +261,7 @@ vaddr_t __sg_mman_reflect(spdid_t spd, int src_spd, int cnt)
 		}
 
 		rd_page = FIRST_LIST(rd_page_list, next, prev);
-		printc("mem_normal reflection: pages %p @ %p\n", rd_page->addr, rd_page);
+		printc("mem_normal reflection: pages %p @ %p\n", (void *)rd_page->addr, (void *)rd_page);
 		ret = rd_page->addr;
 	}
 done:

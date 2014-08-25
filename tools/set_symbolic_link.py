@@ -11,7 +11,7 @@ RECOVERY = 0
 ########################################
 # interface
 #######################################
-service_names = ['mem_mgr','rtorrent', 'sched', 'timed_blk', 'periodic_wake', 'cbuf_c', 'llboot', 'lock', 'evt']
+service_names = ['mem_mgr','rtorrent', 'sched', 'timed_blk', 'periodic_wake', 'cbuf_c', 'llboot', 'lock', 'evt', 'mbtorrent']
 
 # interface
 interface_path = '/src/components/interface/'
@@ -69,6 +69,12 @@ ramfs_component_path = '/src/components/implementation/torrent/ramfs/'
 ramfs_rec_c = '__ramfs_rec'
 ramfs_nor_c = '__ramfs'
 ramfs_c = 'ramfs.c'
+
+#MBOX
+mbox_component_path = '/src/components/implementation/torrent/async_conn/'
+mbox_rec_c = '__as_connector_rec'
+mbox_nor_c = '__as_connector'
+mbox_c = 'as_connector.c'
 
 #TE
 te_component_path = '/src/components/implementation/timed_blk/timed_evt/'
@@ -235,17 +241,17 @@ def set_link(name, c_path, dest, nor, rec, par):
     
     if os.path.exists(dest):
         os.unlink(dest)
-    if (name == "rtorrent" or name == "llboot"):  # temp, remove later
+    if (name == "rtorrent" or name == "llboot" or name == "mbtorrent"):  # temp, remove later
         if os.path.exists("Makefile"):
             os.unlink("Makefile")
     if (ret == 'normal') or (ret == 'n'):
         os.system("ln -s " + nor + " " + dest)
-        if (name == "rtorrent" or name == "llboot"):  # temp, remove later
+        if (name == "rtorrent" or name == "llboot" or name == "mbtorrent"):  # temp, remove later
             os.system("ln -s __Makefile  Makefile")  # temp, remove later
     elif (ret == 'recovery') or (ret == 'r'):
         RECOVERY = 1
         os.system("ln -s " + rec + " " + dest)
-        if (name == "rtorrent" or name == "llboot"):  # temp, remove later
+        if (name == "rtorrent" or name == "llboot" or name == "mbtorrent"):  # temp, remove later
             os.system("ln -s __Makefile_rec  Makefile")  # temp, remove later
     else:
         os.system("ln -s " + nor + " " + dest)
@@ -283,6 +289,11 @@ def main():
         if (service_names[i] == 'rtorrent'):
             print service_names[i]
             set_link(service_names[i], ramfs_component_path, ramfs_c, ramfs_nor_c, ramfs_rec_c, 0)
+            print
+        # component MBOX
+        if (service_names[i] == 'mbtorrent'):
+            print service_names[i]
+            set_link(service_names[i], mbox_component_path, mbox_c, mbox_nor_c, mbox_rec_c, 0)
             print
         # component TE
         if (service_names[i] == 'timed_blk'):

@@ -55,7 +55,9 @@ void cos_init(void *arg)
 	if (t1 < 1) {
 		printc("UNIT TEST FAILED: split failed %d\n", t1);
 	}
+	printc("mb server: thd %d 1\n", cos_get_thd_id());
 	evt_wait(cos_spd_id(), evt1);
+	printc("mb server: thd %d 2\n", cos_get_thd_id());
 	cli = tsplit(cos_spd_id(), t1, params2, strlen(params2), TOR_RW, evt2);
 	if (cli < 1) {
 		printc("UNIT TEST FAILED: split1 failed %d\n", cli);

@@ -54,13 +54,16 @@ void cos_init(void *arg)
 	if (serv < 1) {
 		printc("UNIT TEST FAILED: split1 failed %d\n", serv); 
 	}
+	printc("mb client: thd %d 1\n", cos_get_thd_id());
 	evt_wait(cos_spd_id(), evt);
+	printc("mb client: thd %d 2\n", cos_get_thd_id());
+
 	printc("client split successfully\n");
 	sz = 4096;
 	j = 1000*ITER;
 	rdtscll(start);
 	for (i=1; i<=j; i++) {
-		if (i == j)    rdtscll(end);
+		if (i == j) rdtscll(end);
 		d = cbufp_alloc(sz, &cb1);
 		if (!d) goto done;
 		cbufp_send(cb1);
