@@ -149,6 +149,15 @@ err:
 	return 0;
 }
 
+/* Jiguo: why is this function not in hier?  */
+int mman_revoke_page(spdid_t spd, vaddr_t addr, int flags)
+{
+	struct mapping *m;
+	int ret = 0;
+
+	return ret;
+}
+
 /*
  * Call to give up a page of memory in an spd at an address.
  */

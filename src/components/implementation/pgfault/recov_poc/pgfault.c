@@ -16,7 +16,7 @@
 #include <failure_notif.h>
 
 /* FIXME: should have a set of saved fault regs per thread. */
-
+// when test mailbox, why spdid is 14, but reg->bx and cx are 7?
 int fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 {
 	unsigned long r_ip; 	/* the ip to return to */
@@ -24,11 +24,13 @@ int fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip
 
 	int tid = cos_get_thd_id();
 
-	if (spdid != cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) {
-		assert(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0));
+	/* assert(0); */
+
+	/* if (spdid != cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) { */
+	        assert(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0));
 		assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));
 		assert(!cos_thd_cntl(COS_THD_INVFRM_SET_IP, tid, 1, r_ip-8));
-	}
+	/* } */
 
 	return 0;
 }

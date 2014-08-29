@@ -16,6 +16,7 @@ service_names = ['mem_mgr','rtorrent', 'sched', 'timed_blk', 'periodic_wake', 'c
 # interface
 interface_path = '/src/components/interface/'
 rec_stubs = '__stubs_rec'
+reflect_stubs = '__stubs_rec_reflection'
 log_stubs = '__stubs_log'
 normal_stubs = '__stubs'
 using_stubs = 'stubs'
@@ -63,6 +64,7 @@ evt_component_path = '/src/components/implementation/evt/edge/'
 evt_rec_c = '__evt_rec'
 evt_nor_c = '__evt'
 evt_c = 'evt.c'
+evt_rec_reflection = '__evt_rec_reflection'
 
 #FS
 ramfs_component_path = '/src/components/implementation/torrent/ramfs/'
@@ -186,6 +188,23 @@ def query(name, default = "0"):
         print "please type n/r/l"
         return '0'
 
+def set_reflection_interface(name, par):
+    
+    prefix = path + interface_path + name
+    os.chdir(prefix)
+
+    if os.path.exists(p_dst):
+        os.unlink(p_dst)
+        sys.exit
+    # interface
+    if (par == 'normal') or (par == 'n'):
+        os.system("ln -s " + p_nor + " " + p_dst)
+    elif (par == 'recovery') or (par == 'r'):
+        os.system("ln -s " + p_reflect + " " + p_dst)
+    else:
+        os.system("ln -s " + p_nor + " " + p_dst)
+    return
+
 def set_interface(name, par):
 
     global RECOVERY
@@ -211,8 +230,11 @@ def set_interface(name, par):
             os.system("ln -s " + p_log + " " + p_dst)
         else:
             os.system("ln -s " + p_nor + " " + p_dst)
+
+        if (name == 'mbtorrent'):
+            set_reflection_interface('evt', ret)
+            
         return ret
-        
 
 def set_link(name, c_path, dest, nor, rec, par):
 
@@ -260,10 +282,11 @@ def set_link(name, c_path, dest, nor, rec, par):
 
 def main():
 
-    global p_rec, p_nor, p_dst, path
+    global p_rec, p_reflect, p_nor, p_dst, path
     path = os.path.dirname(os.getcwd())
 
     p_rec = rec_stubs
+    p_reflect = reflect_stubs
     p_log = log_stubs
     p_nor = normal_stubs
     p_dst = using_stubs

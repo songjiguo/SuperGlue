@@ -407,3 +407,4 @@ int evt_stats_len(spdid_t spdid) { return 0; }
 #endif
 
 long evt_split(spdid_t spdid, long parent, int group) { return -1; }
+int evt_trigger_all(spdid_t spdid) {return 0;}

@@ -1,6 +1,6 @@
-COMPONENT=tasc.o
+COMPONENT=tasc_rec.o
 INTERFACES=mbtorrent
-DEPENDENCIES=cbufp cbuf_c printc lock sched valloc uniq_map evt mem_mgr_large ll_log
+DEPENDENCIES=cbufp cbuf_c printc lock sched valloc uniq_map evt mem_mgr_large ll_log pgfault
 
 include ../../Makefile.subsubdir
 

@@ -135,8 +135,8 @@ int __sg_sched_reflect(spdid_t spd, int src_spd, int cnt)
 
 	assert(src_spd);
 	cos_sched_lock_take();
-	printc("scheduler server side stub (thd %d)\n", cos_get_thd_id());
-	printc("passed reflection: spd %d src_spd %d\n", spd, src_spd);
+	/* printc("scheduler server side stub (thd %d)\n", cos_get_thd_id()); */
+	/* printc("passed reflection: spd %d src_spd %d\n", spd, src_spd); */
 
 	rd = rdblk_lookup(src_spd);
 	if (!rd) goto done;  // if there is no thread blocked from src_spd, return
@@ -150,11 +150,11 @@ int __sg_sched_reflect(spdid_t spd, int src_spd, int cnt)
 		}
 	} else {
 
-		for (blk_thd = FIRST_LIST(&rd->blkthd, next, prev);
-		     blk_thd != &rd->blkthd;
-		     blk_thd = FIRST_LIST(blk_thd, next, prev)){
-			printc("(before)blocked thds %d\n", blk_thd->id);
-		}
+		/* for (blk_thd = FIRST_LIST(&rd->blkthd, next, prev); */
+		/*      blk_thd != &rd->blkthd; */
+		/*      blk_thd = FIRST_LIST(blk_thd, next, prev)){ */
+		/* 	printc("(before)blocked thds %d\n", blk_thd->id); */
+		/* } */
 
 		blk_thd = FIRST_LIST(&rd->blkthd, next, prev);
 		if (!EMPTY_LIST(blk_thd, next, prev)) REM_LIST(blk_thd, next, prev);

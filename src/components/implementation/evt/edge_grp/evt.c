@@ -252,14 +252,13 @@ long evt_wait_n(spdid_t spdid, long evt_id, int n) {
 long evt_wait(spdid_t spdid, long evt_id)
 {
 	long ret;
-	
+
 	do {
 		lock_take(&evt_lock);
 		ret = __evt_wait(spdid, evt_id);
 		lock_release(&evt_lock);
 		if (!ret && 0 > sched_block(cos_spd_id(), 0)) BUG();
 	} while (!ret);
-
 	return ret; 
 }
 
@@ -274,15 +273,6 @@ evt_trigger(spdid_t spdid, long evt_id)
 	return 0;
 }
 
-
-/* Jiguo: this is used to update event state (all threads woken up
- * through reflection, not through trigger. We treat this as *
- * trigger) */
-int evt_update_status(spdid_t spdid, long extern_evt)
-{
-
-	return 0;
-}
 
 void 
 cos_init(void)
@@ -312,3 +302,5 @@ unsigned long *evt_stats(spdid_t spdid, unsigned long *stats) { return NULL; }
 int evt_stats_len(spdid_t spdid) { return 0; }
 
 long __evt_create(spdid_t spdid) {return 0;}
+
+int evt_trigger_all(spdid_t spdid) {return 0;}

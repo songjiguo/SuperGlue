@@ -100,7 +100,10 @@ rdevt_alloc(int evtid)
 
 	rd = cslab_alloc_rdevt();
 	assert(rd);
-	cvect_add(&rec_evt_vect, rd, evtid);
+	if (cvect_add(&rec_evt_vect, rd, evtid)) {
+		printc("can not add into cvect\n");
+		BUG();
+	}
 	return rd;
 }
 
@@ -266,22 +269,22 @@ redo:
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
+
+	if ((ser_eid = ret) <= 0) return ret;
 	
-	if ((ser_eid = ret) > 0) {
-		// if does exist, we need an unique id. Otherwise, create it
-		if (unlikely(rdevt_lookup(ser_eid))) {
-			cli_eid = get_unique();
-			assert(cli_eid > 0 && cli_eid != ser_eid);
-		} else {
-			cli_eid = ser_eid;
-		}
-		rd = rdevt_alloc(cli_eid);
-		assert(rd);
-		
-		rd_cons(rd, cos_spd_id(), cli_eid, ser_eid, 0, cos_get_thd_id());
-		INIT_LIST(&rd->blkthd, next, prev);
-		ret = cli_eid;
+	// if does exist, we need an unique id. Otherwise, create it
+	if (unlikely(rdevt_lookup(ser_eid))) {
+		cli_eid = get_unique();
+		assert(cli_eid > 0 && cli_eid != ser_eid);
+	} else {
+		cli_eid = ser_eid;
 	}
+	rd = rdevt_alloc(cli_eid);
+	assert(rd);
+	
+	rd_cons(rd, cos_spd_id(), cli_eid, ser_eid, 0, cos_get_thd_id());
+	INIT_LIST(&rd->blkthd, next, prev);
+	ret = cli_eid;
 
 	return ret;
 }

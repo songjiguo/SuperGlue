@@ -9,6 +9,7 @@
 #include <evt.h>
 #include <torrent.h>
 #include <periodic_wake.h>
+
 #define  ITER 10
 void parse_args(int *p, int *n)
 {
@@ -48,11 +49,13 @@ void cos_init(void *arg)
 		if (sched_create_thd(cos_spd_id(), sp.v, 0, 0) == 0) BUG();
 		return ;
 	}
+
 	evt = evt_split(cos_spd_id(), 0, 0);
 	assert(evt > 0);
-	serv = tsplit(cos_spd_id(), td_root, params1, strlen(params1), TOR_RW, evt);
+	serv = tsplit(cos_spd_id(), td_root, params1, strlen(params1), TOR_RW | TOR_WAIT, evt);
 	if (serv < 1) {
-		printc("UNIT TEST FAILED: split1 failed %d\n", serv); 
+		printc("UNIT TEST FAILED (3): split1 failed %d\n", serv); 
+		assert(0);
 	}
 	printc("mb client: thd %d 1\n", cos_get_thd_id());
 	evt_wait(cos_spd_id(), evt);
@@ -101,5 +104,6 @@ done:
 	printc("client UNIT TEST PASSED: split->release\n");
 
 	printc("client UNIT TEST ALL PASSED\n");
+	
 	return;
 }

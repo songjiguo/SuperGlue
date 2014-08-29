@@ -458,9 +458,11 @@ int mman_release_page(spdid_t spd, vaddr_t addr, int flags)
 
 	LOCK();
 
-	printc("mman_release_page (thd %d) addr %p\n", cos_get_thd_id(), (void *)addr);
+	/* printc("mman_release_page (thd %d) addr %p\n", cos_get_thd_id(), (void *)addr); */
 
-	// Jiguo: when flags > 0, it is the src_spd. We want to revoke from it ??
+	/* Jiguo: when flags > 0, it is used for reflection
+	 * purpose. flags == src_spd from which we want to revoke
+	 * pages */
 	if (flags > 0) spd = flags;
 
 	m = mapping_lookup(spd, addr);

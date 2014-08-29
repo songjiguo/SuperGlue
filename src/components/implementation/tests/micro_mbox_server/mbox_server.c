@@ -9,6 +9,7 @@
 #include <evt.h>
 #include <torrent.h>
 #include <periodic_wake.h>
+
 #define ITER 10
 void parse_args(int *p, int *n)
 {
@@ -45,22 +46,28 @@ void cos_init(void *arg)
 		sp.c.type = SCHEDP_PRIO;
 		sp.c.value = 7;
 		if (sched_create_thd(cos_spd_id(), sp.v, 0, 0) == 0) BUG();
+
 		return ;
 	}
+	
 	evt1 = evt_split(cos_spd_id(), 0, 0);
 	assert(evt1 > 0);
 	evt2 = evt_split(cos_spd_id(), 0, 0);
 	assert(evt2 > 0);
-	t1 = tsplit(cos_spd_id(), td_root, params1, strlen(params1), TOR_ALL | TOR_NONPERSIST, evt1);
+	printc("mb server: 1st tsplit by thd %d in spd %ld\n", 
+	       cos_get_thd_id(), cos_spd_id());
+	t1 = tsplit(cos_spd_id(), td_root, params1, strlen(params1), TOR_ALL | TOR_NONPERSIST | TOR_WAIT, evt1);
 	if (t1 < 1) {
-		printc("UNIT TEST FAILED: split failed %d\n", t1);
+		printc("UNIT TEST FAILED (1): split failed %d\n", t1);
+		assert(0);
 	}
-	printc("mb server: thd %d 1\n", cos_get_thd_id());
+	printc("mb server: thd %d (waiting on event %ld)\n", cos_get_thd_id(), evt1);
 	evt_wait(cos_spd_id(), evt1);
-	printc("mb server: thd %d 2\n", cos_get_thd_id());
+	printc("mb server: thd %d (back from evt_wait %ld)\n", cos_get_thd_id(), evt1);
 	cli = tsplit(cos_spd_id(), t1, params2, strlen(params2), TOR_RW, evt2);
 	if (cli < 1) {
-		printc("UNIT TEST FAILED: split1 failed %d\n", cli);
+		printc("UNIT TEST FAILED (2): split1 failed %d\n", cli);
+		assert(0);
 	}
 	j = 1000*ITER;
 	rdtscll(start);
@@ -99,5 +106,6 @@ void cos_init(void *arg)
 	printc("server UNIT TEST PASSED: split->release\n");
 
 	printc("server UNIT TEST ALL PASSED\n");
+	
 	return;
 }

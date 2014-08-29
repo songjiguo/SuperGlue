@@ -17,6 +17,15 @@
 #include <cos_map.h>
 #include <cringbuf.h>
 #include <ck_ring.h>
+
+#include <objtype.h>
+/* #define TEST_MBOX_TSPLIT_1  // server side create */
+/* #define TEST_MBOX_TSPLIT_2  // client side create */
+#define TEST_MBOX_TSPLIT_3  // accept a new connection on server side
+/* #define TEST_MBOX_TREADP */
+/* #define TEST_MBOX_TWRITEP */
+/* #define TEST_MBOX_TRELEASE */
+
 #define MBOX_BUFFER_SIZE 256
 struct cbuf_info {
 	cbufp_t cb;
@@ -58,6 +67,7 @@ __mbox_remove_cbufp(struct as_conn *ac)
 		}
 	}
 	
+	return;
 }
 
 static void 
@@ -101,6 +111,7 @@ mbox_create_addr(spdid_t spdid, struct torrent *t, struct fsobj *parent,
 	struct fsobj *fsc = NULL;;
 	struct as_conn_root *acr;
 
+	printc("mbox create addr by thd %d\n", cos_get_thd_id());
 	assert(parent);
 	if (!(parent->flags & TOR_SPLIT)) ERR_THROW(-EACCES, done);
 	fsc = fsobj_alloc(subpath, parent);
@@ -134,6 +145,7 @@ mbox_create_server(struct torrent *t, struct as_conn_root *acr)
 	struct as_conn *ac;
 	assert(!t->data);
 
+	printc("mbox create server by thd %d\n", cos_get_thd_id());
 	if (EMPTY_LIST(&acr->cs, next, prev)) return -EAGAIN;
 	ac = FIRST_LIST(&acr->cs, next, prev);
 	REM_LIST(&acr->cs, next, prev);
@@ -156,6 +168,7 @@ mbox_create_client(struct torrent *t, struct as_conn_root *acr)
 	int i, ret = 0;
 	assert(!t->data);
 	
+	printc("mbox create client by thd %d\n", cos_get_thd_id());
 	ac = malloc(sizeof(struct as_conn));
 	if (!ac) return -ENOMEM;
 	ac->status = 0;
@@ -230,8 +243,8 @@ mbox_get(struct torrent *t, int *sz, int *off, int ep)
  * later be split with param == "", and it will create the new
  * connection.
  *
- * NOTE: at any point, split will return -EAGAIN until for the server
- * until a client has arrived.
+ * NOTE: at any point, split will return -EAGAIN for the server until
+ * a client has arrived.
  *
  * 4) c_s receives event notification that a split is available on
  * td_s.  When split with td = td_s -> td_s^new
@@ -240,6 +253,8 @@ mbox_get(struct torrent *t, int *sz, int *off, int ep)
  * be asynchronously written to the other.  When either side releases
  * the descriptor, -EPIPE will be sent to the other
  */
+
+static int test_control = 0;
 
 td_t 
 tsplit(spdid_t spdid, td_t td, char *param, 
@@ -250,30 +265,68 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	struct fsobj *fsc, *parent = NULL; /* child, and parent */
 	char *subpath;
 
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_1)
+	test_control++;
+	printc("thd %d tsplit_1 (test_control %d) \n", cos_get_thd_id(), test_control);
+	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 1) {
+		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_2)
+	test_control++;
+	printc("thd %d tsplit_2 (test_control %d) \n", cos_get_thd_id(), test_control);
+	if (spdid == 15 && cos_get_thd_id() == 13 && test_control == 2) {
+		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_3)
+	test_control++;
+	printc("thd %d tsplit (test_control %d) \n", cos_get_thd_id(), test_control);
+	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 3) {
+		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 	LOCK();
 	t = tor_lookup(td);
+	printc("1\n");
 	if (!t) ERR_THROW(-EINVAL, done);
-
+	printc("2\n");
 	nt = tor_alloc(NULL, tflags);
 	if (!nt) ERR_THROW(-ENOMEM, done);
 	nt->evtid = evtid;
 
+	printc("3\n");
 	fsc = fsobj_path2obj(param, len, t->data, &parent, &subpath);
 	if (!fsc) {
+		printc("4.5\n");
 		if (!(tflags & TOR_NONPERSIST)) ERR_THROW(-EINVAL, free);
 		fsc = mbox_create_addr(spdid, nt, parent, subpath, tflags, (int*)&ret);
+		printc("4\n");
 		if (!fsc) goto free; /* ret set above... */
+		printc("5\n");
 		nt->data = fsc;
 		nt->flags = tflags & TOR_SPLIT;
 	} else {
 		struct as_conn_root *acr = (struct as_conn_root*)fsc->data;
 		assert(acr);
+		printc("6.5\n");
 	        if ((~fsc->flags) & tflags) ERR_THROW(-EACCES, free);
 		/* Case 2: a client attempt to connect to a server*/
 	        if (len>0)      ret = (td_t)mbox_create_client(nt, acr);
 		/* Case 3: a server create a connection to a client*/
 	        else            ret = (td_t)mbox_create_server(nt, acr); 
+		printc("6\n");
 	        if (ret < 0) goto free;
+		printc("7\n");
 	        nt->flags = tflags & TOR_RW;
 	}
 	ret = nt->td;
@@ -420,5 +473,13 @@ int cos_init(void)
 	root_torrent.data = &root;
 	root.flags = TOR_READ | TOR_SPLIT;
 
+	return 0;
+}
+
+// Jiguo: dummy function for the non-tracking tsplit (remove later??)
+td_t 
+__tsplit(spdid_t spdid, td_t td, char *param, 
+       int len, tor_flags_t tflags, long evtid) 
+{
 	return 0;
 }

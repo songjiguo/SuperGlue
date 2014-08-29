@@ -254,14 +254,14 @@ vaddr_t __sg_mman_reflect(spdid_t spd, int src_spd, int cnt)
 		}
 	} else {
 		rd_page_list = &rd->pages;
-		for (rd_page = FIRST_LIST(rd_page_list, next, prev);
-		     rd_page != rd_page_list;
-		     rd_page = FIRST_LIST(rd_page, next, prev)){
-			printc("(before)saved pages %p @ %p\n", (void *)rd_page->addr, (void *)rd_page);
-		}
+		/* for (rd_page = FIRST_LIST(rd_page_list, next, prev); */
+		/*      rd_page != rd_page_list; */
+		/*      rd_page = FIRST_LIST(rd_page, next, prev)){ */
+		/* 	printc("(before)saved pages %p @ %p\n", (void *)rd_page->addr, (void *)rd_page); */
+		/* } */
 
 		rd_page = FIRST_LIST(rd_page_list, next, prev);
-		printc("mem_normal reflection: pages %p @ %p\n", (void *)rd_page->addr, (void *)rd_page);
+		/* printc("mem_normal reflection: pages %p @ %p\n", (void *)rd_page->addr, (void *)rd_page); */
 		ret = rd_page->addr;
 	}
 done:
