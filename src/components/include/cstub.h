@@ -44,9 +44,12 @@
 #define CSTUB_ASM_POST_3RETS_3() "popl %7\n\t" CSTUB_ASM_POST_3RETS_2()
 #define CSTUB_ASM_POST_3RETS_4() "pop %8\n\t" CSTUB_ASM_POST_3RETS_3()
 
-#define CSTUB_ASM_OUT(_ret, _fault) "=a" (_ret), "=r" (_fault)
+/* Jiguo: instead using any register "r", force to use ecx, ebx and
+ * edx. Make sure they are not on the clobber list
+ */
+#define CSTUB_ASM_OUT(_ret, _fault) "=a" (_ret), "=c" (_fault)
 #define CSTUB_ASM_OUT_3RETS(_ret0, _fault, _ret1, _ret2) \
-	"=a" (_ret0), "=r" (_fault), "=r" (_ret1), "=r" (_ret2)
+	"=a" (_ret0), "=c" (_fault), "=b" (_ret1), "=d" (_ret2)
 
 /* input registers */
 #define CSTUB_ASM_IN_0(_uc) "a" (_uc->cap_no)
@@ -105,9 +108,9 @@
 		CSTUB_ASM_POST_3RETS_##_narg() \
 		: CSTUB_ASM_OUT_3RETS(_ret0, _fault, _ret1, _ret2) \
 		: CSTUB_ASM_IN_##_narg(__VA_ARGS__) \
-		: CSTUB_ASM_CLOBBER_##_narg() \
+		: CSTUB_ASM_CLOBBER_4()		    \
 	)
-
+/* : CSTUB_ASM_CLOBBER_##_narg() \ */  //Jiguo: this used to be used for 3RETS
 
 /* Use CSTUB_INVOKE() to make a capability invocation with _uc.
  * 	_ret: output return variable

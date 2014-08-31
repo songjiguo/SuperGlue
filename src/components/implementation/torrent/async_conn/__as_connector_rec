@@ -21,9 +21,9 @@
 #include <objtype.h>
 /* #define TEST_MBOX_TSPLIT_1  // server side create */
 /* #define TEST_MBOX_TSPLIT_2  // client side create */
-#define TEST_MBOX_TSPLIT_3  // accept a new connection on server side
+/* #define TEST_MBOX_TSPLIT_3  // accept a new connection on server side */
 /* #define TEST_MBOX_TREADP */
-/* #define TEST_MBOX_TWRITEP */
+#define TEST_MBOX_TWRITEP
 /* #define TEST_MBOX_TRELEASE */
 
 #define MBOX_BUFFER_SIZE 256
@@ -356,6 +356,16 @@ trelease(spdid_t spdid, td_t td)
 	if (!tor_is_usrdef(td)) return;
 
 	LOCK();
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE)
+	printc("thd %d treadp\n", cos_get_thd_id());
+	if (spdid == 14 && cos_get_thd_id() == 12) {
+		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 	t = tor_lookup(td);
 	if (!t) goto done;
 
@@ -424,20 +434,37 @@ treadp(spdid_t spdid, td_t td, int *off, int *sz)
 	struct torrent *t;
 	struct as_conn *ac;
 
+	printc("treadp (thd %d) 1\n", cos_get_thd_id());
+	
 	if (tor_isnull(td)) return -EINVAL;
 
 	LOCK();
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TREADP)
+	test_control++;
+	printc("thd %d treadp (test_control %d) \n", cos_get_thd_id(), test_control);
+	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 4) {
+		printc("trigger fault in mbox treadp: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);
 	assert(!tor_is_usrdef(td) || t->data);
 	if (!(t->flags & TOR_READ)) ERR_THROW(-EACCES, done);
-
+	printc("treadp (thd %d) 2\n", cos_get_thd_id());
 	ac = t->data;
 	ret = mbox_get(t, sz, off, ac->owner != spdid);
+	printc("treadp (thd %d) 2.5 ret %d\n", cos_get_thd_id(), ret);
 	if ((int)ret < 0) goto done;
 	t->offset += ret;
+	printc("treadp (thd %d) 3\n", cos_get_thd_id());
 done:	
 	UNLOCK();
+	printc("treadp (thd %d) return, ret %d\n", cos_get_thd_id(), ret);
+	printc("treadp (thd %d) off %d sz %d\n", cos_get_thd_id(), *off, *sz);
 	return ret;
 }
 
@@ -451,6 +478,17 @@ twritep(spdid_t spdid, td_t td, int cbid, int sz)
 
 	if (tor_isnull(td)) return -EINVAL;
 	LOCK();
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TWRITEP)
+	test_control++;
+	printc("thd %d twritep (test_control %d) \n", cos_get_thd_id(), test_control);
+	if (spdid == 15 && cos_get_thd_id() == 13 && test_control == 4) {
+		printc("trigger fault in mbox twritep: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);
 	assert(t->data);

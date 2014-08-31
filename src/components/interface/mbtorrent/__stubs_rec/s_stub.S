@@ -5,7 +5,9 @@
  * Public License v2.
  */
 
-#include <cos_asm_server_stub.h>
+#include <cos_asm_server_stub.h>  //this is using stkmgr
+//#include <cos_asm_server_stub_simple_stack.h>	
+
 .text	
 // cos_asm_server_stub_spdid(tsplit)
 // cos_asm_server_fn_stub_spdid(__tsplit, __sg_tsplit)

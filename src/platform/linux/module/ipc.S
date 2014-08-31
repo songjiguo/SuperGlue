@@ -103,7 +103,7 @@ composite_ret_ipc:	 /*ret_cap:*/
 	addl $8, %esp
 
 	/* eax contains ptr to invocation_frame */
-	/* FIXME: this is brain-damaged, should allocate ret area on stack instead of messing with invocation stack frame... Saved for now by the non-preemption thing and fact that thread is only modified one one core at a time. */
+	/* FIXME: this is brain-damaged, should allocate ret area on stack instead of messing with invocation stack frame... Saved for now by the non-preemption thing and fact that thread is only modified on one core at a time. */
 	movl SFRAMESP(%eax), %ecx
 	movl SFRAMEIP(%eax), %edx
 	popl %eax /* user-level ret val */
