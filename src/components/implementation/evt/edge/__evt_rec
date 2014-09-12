@@ -19,6 +19,8 @@
 #include <print.h>
 #include <cos_map.h>
 
+#include <cvect.h>
+
 #include <errno.h>
 
 #include <objtype.h>
@@ -28,12 +30,28 @@
 
 #include <sched.h>
 
+#include <name_server.h>
+
+// spd 11 for create/free, spd 12 for wait and spd 13 for trigger
+
+/* Note: evt_create fault can happen before and after event created in
+ * name server. evt_free fault can happen before and after event
+ * removed in name server 
+
+ * Here is the pattern: if the fault happens in the function that ever
+ * write out something, we need be careful since the fault before the
+ * fault has the different effect from the fault occurred after the
+ * write out!!!! If the fault occurs in a function that only reads,
+ * then no different where the fault happens !!!!
+ */
+
 /* #define TEST_EVT_CREATE */
+/* #define TEST_EVT_FREE */
 /* #define TEST_EVT_WAIT */
 /* #define TEST_EVT_TRIGGER */
-/* #define TEST_EVT_FREE */
 
 /* #define TEST_EVT_SPLIT */  // not support this yet
+static int test_num = 0;
 
 //#define ACT_LOG
 #ifdef ACT_LOG
@@ -65,32 +83,66 @@ typedef enum {
 #define ACT_RECORD(a, s, e, t1, t2)
 #endif
 
+CVECT_CREATE_STATIC(evtmap_vect);  // cache purpose
 /* A mapping between event ids and actual events */
 COS_MAP_CREATE_STATIC(evt_map);
 cos_lock_t evt_lock;
-
 struct evt_grp grps;
 
 /* 
  * mapping_* functions are for maintaining mappings between an
  * external event and an event structure 
  */
-static long mapping_create(struct evt *e)
+static long mapping_create(spdid_t spdid, struct evt *e)
 {
-	return cos_map_add(&evt_map, e);
+	/* Jiguo: replace map_add with ns_getid. However, there is one
+	 * issue here -- if the fault occurs after following function
+	 * and before return to the client, then we basically create
+	 * "holes" in the name server.
+	 
+	 Solution: on the client where evt_create is invoked, also
+	 call evt_updateid to indicate the client has received id
+	 
+	 */
+	long id = ns_getid(spdid);
+	assert(id >= 0);
+	printc("cvect add --> id %ld\n", id);
+        /* why need to delete such id?? After fault, we might find an
+	 * entry at this position, so we delete first??? */
+	cvect_del(&evtmap_vect, id);
+	cvect_add(&evtmap_vect, e, id);
+	return id;
+	/* return cos_map_add(&evt_map, e); */
 }
 
 static inline struct evt *mapping_find(long extern_evt)
 {
-	struct evt *e = cos_map_lookup(&evt_map, extern_evt);
+	/* struct evt *e = cos_map_lookup(&evt_map, extern_evt); */
+	// replace with cvect now,  Jiguo
+	struct evt *e = cvect_lookup(&evtmap_vect, extern_evt);
+
 	if (NULL == e) return e;
-	assert(e->extern_id == extern_evt);
+	printc("in mapping find 1 (e@%p)\n", e);
+	printc("evt: e->extern_id %ld (passed in extern_id %ld)\n", e->extern_id, extern_evt);
+
+	if (!e->extern_id) {
+		struct evt *new = cvect_lookup(&evtmap_vect, e->next->extern_id);
+		assert(new);
+		e = new;
+	} else {
+		assert(e->extern_id == extern_evt);
+	}
+	
+	printc("in mapping found e with id %ld\n", e->extern_id);
 	return e;
 }
 
 static void mapping_free(long extern_evt)
 {
-	if (cos_map_del(&evt_map, extern_evt)) BUG();
+	/* if (cos_map_del(&evt_map, extern_evt)) BUG(); */
+	// replace with cvect as cache, Jiguo
+	cvect_del(&evtmap_vect, extern_evt);	
+	ns_delid(cos_spd_id(), extern_evt);
 }
 
 /* 
@@ -160,15 +212,14 @@ long evt_create(spdid_t spdid)
 	struct evt *e;
 	int ret = -ENOMEM;
 
+/* #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_CREATE) */
+/* 	if (spdid == 11 && cos_get_thd_id() == 11 && test_num++ > 2) { */
+/* 		printc("trigger fault in evt_create: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid); */
+/* 		assert(0); */
+/* 	} */
+/* #endif */
+
 	lock_take(&evt_lock);
-
-#if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_CREATE)
-	if (spdid == 10 && cos_get_thd_id() == 11) {
-		printc("trigger fault in evt_create: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
-		assert(0);
-	}
-#endif
-
 	g = evt_grp_find(tid);
 	/* If the group associated with this thread hasn't been
 	 * created yet. */
@@ -185,10 +236,22 @@ long evt_create(spdid_t spdid)
 		e = __evt_new(g);
 		if (NULL == e) goto err;
 	}
-	e->extern_id = mapping_create(e);
+	e->extern_id = mapping_create(spdid, e);
 	e->n_received = 0;
 	if (0 > e->extern_id) goto free_evt_err;
 	ret = e->extern_id;
+	
+	/* what if the fault happens here?? In name server, an entry
+	 * is only valid if it is marked with "received". After every
+	 * fault, all entries without received will be removed. See
+	 * name_sever ns_del_norecevied(), called in each cos_init */
+#if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_CREATE)
+	if (spdid == 11 && cos_get_thd_id() == 11 && test_num++ > 2) {
+		printc("trigger fault in evt_create: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 done:
 	lock_release(&evt_lock);
 	return ret;
@@ -205,7 +268,7 @@ void evt_free(spdid_t spdid, long extern_evt)
 	lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_FREE)
-	if (spdid == 11 && cos_get_thd_id() == 10) {
+	if (spdid == 11 && cos_get_thd_id() == 11 && test_num++ > 2) {
 		printc("trigger fault in evt_free: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -215,6 +278,16 @@ void evt_free(spdid_t spdid, long extern_evt)
 	if (NULL == e) goto done;
 	__evt_free(e);
 	mapping_free(extern_evt);
+	/* what if the fault happens here?? Use reflection on
+	 * name_server to check if an event has been removed. See
+	 * evt_free cli_interface */
+/* #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_FREE) */
+/* 	if (spdid == 11 && cos_get_thd_id() == 11 && test_num++ > 2) { */
+/* 		printc("trigger fault in evt_free: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid); */
+/* 		assert(0); */
+/* 	} */
+/* #endif */
+
 done:
 	lock_release(&evt_lock);
 	return;
@@ -299,7 +372,45 @@ err:
 	
 }
 
-static int test_num = 0;
+
+/* Jiguo: only called when new server side id is recreated. Assume
+ * this will not fail for now */
+int
+evt_updateid(spdid_t spdid, int cli_id, int cur_id) 
+{
+	int ret = -1;
+	
+	printc("evt: update ..... (cli_id %d, cur_id %d)\n", cli_id, cur_id);
+
+	lock_take(&evt_lock);
+
+	ret = ns_setid(spdid, cli_id, cur_id);
+
+	if (likely(cli_id == cur_id)) {
+		ret = 0;
+		goto done;
+	}
+
+	// fault path of cache
+	struct evt *curr = mapping_find(cur_id);
+	if (!curr) goto done;
+	/* this will recreate event for cli_id, and is only used for
+	 * mapping, not by event manager anymore. Will be deleted  */
+	printc("AAAAAAA\n");
+	cvect_del(&evtmap_vect, cli_id);
+	struct evt *e;
+	e = malloc(sizeof(struct evt));
+	if (NULL == e) goto done;
+	e->next = curr;
+	e->extern_id = 0;  // 0 indicates this entry is invalid in cache
+	printc("BBBBBBB\n");
+	cvect_add(&evtmap_vect, e, cli_id);
+	ret = 0;
+	printc("evt: update ..... done@!!!\n");
+done:
+	lock_release(&evt_lock);	
+	return ret;
+}
 
 /* volatile int bid = 0; */
 
@@ -311,12 +422,12 @@ int __evt_wait(spdid_t spdid, long extern_evt, int n)
 		int ret;
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT)
-		if (spdid == 11 && cos_get_thd_id() == 10 && test_num++ > 5) {
+		if (spdid == 12 && cos_get_thd_id() == 11 && test_num++ > 3) {
 			printc("trigger fault in evt_wait (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
 			assert(0);
 		}
 #endif
-		
+	
 		printc("22222 (extern evt id %ld)\n", extern_evt);
 		lock_take(&evt_lock);
 		e = mapping_find(extern_evt);
@@ -331,7 +442,7 @@ int __evt_wait(spdid_t spdid, long extern_evt, int n)
 		lock_release(&evt_lock);
 		if (1 == ret) {
 			printc("555555\n");
-			assert(extern_evt == e->extern_id);
+			/* assert(extern_evt == e->extern_id); */  // after recovery, this might not be true. Jiguo
 			return 0;
 		} else {
 			ACT_RECORD(ACT_SLEEP, spdid, e->extern_id, cos_get_thd_id(), 0);
@@ -370,7 +481,7 @@ int evt_trigger(spdid_t spdid, long extern_evt)
 	cpuid_t core;
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER)
-	if (spdid == 11 && cos_get_thd_id() == 13) {
+	if (spdid == 13 && cos_get_thd_id() == 12 && test_num++ > 2) {
 		printc("trigger fault in evt_trigger: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -402,28 +513,6 @@ err:
 	return -1;
 }
 
-
-/* Jiguo: this is used to update event state (all threads woken up
- * through reflection, not through trigger. We treat this as *
- * trigger) */
-int evt_update_status(spdid_t spdid, long extern_evt)
-{
-	struct evt *e;
-	int ret = 0;
-
-	lock_take(&evt_lock);
-
-	e = mapping_find(extern_evt);
-	if (NULL == e) goto err;
-
-	__evt_trigger(e);
-	lock_release(&evt_lock);
-	return 0;
-err:
-	lock_release(&evt_lock);
-	return -1;
-}
-
 int evt_set_prio(spdid_t spdid, long extern_evt, int prio)
 {
 	struct evt *e;
@@ -446,8 +535,12 @@ void cos_init(void *arg)
 {
 	lock_static_init(&evt_lock);
 	cos_map_init_static(&evt_map);
-	if (mapping_create(NULL) != 0) BUG();
+        // Now we use cvect for cache, and id is got from name_server
+	/* if (mapping_create(NULL) != 0) BUG(); */  
+	cvect_init_static(&evtmap_vect);  // Jiguo: for cache between faults
 	INIT_LIST(&grps, next, prev);
+
+	ns_del_norecevied();   // free all not received id in nameserver
 }
 
 #ifdef ACT_LOG

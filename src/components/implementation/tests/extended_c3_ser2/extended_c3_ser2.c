@@ -14,6 +14,8 @@
 //#define EXAMINE_LOCK
 #define EXAMINE_EVT
 
+long passed_evtid;
+
 #ifdef EXAMINE_LOCK
 static int low = 13;
 static int mid = 12;
@@ -112,57 +114,35 @@ static int test_num2 = 0;
 
 static void try_hp(void)
 {
-	printc("(ser 2) thread h : %d is creating evts\n", cos_get_thd_id());
-	evt1 = evt_create(cos_spd_id());
-	assert(evt1 > 0);	
-
-	while(test_num1++ < 10) {
-		printc("(ser 2) thread h : %d waiting for event %ld (%d time)\n", 
-		       cos_get_thd_id(), evt1, test_num1);
-
-		evt_wait(cos_spd_id(), evt1);
-		printc("(ser 2) thread h : %d is processing event %ld (%d time)\n", 
-		       cos_get_thd_id(), evt1, test_num1);
-	}
-
-	printc("(ser2) thread h : %d frees event %ld\n", cos_get_thd_id(), evt1);
-	evt_free(cos_spd_id(), evt1);
-
+	/* printc("(ser 2) thread h : %d is triggering event %ld (%d time)\n",  */
+	/*        cos_get_thd_id(), passed_evtid, test_num2); */
+	/* if (evt_trigger(cos_spd_id(), passed_evtid)) assert(0);	 */
+	
 	return;
 }
 
 static void try_mp(void)
 {
-	while(test_num2++ < 10 && test_num1 <= 10) {
-		printc("(ser 2) thread h's test_num1 is already (%d time)\n", test_num1);
-		
-		printc("(ser 2) thread m : %d is triggering event %ld (%d time)\n", cos_get_thd_id(), evt1, test_num2);
-		if (evt_trigger(cos_spd_id(), evt1)) assert(0);
-	}
-
-	test_num2 = 0;
-	while(test_num2++ < 2) {
-		printc("\n [[[ trying to trigger an event in a different spd.....]]]\n");
-		printc("(ser 2) thread m : %d is triggering event %ld (%d time)\n", cos_get_thd_id(), evt1+1, test_num2);
-		if (evt_trigger(cos_spd_id(), evt1+1)) assert(0);  //  +1 for test only
-	}
-
 	return;
 }
 
 vaddr_t ec3_ser2_test(void)
 {
+	/* if (cos_get_thd_id() == hig) { */
+	/* 	printc("\n<<< Ser2 event test start in spd %d ... >>>>\n\n",  */
+	/* 	       cos_spd_id(), cos_get_thd_id()); */
+	/* 	try_hp(); */
+	/* 	printc("\n<<< ... Ser2 event test done in spd %d >>>>\n\n",  */
+	/* 	       cos_spd_id(), cos_get_thd_id()); */
+	/* } */
+	return 0;
+}
 
-	if (cos_get_thd_id() == hig) {
-		printc("\n<<< Ser2 event test start in spd %d ... >>>>\n\n", cos_get_thd_id());
-		try_hp();
-	}
-	if (cos_get_thd_id() == mid) try_mp();
-
-	if (cos_get_thd_id() == hig) {
-		printc("\n<<< ... Ser2 event test done in spd %d >>>>\n\n", cos_get_thd_id());
-	}
-
+int ec3_ser2_pass(long id)
+{
+	printc("\n**** wait ****\n");
+	printc("(ser 2) thd %d waiting for event %ld\n\n", cos_get_thd_id(), id);
+	evt_wait(cos_spd_id(), id);
 	return 0;
 }
 

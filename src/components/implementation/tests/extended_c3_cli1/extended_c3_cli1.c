@@ -92,15 +92,15 @@ cos_init(void)
 			ec3_ser1_test();
 		}
 			
-		if (cos_get_thd_id() == warm) {
-			printc("<<<warm thd %d>>>\n", cos_get_thd_id());
-			ec3_ser2_test();
-		}
+		/* if (cos_get_thd_id() == warm) { */
+		/* 	printc("<<<warm thd %d>>>\n", cos_get_thd_id()); */
+		/* 	ec3_ser2_test(); */
+		/* } */
 			
-		if (cos_get_thd_id() == low) {
-			printc("<<<low thd %d>>>\n", cos_get_thd_id());
-			ec3_ser2_test();
-		}
+		/* if (cos_get_thd_id() == low) { */
+		/* 	printc("<<<low thd %d>>>\n", cos_get_thd_id()); */
+		/* 	ec3_ser2_test(); */
+		/* } */
 #endif
 	}
 

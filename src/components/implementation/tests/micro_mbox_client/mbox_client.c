@@ -35,6 +35,7 @@ void cos_init(void *arg)
 	td_t t1, serv;
 	long evt;
 	char *params1 = "foo", *params2 = "", *d;
+	char *data = "1234567890";
 	int period, num, ret, sz, i, j;
 	u64_t start = 0, end = 0, re_cbuf;
 	cbufp_t cb1;
@@ -68,11 +69,16 @@ void cos_init(void *arg)
 	for (i=1; i<=j; i++) {
 		if (i == j) rdtscll(end);
 		d = cbufp_alloc(sz, &cb1);
-		if (!d) goto done;
+		if (!d) {
+			printc("can not get a cbufp (thd %d)\n", cos_get_thd_id());
+			goto done;
+		}
 		cbufp_send(cb1);
 		rdtscll(end);
 		((u64_t *)d)[0] = end;
+		printc("cli:passed out data is %lld\n", ((u64_t *)d)[0]);
 		ret = twritep(cos_spd_id(), serv, cb1, sz);
+		printc("Kevin (thd %d)\n", cos_get_thd_id());
 		cbufp_deref(cb1); 
 	}
 	printc("Client snd %d times %llu\n", j-1, (end-start)/(j-1));

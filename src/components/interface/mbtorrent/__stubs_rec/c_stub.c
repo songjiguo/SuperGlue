@@ -42,6 +42,16 @@ extern void free_page(void *ptr);
 
 static unsigned long fcounter = 0;
 
+/* Linked list for tracking cbufp ids that are passed in twritep. Any
+   cbufp on RB (not received yet and deref yet should be claimed)
+*/
+
+struct cb_node {
+	int cbid;
+	int sz;
+	struct cb_node *next, *prev;
+};
+
 // tracking data structure
 struct rec_data_tor {
 	td_t	parent_tid;
@@ -54,10 +64,13 @@ struct rec_data_tor {
 
 	long		 evtid;
 	unsigned int     evt_wait;  // for evt_wait after split
-
+	
+	struct cb_node   clist_head;  // see above explanation
+	
 	unsigned long	 fcnt;
 };
 
+CSLAB_CREATE(cbn, sizeof(struct cb_node));
 CSLAB_CREATE(rd, sizeof(struct rec_data_tor));
 CVECT_CREATE_STATIC(rec_vect);
 
@@ -104,6 +117,10 @@ rd_cons(struct rec_data_tor *rd, td_t tid, td_t ser_tid, td_t cli_tid, char *par
 	rd->evtid	 = evtid;
 
 	rd->fcnt	 = fcounter;
+
+	rd->clist_head.cbid = 0;
+	INIT_LIST(&rd->clist_head, next, prev);
+	assert(EMPTY_LIST(&rd->clist_head, next, prev));
 
 	rd->evt_wait	 = tflags & TOR_WAIT;  // add for now, wait after tsplit
 	
@@ -282,23 +299,36 @@ update_rd(td_t tid)
 {
         struct rec_data_tor *rd;
 
+	/* C_TAKE(cos_spd_id()); */
+
         rd = rd_lookup(tid);
-	if (!rd) return NULL;
-	if (likely(rd->fcnt == fcounter)) return rd;
+	if (!rd) goto done;
+	if (likely(rd->fcnt == fcounter)) goto done;
 	td_t parent_tid;
 	printc("thd %d restoring mbox (passed tid %d) \n", cos_get_thd_id(), tid);
 	printc("its parent torrent id %d \n", rd->parent_tid);
 
+	/* This is bounded by the depth of a torrent */
 	reinstate(rd);
 
-	/* parent_tid = reinstate(tid); */
-	/* /\* This is bounded by the depth of a torrent *\/ */
-	/* while (1) { */
-	/* 	parent_tid = reinstate(parent_tid); */
-	/* 	if (!parent_tid) break; */
-	/* } */
-
+	/* rd's parent should not be a mailbox channel, so just check
+	 * this for rd and write cbid back to channel if found any */
+	if (!EMPTY_LIST(&rd->clist_head, next, prev)) {
+		struct cb_node *cbn, *tmp;
+		cbn = LAST_LIST(&rd->clist_head, next, prev);
+		assert(cbn);
+		while (cbn != &rd->clist_head) {
+			/* printc("cli: recovering twritep s_tid %d cbid %d sz %d\n", */
+			/*        rd->s_tid, cbn->cbid, cbn->sz); */
+			twritep(cos_spd_id(), rd->s_tid, cbn->cbid, cbn->sz); // > 0?
+			tmp = cbn;
+			cbn = LAST_LIST(cbn, next, prev);
+			REM_LIST(tmp, next, prev);
+		}
+	}
 	printc("thd %d restore mbox done!!!\n", cos_get_thd_id());
+done:
+	/* C_RELEASE(cos_spd_id()); */
 	return rd;
 }
 
@@ -385,26 +415,61 @@ redo:
 		printc("try to write a non-existing mailbox\n");
 		return -1;
 	}
+
+	struct cb_node *cn;	
+	assert(rd);
+	cn = cslab_alloc_cbn();
+	assert(cn);
+	cn->cbid = cbid;
+	cn->sz   = sz;
+	printc("<<< add written cbuf id (thd %d)>>>\n", cos_get_thd_id());
+	ADD_LIST(&rd->clist_head, cn, next, prev);
+
+	/* Jiguo: Before return from twritep, make cbufp page read
+	 * only and track in cbuf_manager. The purpose is to avoid
+	 * corrupt the content in the shared pages before they are
+	 * read (dequeued from mailbox) 
+
+	 In order to use a unique id (for tracking over the server
+	 side), use the combination of "spdid|cli_tid" as the index
+	 for tracking the mapping between cli_id and ser_id between
+	 faults.
+
+	 I think spdid_id and cli_tid can uniquely identify the
+	 object, ser_tid will be updated between faults!!! So fault
+	 number is not necessary.
+
+
+	 Ignore above: there is no cbufp mapped into this component,
+	 only cbufp id and sz
+	*/	
+
+#if (RECOVERY_ENABLE == 1)
+	int dest_spd = cap_to_dest(uc->cap_no);
+	cbuf_c_claim(dest_spd, cbid);
+#endif
 	
 	CSTUB_INVOKE(ret, fault, uc, 4, spdid, rd->s_tid, cbid, sz);
 
-	printc("mb cli: twritep (thd %d) return, ret %d fault %ld\n", 
-	       cos_get_thd_id(), ret, fault);
+	/* printc("mb cli: twritep (thd %d) return, ret %d fault %ld\n",  */
+	/*        cos_get_thd_id(), ret, fault); */
 
 	if (unlikely (fault)){
 		printc("twritep found a fault (thd %d)\n", cos_get_thd_id());
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
-	
+
+	printc("<<< remove written cbuf id (thd %d)>>>\n", cos_get_thd_id());
+	REM_LIST(cn, next, prev);
+
 	return ret;
 }
-
 
 CSTUB_FN(int, treadp)(struct usr_inv_cap *uc,
 		spdid_t spdid, td_t tid, int *off, int *sz)
 {
-	int ret;
+	int ret = 0;
 	long fault = 0;
         printc("<<< In: call treadp  (thread %d) >>>\n", cos_get_thd_id());
         struct rec_data_tor *rd;
@@ -414,6 +479,9 @@ redo:
 		printc("try to write a non-existing mailbox\n");
 		return -1;
 	}
+
+	printc("mb cli: treadp (thd %d) invoke, ret %d fault %ld, off %d sz %d\n", 
+	       cos_get_thd_id(), ret, fault, *off, *sz);
 
 	CSTUB_INVOKE_3RETS(ret, fault, *off, *sz, uc, 2, spdid, rd->s_tid);
 

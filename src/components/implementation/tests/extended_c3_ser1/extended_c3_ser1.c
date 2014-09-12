@@ -9,6 +9,7 @@
 #include <timed_blk.h>
 
 #include <ec3_ser2.h>
+#include <ec3_ser3.h>
 
 // test evt: 10 and 13, 11 and 12
 
@@ -106,46 +107,36 @@ static int test_num1 = 0;
 static int test_num2 = 0;
 static void try_hp(void)
 {
-	printc("(ser1) thread h : %d is creating evts\n", cos_get_thd_id());
-	evt1 = evt_create(cos_spd_id());
-	assert(evt1 > 0);	
-
 	while(test_num1++ < 10) {
-		printc("(ser 1) thread h : %d waiting for event %ld (%d time)\n", 
-		       cos_get_thd_id(), evt1, test_num1);
-
-		evt_wait(cos_spd_id(), evt1);
-		printc("(ser 1) thread h : %d is processing event %ld (%d time)\n", 
-		       cos_get_thd_id(), evt1, test_num1);
+		printc("\n**** create ****\n");
+		printc("(ser1) thread h : %d is creating evts\n", cos_get_thd_id());
+		evt1 = evt_create(cos_spd_id());
+		assert(evt1 > 0);	
+		ec3_ser2_pass(evt1);  // go to evt_wait
+		printc("\n**** free ****\n");
+		printc("(ser1) thd h : %d frees event %ld\n", cos_get_thd_id(), evt1);
+		evt_free(cos_spd_id(), evt1);
 	}
-
-	printc("(ser1) thread h : %d frees event %ld\n", cos_get_thd_id(), evt1);
-	evt_free(cos_spd_id(), evt1);
-
 	return;
 }
 
 static void try_mp(void)
 {
-	while(test_num2++ < 6) {
-		printc("(ser1)thd m : %d is triggering event %ld (%d time)\n", cos_get_thd_id(), evt1, test_num2);
-		if (evt_trigger(cos_spd_id(), evt1)) assert(0);
+	while(test_num2++ < 10) {
+		ec3_ser3_pass(evt1);  // go to evt_trigger
 	}
-	
 	return;
 }
 
 vaddr_t ec3_ser1_test(void)
 {
 	if (cos_get_thd_id() == hig) {
-		printc("\n<<< Ser1 event test start in spd %d ... >>>>\n\n", cos_get_thd_id());
+		printc("\n<< Test start in spd %d ... >>>\n\n", cos_get_thd_id());
 		try_hp();
+		printc("\n<< ... Test done in spd %d >>>\n\n", cos_get_thd_id());
 	}
-	if (cos_get_thd_id() == mid) try_mp();
 
-	if (cos_get_thd_id() == hig) {
-		printc("\n<<< ... Ser1 event test done in spd %d >>>>\n\n", cos_get_thd_id());
-	}
+	if (cos_get_thd_id() == mid) try_mp();
 
 	return 0;
 }

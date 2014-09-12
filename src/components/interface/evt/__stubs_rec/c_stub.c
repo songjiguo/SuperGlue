@@ -13,7 +13,7 @@
 
 !!!! Here is an issue: if the event is triggered by a different thread
      in a different component, how do we ensure that next time,
-     evt_trigger will pass the correct id to evt manager?  
+     evt_trigger will pass the correct server side id to evt manager?
      
      Solution 1: a separate spd that maintains the mapping of client
      and server id. Need call this spd every time .... not good
@@ -43,6 +43,8 @@
 #include <evt.h>
 #include <cstub.h>
 
+#include <name_server.h>
+
 extern int sched_component_take(spdid_t spdid);
 extern int sched_component_release(spdid_t spdid);
 #define TAKE(spdid) 	do { if (sched_component_take(spdid))    return; } while (0)
@@ -63,21 +65,20 @@ extern void free_page(void *ptr);
 static unsigned long fcounter;
 
 /* recovery data structure evt service */
-struct blocked_thd {
-	int thd;
-	struct blocked_thd *next, *prev;
-};
-
 struct rec_data_evt {
 	spdid_t spdid;
-	int grp_id;             // evt is created by thread in its group
-	unsigned long p_evtid;  // for tsplit only
-
 	unsigned long c_evtid;
-	unsigned long s_evtid;
 
+	unsigned int state;
 	unsigned long fcnt;
-	struct blocked_thd blkthd;
+};
+
+/* the state of an event obect (each operation expects to change) */
+enum {
+	EVT_CREATED,
+	EVT_WAITING,
+	EVT_TRIGGERED,
+	EVT_FREED
 };
 
 /**********************************************/
@@ -111,48 +112,18 @@ static void
 rdevt_dealloc(struct rec_data_evt *rd)
 {
 	assert(rd);
+	if (cvect_del(&rec_evt_vect, rd->c_evtid)) BUG();
 	cslab_free_rdevt(rd);
 }
 
-static void
-rdevt_addblk(struct rec_data_evt *rd, struct blocked_thd *ptr_blkthd)
-{
-	assert(rd && ptr_blkthd);
-
-	ptr_blkthd->thd = cos_get_thd_id();
-	INIT_LIST(ptr_blkthd, next, prev);
-	ADD_LIST(&rd->blkthd, ptr_blkthd, next, prev);
-       
-	return;
-}
-
-
-static int
-get_unique(void)
-{
-	unsigned int i;
-	cvect_t *v;
-
-	v = &rec_evt_vect;
-	for(i = 1 ; i <= CVECT_MAX_ID ; i++) {
-		if (!cvect_lookup(v, i)) return i;
-	}
-
-	return -1;
-}
-
 static void 
-rd_cons(struct rec_data_evt *rd, spdid_t spdid, unsigned long cli_evtid, unsigned long ser_evtid, unsigned long par_evtid, int grp_id)
+rd_cons(struct rec_data_evt *rd, spdid_t spdid, unsigned long evtid, int state)
 {
 	assert(rd);
 
 	rd->spdid	 = spdid;
-	rd->grp_id	 = grp_id;
-
-	rd->p_evtid      = par_evtid;
-	rd->c_evtid	 = cli_evtid;
-	rd->s_evtid	 = ser_evtid;
-
+	rd->c_evtid	 = evtid;
+	rd->state	 = state;
 	rd->fcnt	 = fcounter;
 
 	return;
@@ -211,25 +182,79 @@ rd_reflection(int cap)
 #endif
 
 static struct rec_data_evt *
-update_rd(int evtid, int par_evtid, int cap)
+update_rd(int evtid, int state)
 {
         struct rec_data_evt *rd = NULL;
 
         rd = rdevt_lookup(evtid);
-	if (unlikely(!rd)) {
-		/* rd = rdevt_alloc(evtid); */
-		/* assert(rd);	 */
-		/* rd_cons(rd, cos_spd_id(), evtid, evtid, 0, cos_get_thd_id()); */
-		/* INIT_LIST(&rd->blkthd, next, prev); */
-		
-		goto done;
-	}
+	if (unlikely(!rd)) goto done;
 	if (likely(rd->fcnt == fcounter)) goto done;
+
 	rd->fcnt = fcounter;
+
+	/* Jiguo: if evt is created in a different component, do we
+	 * need switch to recovery thread and upcall to the creator? I
+	 * think we can just recreate a new event within in this
+	 * component, name_server will be updated anyway. The original
+	 * creator component will still see the old cli_id and the new
+	 * one will be cached in evt between faults.  
+	 
+	 * However, based on the state machine, if this is
+	 * evt_trigger, then the event should be in wait state
+	 * first. If this is evt_wait, then the event should be in
+	 * created state. (e.g, trigger sees a fault has occurred
+	 * before, if the event is already in the waiting state (say
+	 * after replay evt_wait, then no need to )
+
+	 * Note: torrent is different. We can not just create a new
+	 * object in the current component since each torrent is
+	 * associated with a file (e.g, "path"). And event does not.
+	 */
+	int new_evtid;
+	switch (state) {
+	case EVT_CREATED:
+                /* for create, if failed, just redo, should not be here */
+		assert(0);  
+		break;
+	case EVT_FREED:
+                /* here is one issue: if fault happens in evt_free
+		 * (after delid in mapping_free in evt manager), the
+		 * original id will be removed, then when replay
+		 * evt_free, how to remove the re-created id? We can
+		 * check if the entry is still presented in
+		 * name_space. If not, which means that fault must
+		 * happens after all related ids have been removed No
+		 * need to replay. Otherwise, we can just create a new
+		 * event and replay evt_free. This is basically a
+		 * reflection on name_server
+		 */
+		// if the entry has been removed, return NULL
+		if (ns_reflection(cos_spd_id(), evtid)) {
+			assert(rd);
+			rdevt_dealloc(rd);
+			return NULL;
+		}
+		// otherwise, create a new one and remove all on replay
+	case EVT_WAITING:
+		new_evtid = __evt_create(cos_spd_id());
+		assert(new_evtid > 0);
+		printc("in update_rd (state %d): creating a new evt (%d)\n", 
+		       state, new_evtid);
+		assert(!evt_updateid(cos_spd_id(), evtid, new_evtid));
+		break;
+	case EVT_TRIGGERED:
+		/* event should be in wait state already (after
+		 * reflection on scheduler) */
+		break;
+	default:
+		break;
+	}
+
 done:	
 	return rd;
 }
 
+// only used to get a new server side id, no tracking
 CSTUB_FN(unsigned long, __evt_create) (struct usr_inv_cap *uc,
 				       spdid_t spdid)
 {
@@ -237,11 +262,9 @@ CSTUB_FN(unsigned long, __evt_create) (struct usr_inv_cap *uc,
 	unsigned long ret;
 redo:
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
-	struct rec_data_evt *rd = NULL;
-	
 	if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
-		assert(0);
+		assert(0);  // assume fault does not occur during the recover
 		goto redo;
 	}
 	
@@ -262,29 +285,22 @@ CSTUB_FN(long, evt_create) (struct usr_inv_cap *uc,
         struct rec_data_evt *rd = NULL;
         unsigned long ser_eid, cli_eid;
 redo:
-/* printc("evt cli: evt_create %d\n", cos_get_thd_id()); */
+        printc("evt cli: evt_create %d\n", cos_get_thd_id());
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
-
 	if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
+		printc("evt cli: goto redo\n");
 		goto redo;
 	}
+	
+	assert(ret > 0);
+	assert(!evt_updateid(cos_spd_id(), ret, ret));
 
-	if ((ser_eid = ret) <= 0) return ret;
-	
-	// if does exist, we need an unique id. Otherwise, create it
-	if (unlikely(rdevt_lookup(ser_eid))) {
-		cli_eid = get_unique();
-		assert(cli_eid > 0 && cli_eid != ser_eid);
-	} else {
-		cli_eid = ser_eid;
-	}
-	rd = rdevt_alloc(cli_eid);
-	assert(rd);
-	
-	rd_cons(rd, cos_spd_id(), cli_eid, ser_eid, 0, cos_get_thd_id());
-	INIT_LIST(&rd->blkthd, next, prev);
-	ret = cli_eid;
+	printc("cli: evt_create create a new rd in spd %ld\n",
+	       cos_spd_id());		
+	rd = rdevt_alloc(ret);
+	assert(rd);	
+	rd_cons(rd, cos_spd_id(), ret, EVT_CREATED);
 
 	return ret;
 }
@@ -319,43 +335,23 @@ CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
 	long fault = 0;
 	long ret;
 
-	struct blocked_thd blk_thd;
         struct rec_data_evt *rd = NULL;
-
-        rd = update_rd(extern_evt, 0, uc->cap_no);
-	if (!rd) {
-		printc("try to wait for a non-existing evt\n");
-		return -1;
+redo:
+	printc("evt cli: evt_wait %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
+        rd = update_rd(extern_evt, EVT_WAITING);
+	if (unlikely(!rd)) {
+		printc("cli: evt_wait create a new rd in spd %ld\n",
+		       cos_spd_id());
+		rd = rdevt_alloc(extern_evt);
+		assert(rd);	
+		rd_cons(rd, cos_spd_id(), extern_evt, EVT_WAITING);
 	}
-        rdevt_addblk(rd, &blk_thd);
-
-	printc("evt cli: evt_wait %d (combined id %p)\n", cos_get_thd_id(), (void *)((extern_evt << 16) | rd->s_evtid));
-	CSTUB_INVOKE(ret, fault, uc, 2, spdid, (extern_evt << 16) | rd->s_evtid);
-	
+	assert(rd);
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
         if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
-		/* Only the thread who called event_create should
-		   re-create the event since group id is the creator
-		   (ownership) In the case other function failed, the
-		   blocked waiting thread will be woken up and detect
-		   the fault when returns back from scheduler.*/
-		rd->s_evtid = __evt_create(cos_spd_id());
-		/* evt_update_status(cos_spd_id(), rd->s_evtid); */
-		
-		printc("evt cli: evt_wait fault %d (create event %d again ofr cli evt %d)\n",
-		       cos_get_thd_id(), rd->s_evtid, extern_evt);
-		/* This will assume an event has occurred, no need to
-		 * block wait. In the worst case, the processing
-		 * thread will deal an event that does not happen
-		 * actually when the fault occurs. So the event
-		 * process thread should validate the event. We do not
-		 * want to miss an event if it happens (fault can
-		 * occur after the event arrives and the thread is
-		 * woken up)
-		 */
-		ret = 0;
+		goto redo;
         }
-        REM_LIST(&blk_thd, next, prev);
 
 	return ret;
 }
@@ -367,23 +363,22 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
 	int ret;
 
         struct rec_data_evt *rd = NULL;
+redo:
+	printc("evt cli: evt_trigger %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
+        rd = update_rd(extern_evt, EVT_TRIGGERED);
+	if (unlikely(!rd)) {
+		printc("cli: evt_trigger create a new rd in spd %ld\n",
+		       cos_spd_id());
+		rd = rdevt_alloc(extern_evt);
+		assert(rd);	
+		rd_cons(rd, cos_spd_id(), extern_evt, EVT_TRIGGERED);
+	}
+	assert(rd);
 
-        rd = update_rd(extern_evt, 0, uc->cap_no);
-        /* evt_trigger can be invoked from a different client. So do
-	 * not check return value of update_rd */
-	/* if (!rd) CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt); */
-	/* else     CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid); */
-        /* printc("evt cli: evt_trigger %d\n", cos_get_thd_id()); */
-	/* CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid); */
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
-	
 	if (unlikely (fault)){
-		/* when fault occurs, all threads will be reflected and
-		   woken up so it looks like an event trigger
-		   anyway. No need to repeat trigger
-		*/
 		CSTUB_FAULT_UPDATE();
-		ret = 0;
+		goto redo;
 	}
 	
 	return ret;
@@ -396,19 +391,26 @@ CSTUB_FN(int, evt_free) (struct usr_inv_cap *uc,
 	int ret;
 
         struct rec_data_evt *rd = NULL;
-
-        rd = update_rd(extern_evt, 0, uc->cap_no);
-	if (!rd) {
-		printc("try to free a non-existing evt\n");
-		return -1;
-	}
-	rdevt_dealloc(rd);
-/* printc("evt cli: evt_free %d\n", cos_get_thd_id()); */
-	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
+redo:
+	printc("evt cli: evt_free %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
+        rd = update_rd(extern_evt, EVT_FREED);
+        /* Here !rd does not mean rd does not exist. Actually it has
+	 * to exist in the same component. In evt_free, !rd means that
+	 * evt has been removed from name server and evt manager
+	 * before the fault occurs in evt_free 
+	 
+	 Note: rd must be deallocated in update_rd in this case */
 	
+	if (!rd) {
+		printc("evt cli: in evt_free, id %ld has been removed\n", extern_evt);
+		return ret; 
+	}
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
 	if (unlikely (fault)) {
 		CSTUB_FAULT_UPDATE();
+		goto redo;
 	}
 
+	rdevt_dealloc(rd);
 	return ret;
 }

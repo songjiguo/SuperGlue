@@ -11,3 +11,4 @@
 .text
 
 cos_asm_server_stub(ec3_ser2_test)
+cos_asm_server_stub(ec3_ser2_pass)

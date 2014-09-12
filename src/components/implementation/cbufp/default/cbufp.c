@@ -593,6 +593,104 @@ done:
 	return ret;
 }
 
+
+/* /\*  */
+/*  * Exchange the cbuf descriptor (flags of ownership) of old spd and */
+/*  * requested spd */
+/*  *\/ */
+/* static int  */
+/* mgr_update_owner(spdid_t new_spdid, long cbid) */
+/* { */
+/* 	struct spd_tmem_info *old_sti, *new_sti; */
+/* 	struct cb_desc *d; */
+/* 	struct cos_cbuf_item *cbi; */
+/* 	struct cb_mapping *old_owner, *new_owner, tmp; */
+/* 	struct cbuf_meta *old_mc, *new_mc; */
+/* 	vaddr_t mgr_addr; */
+/* 	int ret = 0; */
+
+/* 	cbi = cos_map_lookup(&cb_ids, cbid); */
+/* 	if (!cbi) goto err; */
+/* 	d = &cbi->desc; */
+/* 	old_owner = &d->owner; */
+/* 	old_sti = get_spd_info(old_owner->spd); */
+/* 	assert(SPD_IS_MANAGED(old_sti)); */
+
+/* 	old_mc = __spd_cbvect_lookup_range(old_sti, cbid); */
+/* 	if (!old_mc) goto err; */
+/* 	if (!CBUF_OWNER(old_mc->nfo.c.flags)) goto err; */
+/* 	for (new_owner = FIRST_LIST(old_owner, next, prev) ;  */
+/* 	     new_owner != old_owner;  */
+/* 	     new_owner = FIRST_LIST(new_owner, next, prev)) { */
+/* 		if (new_owner->spd == new_spdid) break; */
+/* 	} */
+
+/* 	if (new_owner == old_owner) goto err; */
+/* 	new_sti = get_spd_info(new_owner->spd); */
+/* 	assert(SPD_IS_MANAGED(new_sti)); */
+
+/*         // this returns the whole page for the range */
+/* 	mgr_addr = __spd_cbvect_retrieve_page(old_sti, cbid);  */
+/* 	assert(mgr_addr); */
+/* 	__spd_cbvect_add_range(new_sti, cbid, mgr_addr); */
+
+/* 	new_mc = __spd_cbvect_lookup_range(new_sti, cbid); */
+/* 	if(!new_mc) goto err; */
+/* 	new_mc->nfo.c.flags |= CBUFM_OWNER; */
+/* 	old_mc->nfo.c.flags &= ~CBUFM_OWNER;	 */
+
+/* 	// exchange the spd and addr in cbuf_mapping */
+/* 	tmp.spd = old_owner->spd; */
+/* 	old_owner->spd = new_owner->spd; */
+/* 	new_owner->spd = tmp.spd; */
+
+/* 	tmp.addr = old_owner->addr; */
+/* 	old_owner->addr = new_owner->addr; */
+/* 	new_owner->addr = tmp.addr; */
+/* done: */
+/* 	return ret; */
+/* err: */
+/* 	ret = -1; */
+/* 	goto done; */
+/* } */
+
+/* Jiguo: This is called when the component checks if it still owns
+ * the cbuf or wants to hold a cbuf, if it is not the creater, the
+ * ownership should be re-granted to it from the original owner. For
+ * example, when the ramfs server is called and the server wants to
+ * keep the cbuf longer before restore.(need remember which cbufs for
+ * that tid??)
+ *
+ * r_spdid is the requested spd
+ */
+int   
+cbuf_c_claim(spdid_t r_spdid, int cbid)
+{
+	int ret = 0;
+/* 	spdid_t o_spdid; */
+/* 	struct cb_desc *d; */
+/* 	struct cos_cbuf_item *cbi; */
+
+/* 	assert(cbid >= 0); */
+
+/* 	TAKE(); */
+/* 	cbi = cos_map_lookup(&cb_ids, cbid); */
+/* 	if (!cbi) {  */
+/* 		ret = -1;  */
+/* 		goto done; */
+/* 	} */
+/* 	d = &cbi->desc; */
+	
+/* 	o_spdid = d->owner.spd; */
+/* 	if (o_spdid == r_spdid) goto done; */
+
+/* 	/\* ret = mgr_update_owner(r_spdid, cbid); // -1 fail, 0 success *\/ */
+/* done: */
+/* 	RELEASE(); */
+	return ret;   
+}
+
+
 void
 cos_init(void)
 {

@@ -29,4 +29,9 @@ int evt_set_prio(spdid_t spdid, long extern_evt, int prio);
 unsigned long *evt_stats(spdid_t spdid, unsigned long *stats);
 int evt_stats_len(spdid_t spdid);
 
+// Jiguo: this function is used to update IDs cache and the link in
+// name_server. Only called on the recovery path and assume it does
+// not fail
+int evt_updateid(spdid_t spdid, int cli_id, int curr_id);
+
 #endif 	    /* !EVT_H */

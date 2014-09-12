@@ -340,9 +340,6 @@ pop(struct pt_regs **regs_restore)
 		return NULL;
 	}
 
-	if (*(unsigned long *)(inv_frame+8) != 0) {
-		printk("offset 8 from inv_fram is %d\n", *(unsigned long *)(inv_frame+8));
-	}
 	return inv_frame;	
 }
 

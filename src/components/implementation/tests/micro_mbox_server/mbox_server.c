@@ -78,6 +78,7 @@ void cos_init(void *arg)
 			else            break;
 		}
 		buf = cbufp2buf(cb1,sz);
+		printc("ser:received in data is %lld (sz %d)\n", ((u64_t *)buf)[0], sz);
 		cbufp_deref(cb1);
 	}
 	rdtscll(end);

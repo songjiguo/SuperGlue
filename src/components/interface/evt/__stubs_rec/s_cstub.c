@@ -77,69 +77,65 @@ long __sg_evt_create(spdid_t spdid)
 
 int __sg_evt_free(spdid_t spdid, long extern_evt)
 {
-	struct csmapping_evt *csmap;
+	/* struct csmapping_evt *csmap; */
 	assert(extern_evt);	
 
-	// mapping might be already gone due to fault
-	csmap = csmapping_lookup(extern_evt);
-	if (csmap) {
-		evt_free(spdid, csmap->sid);
-		csmapping_dealloc(csmap);
-	}
-		
+	/* // mapping might be already gone due to fault */
+	/* csmap = csmapping_lookup(extern_evt); */
+	/* if (csmap) { */
+	/* 	evt_free(spdid, csmap->sid); */
+	/* 	csmapping_dealloc(csmap); */
+	/* } */
+	evt_free(spdid, extern_evt);
 	return 0;
 }
 
 long __sg_evt_wait(spdid_t spdid, long extern_evt)
 {
-	long cid, sid;
-	struct csmapping_evt *csmap;
+	/* long cid, sid; */
+	/* struct csmapping_evt *csmap; */
 	
 	assert(extern_evt);
-	cid = extern_evt >> 16;
-	sid = extern_evt & 0xFFFF;
-	assert(cid && sid);
-	printc("\n\nevt ser: evt_wait %d (combined id %p)\n", cos_get_thd_id(), extern_evt);
-	printc("evt ser (spd %d): cid %ld sid %ld\n", cos_spd_id(), cid, sid);
+	printc("\n\nevt ser: evt_wait %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
 	printc("from spd %d\n", spdid);
 	
-	csmap = csmapping_lookup(cid);
-	if (!csmap) {
-		csmap = csmapping_alloc(cid);
-		assert(csmap);
-		csmap->cid = cid;
-		csmap->sid = sid;
-		printc("evt ser: create... track for cid %ld (ser sid %ld)\n", cid, sid);
-		printc("csmap@%p\n", csmap);
-		printc("csmapping_vect@%p\n", &csmapping_vect);
+	/* csmap = csmapping_lookup(cid); */
+	/* if (!csmap) { */
+	/* 	csmap = csmapping_alloc(cid); */
+	/* 	assert(csmap); */
+	/* 	csmap->cid = cid; */
+	/* 	csmap->sid = sid; */
+	/* 	printc("evt ser: create... track for cid %ld (ser sid %ld)\n", cid, sid); */
+	/* 	printc("csmap@%p\n", csmap); */
+	/* 	printc("csmapping_vect@%p\n", &csmapping_vect); */
 
-		int i;
-		if (!first) {
-			printc("first time init csmapping vect\n");
-			first = 1;
-			for (i = 0 ; i < (int)CVECT_BASE ; i++) {
-				if (i != cid) 
-					__cvect_set(&csmapping_vect, i, (void*)CVECT_INIT_VAL);
-			}
-		}
-	} else {
-		printc("evt ser: update... track for cid %ld (ser sid %ld)\n", cid, sid);
-		printc("csmap@%p\n", csmap);
-		printc("csmapping_vect@%p\n", &csmapping_vect);
-		csmap->cid = cid;
-		assert(csmap->sid = sid);
-	}
+	/* 	int i; */
+	/* 	if (!first) { */
+	/* 		printc("first time init csmapping vect\n"); */
+	/* 		first = 1; */
+	/* 		for (i = 0 ; i < (int)CVECT_BASE ; i++) { */
+	/* 			if (i != cid)  */
+	/* 				__cvect_set(&csmapping_vect, i, (void*)CVECT_INIT_VAL); */
+	/* 		} */
+	/* 	} */
+	/* } else { */
+	/* 	printc("evt ser: update... track for cid %ld (ser sid %ld)\n", cid, sid); */
+	/* 	printc("csmap@%p\n", csmap); */
+	/* 	printc("csmapping_vect@%p\n", &csmapping_vect); */
+	/* 	csmap->cid = cid; */
+	/* 	assert(csmap->sid = sid); */
+	/* } */
 
-	return evt_wait(spdid, csmap->sid);
+	return evt_wait(spdid, extern_evt);
 }
 
 int __sg_evt_trigger(spdid_t spdid, long extern_evt)
 {
-	struct csmapping_evt *csmap;
+	/* struct csmapping_evt *csmap; */
 
 	assert(extern_evt);	
-	csmap = csmapping_lookup(extern_evt);
-	assert(csmap);
+	/* csmap = csmapping_lookup(extern_evt); */
+	/* assert(csmap); */
 	
-	return evt_trigger(spdid, csmap->sid);
+	return evt_trigger(spdid, extern_evt);
 }

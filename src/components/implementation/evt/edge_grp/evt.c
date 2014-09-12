@@ -161,6 +161,12 @@ __evt_trigger(spdid_t spdid, long eid)
 	return 0;
 }
 
+int
+evt_updateid(spdid_t spdid, int cli_id, int cur_id) 
+{
+	return 0;
+}
+
 /* 
  * Return the event id if one has been triggered, otherwise 0 and the
  * thread should be blocked, only to retry this operation when woken.
@@ -177,7 +183,7 @@ __evt_wait(spdid_t spdid, long eid)
 	e = cmap_lookup(&evt_map, eid);
 	if (!e)                  return -EINVAL;
 	if (e->bthd)             return -EAGAIN; /* another thread already blocked? */
-	if (e->creator != spdid) return -EINVAL;
+	if (e->creator != spdid) return -EINVAL;   // whey do we need this?  Jiguo
 	assert(!(e->status & EVT_BLOCKED));
 	assert(e->eid);
 

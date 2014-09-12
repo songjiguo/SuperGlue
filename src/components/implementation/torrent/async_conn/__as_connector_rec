@@ -22,8 +22,8 @@
 /* #define TEST_MBOX_TSPLIT_1  // server side create */
 /* #define TEST_MBOX_TSPLIT_2  // client side create */
 /* #define TEST_MBOX_TSPLIT_3  // accept a new connection on server side */
-/* #define TEST_MBOX_TREADP */
-#define TEST_MBOX_TWRITEP
+#define TEST_MBOX_TREADP
+/* #define TEST_MBOX_TWRITEP */
 /* #define TEST_MBOX_TRELEASE */
 
 #define MBOX_BUFFER_SIZE 256
@@ -202,10 +202,14 @@ mbox_put(struct torrent *t, cbufp_t cb, int sz, int off, int ep)
 	cbi.cb  = cb;
 	cbi.sz  = sz;
 	cbi.off = off;
+
+	// Jiguo: ENQUEUE does memcpy (struct to struct, same type)
 	ret = CK_RING_ENQUEUE_SPSC(cb_buffer, &ac->cbs[ep], &cbi);
 	if (ret == 0) return -EALREADY;
 	/* printc("thread %d is trying to trigger evt %ld <<3>>\n",  */
 	/*        cos_get_thd_id(), ac->ts[other_ep]->evtid); */
+
+	// 
 	evt_trigger(cos_spd_id(), ac->ts[other_ep]->evtid);
 	return ret;
 }
@@ -358,7 +362,7 @@ trelease(spdid_t spdid, td_t td)
 	LOCK();
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE)
-	printc("thd %d treadp\n", cos_get_thd_id());
+	printc("thd %d trelease\n", cos_get_thd_id());
 	if (spdid == 14 && cos_get_thd_id() == 12) {
 		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
@@ -435,6 +439,7 @@ treadp(spdid_t spdid, td_t td, int *off, int *sz)
 	struct as_conn *ac;
 
 	printc("treadp (thd %d) 1\n", cos_get_thd_id());
+	printc("treadp passed in par: td %d off %d sz %d\n", td, (int *)off, (int *)sz);
 	
 	if (tor_isnull(td)) return -EINVAL;
 
@@ -461,6 +466,17 @@ treadp(spdid_t spdid, td_t td, int *off, int *sz)
 	if ((int)ret < 0) goto done;
 	t->offset += ret;
 	printc("treadp (thd %d) 3\n", cos_get_thd_id());
+
+	/* Jiguo: The reserved cbuf should not be made back to
+	 * read/write here since an thread can be preempted at any
+	 * point before cbufp2buf is called to get the data. I think
+	 * this should be done in cbufp_deref (before deref)....which
+	 * means the client does not need the data in cbufp anymore
+	 */
+/* #if (RECOVERY_ENABLE == 1) */
+/* 	cbuf_c_claim(spdid, cbid); */
+/* #endif */
+
 done:	
 	UNLOCK();
 	printc("treadp (thd %d) return, ret %d\n", cos_get_thd_id(), ret);
@@ -483,7 +499,7 @@ twritep(spdid_t spdid, td_t td, int cbid, int sz)
 	test_control++;
 	printc("thd %d twritep (test_control %d) \n", cos_get_thd_id(), test_control);
 	if (spdid == 15 && cos_get_thd_id() == 13 && test_control == 4) {
-		printc("trigger fault in mbox twritep: thd %d spd %ld passed spd %d\n", 
+		printc("trigger fault in mbox twritep: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -494,7 +510,8 @@ twritep(spdid_t spdid, td_t td, int cbid, int sz)
 	assert(t->data);
 	if (!(t->flags & TOR_WRITE)) ERR_THROW(-EACCES, done);
 	ac = t->data;
-	ret = mbox_put(t, cb, sz, 0, ac->owner != spdid);
+
+	ret = mbox_put(t, cb, sz, 0, ac->owner != spdid );
 	if (ret < 0) goto done;
 	t->offset += ret;
 done:	
