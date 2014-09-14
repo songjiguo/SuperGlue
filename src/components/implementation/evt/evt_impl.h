@@ -42,7 +42,11 @@ struct evt_grp;
 struct evt {
 	evt_status_t status;
 	int prio;
-	long extern_id;
+	long extern_id;	
+
+	// Jiguo: add current id for c^3
+	long curr_id;
+
 	int n_wait;
 	cpuid_t core_id;
 	volatile int n_received; 

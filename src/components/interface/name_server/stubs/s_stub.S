@@ -1,11 +1,12 @@
 /*
- evt name server
+ evt name server, mainly used for fault toerlance --- Jiguo
 */
 
 #include <cos_asm_server_stub_simple_stack.h>
 .text	
-cos_asm_server_stub_spdid(ns_getid)
-cos_asm_server_stub_spdid(ns_setid)
-cos_asm_server_stub_spdid(ns_delid)
-cos_asm_server_stub_spdid(ns_del_norecevied)
+cos_asm_server_stub_spdid(ns_alloc)
+cos_asm_server_stub_spdid(ns_free)
+cos_asm_server_stub_spdid(ns_update)
+cos_asm_server_stub_spdid(ns_lookup)
+cos_asm_server_stub_spdid(ns_invalidate)
 cos_asm_server_stub_spdid(ns_reflection)

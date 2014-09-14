@@ -273,8 +273,8 @@ interrupt_fault_update(struct thread *next) /* for now, this is the timer thread
 /*
   For COS_CAP_FAULT_UPDATE:
   return 0: successfully trigger or update (client needs fcounter++)
-  return 1: the fault counter has been updated already over this interface
   return -1: error
+  return n: how many times that the faulty component has occurred
 */
 
 static inline int
@@ -326,7 +326,7 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 		break;
 	case COS_CAP_FAULT_UPDATE: 		/* Update fault counter for this client */
 		if (cap_entry->fault.cnt == cap_entry->destination->fault.cnt) {
-			ret = 1;
+			ret = cap_entry->destination->fault.cnt;
 			break;
 		}
 
@@ -343,6 +343,7 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 				cap->fault.cnt = cap_entry->destination->fault.cnt;
 			}
 		}
+		ret = cap_entry->destination->fault.cnt;
 		break;
 	case COS_CAP_REFLECT_UPDATE: 		/* Update reflect counter for this client */
 		printk("check if reflection counter\n");

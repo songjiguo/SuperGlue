@@ -30,13 +30,15 @@ COS_MAP_CREATE_STATIC(ns_evtids);
 struct evt_node {
 	long id;
 	spdid_t spdid;
-	long owner_id;   // first event id (used to delete all received ids)
-
         /* indicate that the client has received this id since the
 	 * evt_create might fail in evt_manager before it returns back
 	 * to the client, but after create the new id in name
 	 * server */
 	unsigned int received;  
+
+	/* see the explanation in client interface, this will keep how
+	 * many times a spd has failed before an object is rebuilt */
+	long ser_fcounter;
 
 	struct evt_node *next, *prev;
 };
@@ -61,8 +63,8 @@ static void mapping_free(long id)
 }
 
 
-int 
-ns_getid(spdid_t spdid) 
+long
+ns_alloc(spdid_t spdid) 
 {
 	int ret = -1;
 	struct evt_node *en;
@@ -76,9 +78,9 @@ ns_getid(spdid_t spdid)
 
 	ret = mapping_create(en);
 	en->id       = ret;
-	en->owner_id = ret;   // this needs to be updated in ns_setid
 	en->spdid    = spdid;
 	en->received = 0;     // client not see this id yet
+	en->ser_fcounter = 0;
 	printc("evt name server getting id %d\n", ret);
 done:
 	UNLOCK();
@@ -86,7 +88,7 @@ done:
 }
 
 int 
-ns_delid(spdid_t spdid, int id) 
+ns_free(spdid_t spdid, int id) 
 {
 	int ret = -1;
 	struct evt_node *head, *m;
@@ -97,21 +99,16 @@ ns_delid(spdid_t spdid, int id)
 	
 	m = mapping_find(id);
 	if (!m) goto done;
-	printc("found m (m id %ld and owner id %ld)\n", m->id, m->owner_id);
-	if (m->owner_id != m->id) head = mapping_find(m->owner_id);
-	else head = m;
-	assert(head);
-	printc("found head (head id %ld)\n", head->id);
 	
-	while(!EMPTY_LIST(head, next, prev)) {
-		struct evt_node *en = NULL;
-		en = FIRST_LIST(head, next, prev);
+	while(!EMPTY_LIST(m, next, prev)) {
+		struct evt_node *en = FIRST_LIST(m, next, prev);
 		REM_LIST(en, next, prev);
 		mapping_free(en->id);
 		free(en);
 	}
-	mapping_free(head->id);	
-	free(head);
+	mapping_free(m->id);	
+	free(m);
+	ret = 0;
 done:
 	UNLOCK();
 	return ret;
@@ -120,34 +117,38 @@ done:
 /* this function links the new id with the client id, only called
  * after fault (in evt manager after create new id due to a fault)
  * Also, we invalidate the old cli_id entry, so the lookup will see
+
+ * For now, par is ser_fcounter passed here by client interface
 */
 int
-ns_setid(spdid_t spdid, int cli_id, int cur_id) 
+ns_update(spdid_t spdid, int cli_id, int cur_id, long par) 
 {
 	int ret = -1;
 	struct evt_node *en_cli, *en_cur;
 
-	printc("evt_ns: ns_setid\n");
+	printc("evt_ns: ns_update\n");
 
 	LOCK();
 
 	en_cli = mapping_find(cli_id);
 	if (unlikely(!en_cli)) goto done;
 
-	if (cli_id == cur_id) {
+	if (cli_id == cur_id) {  // normal path on create
 		printc("set received for id %d\n", cli_id);
 		en_cli->received = 1; // now we know that client has seen this id
 		ret = 0;
 		goto done;
 	}
-
+	
 	en_cur = mapping_find(cur_id);
 	if (!en_cur) goto done;
-	printc("set received for id %d\n", cur_id);
-	en_cur->received = 1; // now we know that client has seen this id after fault
+	en_cur->received     = 1; // now we know that client has seen this id after fault
+	printc("set event id %d 's ser_fcounter to be %ld\n", cur_id, par);
+	en_cur->ser_fcounter = par;
 
 	ADD_LIST(en_cli, en_cur, next, prev);
 	
+	ret = 0;
 	/* struct evt_node *tmp = en_cli; */
 	/* printc("[[[]]]\n"); */
 	/* while(tmp) { */
@@ -161,9 +162,31 @@ done:
 	return 0;
 }
 
+/* This function returns current for the original id */
+long
+ns_lookup(spdid_t spdid, int id) 
+{
+	int ret = 0;
+	struct evt_node *curr, *tmp;
+
+	printc("evt_ns: ns_lookup\n");
+
+	LOCK();
+
+	curr = mapping_find(id);
+	if (!curr) goto done;
+	tmp = FIRST_LIST(curr, next, prev);
+	assert(tmp);
+	ret = tmp->id;
+	printc("evt_ns: ns_lookup done. Fonud id %d\n", ret);
+done:
+	UNLOCK();
+	return ret;
+}
+
 /* call this after the fault, or in cos_init once */
 int
-ns_del_norecevied() 
+ns_invalidate() 
 {
 	int ret = -1;
 	int i;
@@ -186,16 +209,37 @@ ns_del_norecevied()
 }
 
 /* for now, this reflection function is used to check if an entry is
- * presented */
-int
-ns_reflection(spdid_t spdid, int id) 
+ * presented 
+ type 0: check if entry for id is presented
+ type 1: check how many times the server has failed (at least the entry for a cli_id sees)
+
+*/
+long
+ns_reflection(spdid_t spdid, int id, int type) 
 {
 	printc("evt name server reflection id %d\n", id);
 
 	LOCK();	
 
-	int ret = -1;
-	if (!mapping_find(id)) goto done;
+	struct evt_node *en, *cur;
+	long ret = -1;
+
+	switch (type) {
+	case 0:
+		if (!mapping_find(id)) goto done;
+		break;
+	case 1:
+		en = mapping_find(id);
+		assert(en);
+		cur = FIRST_LIST(en, next, prev);
+		assert(cur);
+		ret = cur->ser_fcounter;
+		printc("get ser_fcounter %ld (for old event id %d)\n", ret, id);
+		goto done;
+	default:
+		break;
+	}
+
 	ret = 0;
 done:
 	UNLOCK();

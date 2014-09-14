@@ -138,6 +138,7 @@ vaddr_t ec3_ser2_test(void)
 	return 0;
 }
 
+
 int ec3_ser2_pass(long id)
 {
 	printc("\n**** wait ****\n");

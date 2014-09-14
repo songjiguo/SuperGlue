@@ -63,6 +63,7 @@ extern void free_page(void *ptr);
 
 /* global fault counter, only increase, never decrease */
 static unsigned long fcounter;
+static long ser_fcounter;  // mainly for the evt_trigger (see below explanation)
 
 /* recovery data structure evt service */
 struct rec_data_evt {
@@ -181,6 +182,10 @@ rd_reflection(int cap)
 }
 #endif
 
+
+extern int ns_update(spdid_t spdid, int old_id, int curr_id, long par);
+extern long ns_reflection(spdid_t spdid, int id, int type);
+
 static struct rec_data_evt *
 update_rd(int evtid, int state)
 {
@@ -229,22 +234,66 @@ update_rd(int evtid, int state)
 		 * reflection on name_server
 		 */
 		// if the entry has been removed, return NULL
-		if (ns_reflection(cos_spd_id(), evtid)) {
+		if (ns_reflection(cos_spd_id(), evtid, 0)) {
 			assert(rd);
 			rdevt_dealloc(rd);
 			return NULL;
 		}
 		// otherwise, create a new one and remove all on replay
 	case EVT_WAITING:
+		printc("in update_rd (state %d) is creating a new evt by thd %d\n", 
+		       state, cos_get_thd_id());
 		new_evtid = __evt_create(cos_spd_id());
 		assert(new_evtid > 0);
 		printc("in update_rd (state %d): creating a new evt (%d)\n", 
 		       state, new_evtid);
-		assert(!evt_updateid(cos_spd_id(), evtid, new_evtid));
+		assert(evtid != new_evtid);
+		// preempted by other thread here?
+		assert(!ns_update(cos_spd_id(), evtid, new_evtid, ser_fcounter));
 		break;
 	case EVT_TRIGGERED:
-		/* event should be in wait state already (after
-		 * reflection on scheduler) */
+		/* Generally there are two rules to follow when
+		   recover an object state:
+		   A) follow the protocol of service
+		   B) follow the priority of threads
+		   
+		   In the evt_trigger case, this needs to be careful
+		   because two reasons: 1) to follow the protocol, an
+		   event should be in wait state before evt_trigger is
+		   invoked (e.g, assert(n_received <= n_wait)). 2)
+		   to follow threads priorities, if the triggering
+		   thread is at higher priority, then reflection on
+		   scheduler might not be able to put the waiting
+		   thread back to the wait state. So we can not
+		   account on that the woken up thread from reflection
+		   will definitely create the new event before us.
+
+		   Solution: For simplicity now, always assume the
+		   evt_trigger must follow rule A), not necessary to
+		   rule B). Otherwise, we either need switch to other
+		   thread to get to wait state first, or we need to
+		   ignore the event. Or we can think this should be
+		   ensured by state machine.
+
+		   However, in evt_trigger thd A calls sched_wakeup to
+		   wake up thd B that wait-blocked on the event. Say
+		   if B is woken up, then later calls evt_free to free
+		   the event. Then switch back A and if the fault
+		   occurs at this point (after sched_wakeup), then the
+		   event has been removed. Therefore, we need check if
+		   the event is already removed. But the event with
+		   the same id might be just created again (say,
+		   evt_create -> wevt_wait -> evt_free is a loop).
+
+		   Solution: check if the event is has been
+		   freed. However, we can also need check if the event
+		   is the same one after the fault occurs (this can
+		   happen if evt_trigger triggers the new event with
+		   the same id, for now we just assume it is ok with
+		   protocol). One solution is to use server side fault
+		   counter to differentiate the event with the same
+		   id. Or we can update name server after sched_wakeup
+		*/
 		break;
 	default:
 		break;
@@ -289,12 +338,13 @@ redo:
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
+		ser_fcounter = fault_update;
 		printc("evt cli: goto redo\n");
 		goto redo;
 	}
 	
 	assert(ret > 0);
-	assert(!evt_updateid(cos_spd_id(), ret, ret));
+	assert(!ns_update(cos_spd_id(), ret, ret, ser_fcounter));
 
 	printc("cli: evt_create create a new rd in spd %ld\n",
 	       cos_spd_id());		
@@ -350,6 +400,7 @@ redo:
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
         if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
+		ser_fcounter = fault_update;
 		goto redo;
         }
 
@@ -363,6 +414,7 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
 	int ret;
 
         struct rec_data_evt *rd = NULL;
+	long old_serfcnt = ser_fcounter;
 redo:
 	printc("evt cli: evt_trigger %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
         rd = update_rd(extern_evt, EVT_TRIGGERED);
@@ -374,13 +426,33 @@ redo:
 		rd_cons(rd, cos_spd_id(), extern_evt, EVT_TRIGGERED);
 	}
 	assert(rd);
-
+	
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
 	if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
+		ser_fcounter = fault_update;
+		// if the entry has been removed, just return, no replay
+		if (ns_reflection(cos_spd_id(), extern_evt, 0)) {
+			assert(rd);
+			rdevt_dealloc(rd);
+			printc("FOUND ENTRY HAVE BEEN REMOVED\n");
+			ret = 1;
+			goto done;
+		}
+		// this will return the current # of fault of spd
+		long curr_id_serfcnt = ns_reflection(cos_spd_id(), extern_evt, 1);
+		// if the entry of the same id has been created, just return, no replay
+		// No matter where the event is re-created or not, at least > is true
+		printc("curr_id_serfcnt %ld  old_serfcnt %ld\n", 
+		       curr_id_serfcnt, old_serfcnt);
+		if (curr_id_serfcnt > old_serfcnt) {
+			ret = 1;
+			printc("FOUND SAME ENTRY AFTER FAULT\n");
+			goto done;
+		}
 		goto redo;
 	}
-	
+done:	
 	return ret;
 }
 
@@ -408,6 +480,7 @@ redo:
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
 	if (unlikely (fault)) {
 		CSTUB_FAULT_UPDATE();
+		ser_fcounter = fault_update;
 		goto redo;
 	}
 

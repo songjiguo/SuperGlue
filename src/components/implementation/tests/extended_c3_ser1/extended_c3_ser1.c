@@ -108,12 +108,12 @@ static int test_num2 = 0;
 static void try_hp(void)
 {
 	while(test_num1++ < 10) {
-		printc("\n**** create ****\n");
+		printc("\n**** create (%d) ****\n", test_num1);
 		printc("(ser1) thread h : %d is creating evts\n", cos_get_thd_id());
 		evt1 = evt_create(cos_spd_id());
 		assert(evt1 > 0);	
 		ec3_ser2_pass(evt1);  // go to evt_wait
-		printc("\n**** free ****\n");
+		printc("\n**** free (%d) ****\n", test_num1);
 		printc("(ser1) thd h : %d frees event %ld\n", cos_get_thd_id(), evt1);
 		evt_free(cos_spd_id(), evt1);
 	}
@@ -138,6 +138,7 @@ vaddr_t ec3_ser1_test(void)
 
 	if (cos_get_thd_id() == mid) try_mp();
 
+	while(1);  // quick fix the thread termination issue ???
 	return 0;
 }
 

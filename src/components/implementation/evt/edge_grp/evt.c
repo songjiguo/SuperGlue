@@ -161,12 +161,6 @@ __evt_trigger(spdid_t spdid, long eid)
 	return 0;
 }
 
-int
-evt_updateid(spdid_t spdid, int cli_id, int cur_id) 
-{
-	return 0;
-}
-
 /* 
  * Return the event id if one has been triggered, otherwise 0 and the
  * thread should be blocked, only to retry this operation when woken.
