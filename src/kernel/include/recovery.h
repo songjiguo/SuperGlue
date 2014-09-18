@@ -225,6 +225,8 @@ inv_frame_fault_cnt_update(struct thread *thd, struct spd *spd)
 	inv_frame = thd_invstk_top(thd);
 	inv_frame->fault.cnt = spd->fault.cnt;
 
+	/* printk("inv_frame_fltcnt_update: thd %d n_spd %d\n",  */
+	/*        thd_get_id(thd), spd_get_index(spd)); */
 	/* inv_frame->curr_fault.cnt = spd->fault.cnt;*/  // right? done in hijack or inv (brand_next_thread)
 	return 0;
 }
@@ -344,6 +346,7 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 			}
 		}
 		ret = cap_entry->destination->fault.cnt;
+		
 		break;
 	case COS_CAP_REFLECT_UPDATE: 		/* Update reflect counter for this client */
 		printk("check if reflection counter\n");

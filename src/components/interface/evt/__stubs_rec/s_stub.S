@@ -27,4 +27,5 @@ cos_asm_server_fn_stub_spdid(evt_free, __sg_evt_free)
 cos_asm_server_fn_stub_spdid(evt_wait, __sg_evt_wait)
 cos_asm_server_fn_stub_spdid(evt_trigger, __sg_evt_trigger)
 
-cos_asm_server_fn_stub_spdid(__evt_create, __sg_evt_create)
+cos_asm_server_stub_spdid(evt_re_create)
+cos_asm_server_stub_spdid(evt_reflection)

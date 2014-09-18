@@ -139,6 +139,7 @@ vaddr_t ec3_ser2_test(void)
 }
 
 
+// not using this anymore, since evt_create has to be in the same spd as evt_wait
 int ec3_ser2_pass(long id)
 {
 	printc("\n**** wait ****\n");

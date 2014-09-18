@@ -87,6 +87,10 @@ done:
 	return ret;
 }
 
+/* Do not do this until cos_map of evtids are full. Then we need
+ * deallocate all those entries not being used, which requires to look
+ * up in event manger to find who are being used. For now, just assume
+ * this does not happen */
 int 
 ns_free(spdid_t spdid, int id) 
 {
@@ -114,12 +118,13 @@ done:
 	return ret;
 }
 
-/* this function links the new id with the client id, only called
- * after fault (in evt manager after create new id due to a fault)
- * Also, we invalidate the old cli_id entry, so the lookup will see
+/* this function links the new id with the client id, (after create
+ * new id normally or due to a fault). For now, par is ser_fcounter
+ * passed here by client interface 
 
- * For now, par is ser_fcounter passed here by client interface
-*/
+ Note: the order in which entry is added does not matter, since we
+       always refer to the last added entry as long as the lock is
+       taken here (in the case of preemption in the client) */
 int
 ns_update(spdid_t spdid, int cli_id, int cur_id, long par) 
 {
@@ -133,13 +138,16 @@ ns_update(spdid_t spdid, int cli_id, int cur_id, long par)
 	en_cli = mapping_find(cli_id);
 	if (unlikely(!en_cli)) goto done;
 
-	if (cli_id == cur_id) {  // normal path on create
+	/* normal path on create */
+	if (cli_id == cur_id) {  
 		printc("set received for id %d\n", cli_id);
 		en_cli->received = 1; // now we know that client has seen this id
+		en_cli->ser_fcounter = par;
 		ret = 0;
 		goto done;
 	}
 	
+        /* fault path on create */
 	en_cur = mapping_find(cur_id);
 	if (!en_cur) goto done;
 	en_cur->received     = 1; // now we know that client has seen this id after fault

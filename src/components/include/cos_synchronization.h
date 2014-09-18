@@ -63,7 +63,11 @@ restart:
 		owner              = prev_val.c.owner;
 		result.c.owner     = curr;
 		result.c.contested = 0;
-		assert(owner != curr); /* No recursive lock takes allowed */
+		/* assert(owner != curr); /\* No recursive lock takes allowed *\/ */
+		if (owner == curr) {
+			printc("owner %d in spd %ld\n", owner, cos_spd_id());
+			assert(0);
+		}
 
 		/* Contention path: If there is an owner, whom is not
 		 * us, go through the motions of blocking on the lock.

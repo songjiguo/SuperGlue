@@ -1,37 +1,27 @@
-/* Event recovery client stub interface. The interface tracking code
- is supposed to work for both group and non-group events 
-
- Issue: 
- 1. virtual page allocated in malloc is increasing always (FIX later)
- 2. thread woken up through reflection does not invoke trigger to update the state
-     (add evt_update_status api to evt, but when to call this?)
-     
-  This interface is different from lock/sched/mm... since an event can
-  be triggered from a completely different component. create, wait and
-  free have to be done by the same component/interface, but trigger
-  can be from the same component or a different one. See evt_trigger 
-
-!!!! Here is an issue: if the event is triggered by a different thread
-     in a different component, how do we ensure that next time,
-     evt_trigger will pass the correct server side id to evt manager?
-     
-     Solution 1: a separate spd that maintains the mapping of client
-     and server id. Need call this spd every time .... not good
-
-     Solution 2: in the place where evt is created, ensure only the
-     correct server side id is passed ... need check all places that
-     call evt_create and those cached evt id ... not good
-
-     Solution 3: track the client id and server id over the server
-     side interface. After the fault (all previous records will be
-     gone, but we only care about newly created server id), ensure
-     that a new evt id is created first and tracked/updated at the
-     server side. (this should be ensure since only lower thd triggers
-     the higher thd). Also need pass both cli and ser id to track.
-     Solution 3 seems a general solution for the case that there are
-     client and server id, and the same object state can be changed
-     over different client interfaces.  -- > see s_cstub.c
- */
+/*
+  Event c^3 client stub interface. The interface tracking code
+  is supposed to work for both group and non-group events 
+  
+  Issue:
+  1. virtual page allocated in malloc is increasing always (FIX later)
+  2. thread woken up through reflection does not invoke trigger to update the state
+  (add evt_update_status api to evt, but when to call this?)
+  
+  This interface is different from lock/sched/mm... since an event
+  can be triggered from a completely different component. create,
+  wait and free have to be done by the same component/interface, but
+  trigger can be from the same component or a different one. If the
+  event is triggered by a different thread in a different component,
+  how do we ensure that next time, evt_trigger will pass the correct
+  server side id to evt manager?  Solution:a separate spd that
+  maintains the mapping of client and server id. Need call this spd
+  every time ....overhead, but a reasonable solution for now
+  
+  Important --- Only event manager and cbuf manager are components
+  that can have global name space issue. For torrent interface, we
+  restrict that the operation must be in the same component in which
+  the torrent is created (they do not need name server!)
+*/
 
 #include <cos_component.h>
 #include <cos_debug.h>
@@ -47,8 +37,8 @@
 
 extern int sched_component_take(spdid_t spdid);
 extern int sched_component_release(spdid_t spdid);
-#define TAKE(spdid) 	do { if (sched_component_take(spdid))    return; } while (0)
-#define RELEASE(spdid)	do { if (sched_component_release(spdid)) return; } while (0)
+#define TAKE(spdid) 	do { if (sched_component_take(spdid))    return 0; } while (0)
+#define RELEASE(spdid)	do { if (sched_component_release(spdid)) return 0; } while (0)
 
 extern void *alloc_page(void);
 extern void free_page(void *ptr);
@@ -67,10 +57,9 @@ static long ser_fcounter;  // mainly for the evt_trigger (see below explanation)
 
 /* recovery data structure evt service */
 struct rec_data_evt {
-	spdid_t spdid;
-	unsigned long c_evtid;
-
-	unsigned int state;
+	spdid_t       spdid;
+	unsigned long evtid;
+	unsigned int  state;
 	unsigned long fcnt;
 };
 
@@ -113,7 +102,7 @@ static void
 rdevt_dealloc(struct rec_data_evt *rd)
 {
 	assert(rd);
-	if (cvect_del(&rec_evt_vect, rd->c_evtid)) BUG();
+	if (cvect_del(&rec_evt_vect, rd->evtid)) BUG();
 	cslab_free_rdevt(rd);
 }
 
@@ -123,14 +112,13 @@ rd_cons(struct rec_data_evt *rd, spdid_t spdid, unsigned long evtid, int state)
 	assert(rd);
 
 	rd->spdid	 = spdid;
-	rd->c_evtid	 = evtid;
+	rd->evtid	 = evtid;
 	rd->state	 = state;
 	rd->fcnt	 = fcounter;
 
 	return;
 }
 
-#ifdef REFLECTION
 static int
 cap_to_dest(int cap)
 {
@@ -145,7 +133,7 @@ extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
 extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
 extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
 
-static void
+static int
 rd_reflection(int cap)
 {
 	assert(cap);
@@ -178,18 +166,18 @@ rd_reflection(int cap)
 
 	RELEASE(cos_spd_id());
 	/* printc("evt reflection done (thd %d)\n\n", cos_get_thd_id()); */
-	return;
+	return 0;
 }
-#endif
 
-
-extern int ns_update(spdid_t spdid, int old_id, int curr_id, long par);
-extern long ns_reflection(spdid_t spdid, int id, int type);
+/* extern int ns_update(spdid_t spdid, int old_id, int curr_id, long par); */
+/* extern long ns_reflection(spdid_t spdid, int id, int type); */
 
 static struct rec_data_evt *
-update_rd(int evtid, int state)
+rd_update(int evtid, int state)
 {
         struct rec_data_evt *rd = NULL;
+
+	TAKE(cos_spd_id());
 
         rd = rdevt_lookup(evtid);
 	if (unlikely(!rd)) goto done;
@@ -210,12 +198,7 @@ update_rd(int evtid, int state)
 	 * created state. (e.g, trigger sees a fault has occurred
 	 * before, if the event is already in the waiting state (say
 	 * after replay evt_wait, then no need to )
-
-	 * Note: torrent is different. We can not just create a new
-	 * object in the current component since each torrent is
-	 * associated with a file (e.g, "path"). And event does not.
 	 */
-	int new_evtid;
 	switch (state) {
 	case EVT_CREATED:
                 /* for create, if failed, just redo, should not be here */
@@ -224,32 +207,39 @@ update_rd(int evtid, int state)
 	case EVT_FREED:
                 /* here is one issue: if fault happens in evt_free
 		 * (after delid in mapping_free in evt manager), the
-		 * original id will be removed, then when replay
-		 * evt_free, how to remove the re-created id? We can
-		 * check if the entry is still presented in
-		 * name_space. If not, which means that fault must
-		 * happens after all related ids have been removed No
-		 * need to replay. Otherwise, we can just create a new
-		 * event and replay evt_free. This is basically a
-		 * reflection on name_server
+		 * original id will be removed in the name server,
+		 * then when replay evt_free, how to remove the
+		 * re-created id? We can check if the entry is still
+		 * presented in name_space. If not, which means that
+		 * fault must happens after all related ids have been
+		 * removed No need to replay. Otherwise, we can just
+		 * create a new event and replay evt_free. This is
+		 * basically a reflection on name_server
 		 */
-		// if the entry has been removed, return NULL
-		if (ns_reflection(cos_spd_id(), evtid, 0)) {
-			assert(rd);
-			rdevt_dealloc(rd);
-			return NULL;
-		}
+		/* // if the entry has been removed, return NULL */
+		/* if (ns_reflection(cos_spd_id(), evtid, 0)) { */
+		/* 	assert(rd); */
+		/* 	rdevt_dealloc(rd); */
+		/* 	return NULL; */
+		/* } */
+		break;
 		// otherwise, create a new one and remove all on replay
 	case EVT_WAITING:
-		printc("in update_rd (state %d) is creating a new evt by thd %d\n", 
+		printc("in rd_update (state %d) is creating a new evt by thd %d\n", 
 		       state, cos_get_thd_id());
-		new_evtid = __evt_create(cos_spd_id());
-		assert(new_evtid > 0);
-		printc("in update_rd (state %d): creating a new evt (%d)\n", 
-		       state, new_evtid);
-		assert(evtid != new_evtid);
-		// preempted by other thread here?
-		assert(!ns_update(cos_spd_id(), evtid, new_evtid, ser_fcounter));
+		RELEASE(cos_spd_id());
+		assert(evt_re_create(cos_spd_id(), evtid) > 0);
+		TAKE(cos_spd_id());
+		/* preempted by other thread here? This only becomes
+		 * issue if the preemption occurs when the same object
+		 * is being accessed. However, there are 2 situation:
+		 * if the preempting thread is in the same component,
+		 * they should wait since lock is taken. If the
+		 * preemption thread is in the different component,
+		 * name server look up will only see the last added
+		 * entry, so it does not matter. Do we still need lock
+		 * here???? Maybe not....*/
+		/* assert(!ns_update(cos_spd_id(), evtid, new_evtid, ser_fcounter)); */
 		break;
 	case EVT_TRIGGERED:
 		/* Generally there are two rules to follow when
@@ -300,24 +290,8 @@ update_rd(int evtid, int state)
 	}
 
 done:	
+	RELEASE(cos_spd_id());   // have to release the lock before block somewhere above
 	return rd;
-}
-
-// only used to get a new server side id, no tracking
-CSTUB_FN(unsigned long, __evt_create) (struct usr_inv_cap *uc,
-				       spdid_t spdid)
-{
-	long fault = 0;
-	unsigned long ret;
-redo:
-	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
-	if (unlikely (fault)){
-		CSTUB_FAULT_UPDATE();
-		assert(0);  // assume fault does not occur during the recover
-		goto redo;
-	}
-	
-	return ret;
 }
 
 
@@ -344,13 +318,44 @@ redo:
 	}
 	
 	assert(ret > 0);
-	assert(!ns_update(cos_spd_id(), ret, ret, ser_fcounter));
+	/* assert(!ns_update(cos_spd_id(), ret, ret, ser_fcounter)); */
 
-	printc("cli: evt_create create a new rd in spd %ld\n",
-	       cos_spd_id());		
+	printc("cli: evt_create create a new rd in spd %ld\n", cos_spd_id());		
 	rd = rdevt_alloc(ret);
 	assert(rd);	
 	rd_cons(rd, cos_spd_id(), ret, EVT_CREATED);
+
+	return ret;
+}
+
+
+/* This function is used to create a new server side id for the
+ * old_extern_evt, and do the cache in the server. Here since
+ * ev_trigger can come from a different component, so we cache in the
+ * server side.
+
+ * More generally if we keep the mapping between old id and new id in
+ * the server (say, by caching), we need this function and we do not
+ * need to track the mapping on the client side. However, if we keep
+ * the mappings at client interface, we do not need this function
+ * since the client can find the correct server id. 
+
+ NO tracking here!!!! If failed, just replay
+ */
+CSTUB_FN(long, evt_re_create) (struct usr_inv_cap *uc,
+			  spdid_t spdid, long old_extern_evt)
+{
+	long fault = 0;
+	long ret;
+redo:
+	printc("evt cli: evt_re_create %d (evt id %ld)\n", cos_get_thd_id(), old_extern_evt);
+
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, old_extern_evt);
+        if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		ser_fcounter = fault_update;
+		goto redo;
+        }
 
 	return ret;
 }
@@ -388,15 +393,10 @@ CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
         struct rec_data_evt *rd = NULL;
 redo:
 	printc("evt cli: evt_wait %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
-        rd = update_rd(extern_evt, EVT_WAITING);
-	if (unlikely(!rd)) {
-		printc("cli: evt_wait create a new rd in spd %ld\n",
-		       cos_spd_id());
-		rd = rdevt_alloc(extern_evt);
-		assert(rd);	
-		rd_cons(rd, cos_spd_id(), extern_evt, EVT_WAITING);
-	}
-	assert(rd);
+        // must be in the same component
+        rd = rd_update(extern_evt, EVT_WAITING);
+	assert(rd);   
+
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
         if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
@@ -412,47 +412,46 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
 {
 	long fault = 0;
 	int ret;
-
         struct rec_data_evt *rd = NULL;
-	long old_serfcnt = ser_fcounter;
 redo:
 	printc("evt cli: evt_trigger %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
-        rd = update_rd(extern_evt, EVT_TRIGGERED);
-	if (unlikely(!rd)) {
-		printc("cli: evt_trigger create a new rd in spd %ld\n",
-		       cos_spd_id());
-		rd = rdevt_alloc(extern_evt);
-		assert(rd);	
-		rd_cons(rd, cos_spd_id(), extern_evt, EVT_TRIGGERED);
-	}
-	assert(rd);
-	
+	rd = rd_update(extern_evt, EVT_TRIGGERED);
+
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
 	if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
 		ser_fcounter = fault_update;
-		// if the entry has been removed, just return, no replay
-		if (ns_reflection(cos_spd_id(), extern_evt, 0)) {
-			assert(rd);
-			rdevt_dealloc(rd);
-			printc("FOUND ENTRY HAVE BEEN REMOVED\n");
-			ret = 1;
-			goto done;
-		}
-		// this will return the current # of fault of spd
-		long curr_id_serfcnt = ns_reflection(cos_spd_id(), extern_evt, 1);
-		// if the entry of the same id has been created, just return, no replay
-		// No matter where the event is re-created or not, at least > is true
-		printc("curr_id_serfcnt %ld  old_serfcnt %ld\n", 
-		       curr_id_serfcnt, old_serfcnt);
-		if (curr_id_serfcnt > old_serfcnt) {
-			ret = 1;
-			printc("FOUND SAME ENTRY AFTER FAULT\n");
-			goto done;
-		}
-		goto redo;
+                /*
+		  1) fault occurs in evt_trigger (before
+		  sched_wakeup).In this case, reflection will wake up
+		  threads in blocking wait and replay. Then new event
+		  will be created for evt_id. Replayed evt_trigger on
+		  evt_id will see the new id.
+
+		  2) fault occurs in evt_trigger (after sched_wakeup).
+		  However, in this case eve_id might be already freed
+		  (e.g, in a create-wait-free loop) since the thread
+		  has been triggered correctly and woken up. So no need
+		  to trigger again. (otherwise, might trigger a
+		  different id)
+
+		  3) fault occurred while other thread in evt (say
+		  evt_wait), then fault_notif make us realize the
+		  fault when we call evt_trigger or return from
+		  scheduler (e.g, called evt_trigger previously and
+		  wake up other threads in scheduler). Reflection will
+		  force the other thread to re-create the event and
+		  wait. Then t1 should be able to trigger. However, if
+		  entry is removed in evt by other thread already,
+		  when return back from scheduler, we reflect evt to
+		  see if need redo
+
+		*/
+		printc("decide if going to redo for evt_trigger here\n");
+		if (evt_reflection(cos_spd_id(), extern_evt)) goto redo; // 1) and 3)
+		else rd = rd_update(extern_evt, EVT_TRIGGERED);          // 2) and 3)
 	}
-done:	
+
 	return ret;
 }
 
@@ -463,27 +462,16 @@ CSTUB_FN(int, evt_free) (struct usr_inv_cap *uc,
 	int ret;
 
         struct rec_data_evt *rd = NULL;
-redo:
 	printc("evt cli: evt_free %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
-        rd = update_rd(extern_evt, EVT_FREED);
-        /* Here !rd does not mean rd does not exist. Actually it has
-	 * to exist in the same component. In evt_free, !rd means that
-	 * evt has been removed from name server and evt manager
-	 * before the fault occurs in evt_free 
-	 
-	 Note: rd must be deallocated in update_rd in this case */
-	
-	if (!rd) {
-		printc("evt cli: in evt_free, id %ld has been removed\n", extern_evt);
-		return ret; 
-	}
+        rd = rd_update(extern_evt, EVT_FREED);
+	assert(rd);
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
 	if (unlikely (fault)) {
 		CSTUB_FAULT_UPDATE();
 		ser_fcounter = fault_update;
-		goto redo;
 	}
 
 	rdevt_dealloc(rd);
+
 	return ret;
 }

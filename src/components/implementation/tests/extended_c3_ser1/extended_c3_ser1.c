@@ -112,7 +112,9 @@ static void try_hp(void)
 		printc("(ser1) thread h : %d is creating evts\n", cos_get_thd_id());
 		evt1 = evt_create(cos_spd_id());
 		assert(evt1 > 0);	
-		ec3_ser2_pass(evt1);  // go to evt_wait
+
+		evt_wait(cos_spd_id(), evt1);
+		/* ec3_ser2_pass(evt1);  // go to evt_wait */
 		printc("\n**** free (%d) ****\n", test_num1);
 		printc("(ser1) thd h : %d frees event %ld\n", cos_get_thd_id(), evt1);
 		evt_free(cos_spd_id(), evt1);

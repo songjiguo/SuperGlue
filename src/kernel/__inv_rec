@@ -1274,10 +1274,6 @@ cos_syscall_switch_thread_cont(int spd_id, unsigned short int rthd_id,
 	update_sched_evts(thd, thd_sched_flags, curr, curr_sched_flags);
 	/* success for this current thread */
 	curr->regs.ax = COS_SCHED_RET_SUCCESS;
-
-	/* if (thd_get_id(thd) == 11 || thd_get_id(curr) == 11) */
-	/* 	printk("ocs: switch(curr spd %d) --- curr %d thd %d\n", spd_id, thd_get_id(curr), thd_get_id(thd)); */
-
 	event_record("switch_thread", thd_get_id(curr), thd_get_id(thd));
 
 
@@ -1297,9 +1293,15 @@ cos_syscall_switch_thread_cont(int spd_id, unsigned short int rthd_id,
 		printk("cos : switch notification cost 1: %llu\n", (end-start));
 #endif
 	}
+	/* Say a thread t1 triggers a fault in component A, we
+	 * update cap fault counter and replay. t1 will take
+	 * the lock in A when replay. However, if timer
+	 * interrupt happens and later switch back to t1, we
+	 * do not want notify the fault again. So update the
+	 * fault counter on thread invocation frame here  */
 	switch_thd_fault_update(curr);
-
 	/* printk("cos switch : update fault counter %d\n", thd_get_id(curr)); */
+
 	return &thd->regs;
 ret_err:
 	curr->regs.ax = ret_code;

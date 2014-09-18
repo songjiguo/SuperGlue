@@ -301,6 +301,7 @@ evt_grp_mult_wait(spdid_t spdid, struct cos_array *data) { return -1; }
 unsigned long *evt_stats(spdid_t spdid, unsigned long *stats) { return NULL; }
 int evt_stats_len(spdid_t spdid) { return 0; }
 
-long __evt_create(spdid_t spdid) {return 0;}
+long evt_re_create(spdid_t spdid, long old_extern_evt) { return 0;}
+long evt_reflection(spdid_t spdid, long extern_evt) { return 0;}
 
 int evt_trigger_all(spdid_t spdid) {return 0;}
