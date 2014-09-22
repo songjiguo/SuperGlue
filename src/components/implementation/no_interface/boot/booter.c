@@ -292,9 +292,15 @@ static int boot_spd_caps(struct cobj_header *h, spdid_t spdid)
 unsigned int *boot_sched;
 
 static int 
-boot_spd_thd(spdid_t spdid)
+boot_spd_thd(spdid_t spdid, int failed)
 {
 	union sched_param sp = {.c = {.type = SCHEDP_RPRIO, .value = 1}};
+	
+	if (unlikely(failed)) {
+		sp.c.type  = SCHEDP_PRIO;
+		sp.c.value = 3;   // test with a high priority thread
+	}
+	
 	union sched_param sp_coreid;
 
 	/* All init threads on core 0. */
@@ -407,7 +413,7 @@ boot_create_system(void)
 			if (hs[j]->id == boot_sched[i]) h = hs[j];
 		}		
 		assert(h);
-		if (h->flags & COBJ_INIT_THD) boot_spd_thd(h->id);
+		if (h->flags & COBJ_INIT_THD) boot_spd_thd(h->id, 0);
 	}
 }
 
@@ -430,14 +436,14 @@ failure_notif_fail(spdid_t caller, spdid_t failed)
 //	boot_spd_caps_chg_activation(failed, 0);
 	md = &local_md[failed];
 	assert(md);
+	printc("111111111111\n");
 	if (boot_spd_map_populate(md->h, failed, md->comp_info, 0)) BUG();
 	/* can fail if component had no boot threads: */
 	printc("failed! booter: boot_spd_thd\n");
-	if (md->h->flags & COBJ_INIT_THD) boot_spd_thd(failed); 	
-	printc("failed! booter: boot_spd_thd done\n");
+	if (md->h->flags & COBJ_INIT_THD) boot_spd_thd(failed, 1);
 	if (boot_spd_caps(md->h, failed)) BUG();
 //	boot_spd_caps_chg_activation(failed, 1);
-
+	printc("booter: failure_notif_fail done\n");
 	UNLOCK();
 }
 

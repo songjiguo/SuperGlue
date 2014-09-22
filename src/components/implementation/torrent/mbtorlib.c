@@ -5,7 +5,10 @@
  * Public License v2.
  */
 
-#include <torlib.h>
+
+// Jiguo: change the way how id is allocated here 
+
+#include <mbtorlib.h>
 
 static cos_lock_t fs_lock;
 #define LOCK() if (lock_take(&fs_lock)) BUG();
@@ -26,6 +29,17 @@ __attribute__((weak)) int
 twritep(spdid_t spdid, td_t td, int cbid, int sz)
 {
         return -ENOTSUP;
+}
+
+CVECT_CREATE_STATIC(tormap_vect);  // cache purpose
+
+void print_tormap_cvect()
+{
+	int i;
+	for (i = 0 ; i < (int)CVECT_BASE ; i++) {
+		if (cvect_lookup(&tormap_vect, i)) 
+			printc("on cvect we found entry at %d\n", i);
+	}
 }
 
 COS_MAP_CREATE_STATIC(torrents);
@@ -96,13 +110,24 @@ twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *v
         return 0;
 }
 
+extern long ns_alloc(spdid_t spdid);
+
 int tor_cons(struct torrent *t, void *data, int flags)
 {
 	td_t td;
 	assert(t);
 
-	td        = (td_t)cos_map_add(&torrents, t);
-	if (td == -1) return -1;
+	/* td        = (td_t)cos_map_add(&torrents, t); */
+	/* if (td == -1) return -1; */
+
+	td = (td_t) ns_alloc(cos_spd_id());
+	assert(td >= 0);
+	cvect_add(&tormap_vect, t, td);
+	t->cur_td = td;    // Jiguo: initialize
+
+	printc("cvect add..... --> id %d\n", td);
+	print_tormap_cvect();
+
 	t->td     = td;
 	t->data   = data;
 	t->flags  = flags;
@@ -128,17 +153,47 @@ struct torrent *tor_alloc(void *data, int flags)
 void tor_free(struct torrent *t)
 {
 	assert(t);
-	if (cos_map_del(&torrents, t->td)) BUG();
+	/* if (cos_map_del(&torrents, t->td)) BUG(); */
+
+	cvect_del(&tormap_vect, t->cur_td);   // remove the current entry
+	cvect_del(&tormap_vect, t->td);   // remove the original entry
+
+        /* for now, just keep allocating new id. Only delete all
+	 * unsued ids when there is no more id to be allocated */
+	/* ns_free(cos_spd_id(), t->td); */
+
 	free(t);
 }
 
+static int first_fault = 0; // used to invalidate all entries on cache cvect
 void torlib_init(void)
 {
 	cos_map_init_static(&torrents);
 	/* save descriptors for the null and root spots */
 	null_torrent.td = td_null;
+	null_torrent.cur_td = td_null;
 	if (td_null != cos_map_add(&torrents, NULL)) BUG();
 	root_torrent.td = td_root;
+	root_torrent.cur_td = td_root;
 	if (td_root != cos_map_add(&torrents, &root_torrent)) BUG();
+
+	cvect_init_static(&tormap_vect);  // Jiguo: for cache between faults
+        /* why need to delete such id?? After fault, we might find an
+	 * entry at this position, so we delete first??? After fault,
+	 * there are some entries occupied, due to BSS messed up since
+	 * cache cvect is there? */
+	if (unlikely(!first_fault)) {
+		first_fault = 1;
+		cvect_add(&tormap_vect, &null_torrent, td_null);
+		printc("very first before cvect add --> id %d\n", td_null);
+		print_tormap_cvect();
+		int i;
+		for (i = 0 ; i < (int)CVECT_BASE ; i++) {
+			if (cvect_lookup(&tormap_vect, i)) cvect_del(&tormap_vect, i);
+		}
+	}
+	cvect_add(&tormap_vect, &null_torrent, td_null);	
+	cvect_add(&tormap_vect, &root_torrent, td_root);
+	/* ns_invalidate();   // removed all not received by client ids in name server */
 }
 

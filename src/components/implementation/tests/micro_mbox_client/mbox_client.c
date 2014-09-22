@@ -7,7 +7,7 @@
 #include <sched.h>
 #include <cbuf.h>
 #include <evt.h>
-#include <torrent.h>
+#include <mbtorrent.h>
 #include <periodic_wake.h>
 
 #define  ITER 10
@@ -65,6 +65,7 @@ void cos_init(void *arg)
 	printc("client split successfully\n");
 	sz = 4096;
 	j = 1000*ITER;
+	j = 4;
 	rdtscll(start);
 	for (i=1; i<=j; i++) {
 		if (i == j) rdtscll(end);
@@ -81,6 +82,9 @@ void cos_init(void *arg)
 		printc("Kevin (thd %d)\n", cos_get_thd_id());
 		cbufp_deref(cb1); 
 	}
+	trelease(cos_spd_id(), serv);
+	return;
+
 	printc("Client snd %d times %llu\n", j-1, (end-start)/(j-1));
 	/* 
 	 * insert evt_grp_wait(...) into the code below where it makes

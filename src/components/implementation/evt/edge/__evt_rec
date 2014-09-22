@@ -127,16 +127,19 @@ static long mapping_create(spdid_t spdid, struct evt *e)
 	 * cache cvect is there? */
 	if (unlikely(!first_fault)) {
 		first_fault = 1;
-		struct evt *old = malloc(sizeof(struct evt));
-		assert(old);
-		cvect_add(&evtmap_vect, old, id);
+		//struct evt *old = malloc(sizeof(struct evt));
+		//assert(old);
+		//cvect_add(&evtmap_vect, old, id);
+
+		cvect_add(&evtmap_vect, e, id);
+
 		/* printc("before cvect add --> id %ld\n", old_extern_evt); */
 		/* print_evtmap_cvect(); */
 		int i;
 		for (i = 0 ; i < (int)CVECT_BASE ; i++) {
 			if (cvect_lookup(&evtmap_vect, i)) cvect_del(&evtmap_vect, i);
 		}
-		free(old);
+		//free(old);
 	}
 
 	cvect_add(&evtmap_vect, e, id);

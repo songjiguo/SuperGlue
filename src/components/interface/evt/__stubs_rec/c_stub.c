@@ -111,6 +111,8 @@ rd_cons(struct rec_data_evt *rd, spdid_t spdid, unsigned long evtid, int state)
 {
 	assert(rd);
 
+	// LOCK??
+	
 	rd->spdid	 = spdid;
 	rd->evtid	 = evtid;
 	rd->state	 = state;
@@ -199,6 +201,8 @@ rd_update(int evtid, int state)
 	 * before, if the event is already in the waiting state (say
 	 * after replay evt_wait, then no need to )
 	 */
+	
+	/* STATE MACHINE */
 	switch (state) {
 	case EVT_CREATED:
                 /* for create, if failed, just redo, should not be here */
@@ -216,14 +220,7 @@ rd_update(int evtid, int state)
 		 * create a new event and replay evt_free. This is
 		 * basically a reflection on name_server
 		 */
-		/* // if the entry has been removed, return NULL */
-		/* if (ns_reflection(cos_spd_id(), evtid, 0)) { */
-		/* 	assert(rd); */
-		/* 	rdevt_dealloc(rd); */
-		/* 	return NULL; */
-		/* } */
 		break;
-		// otherwise, create a new one and remove all on replay
 	case EVT_WAITING:
 		printc("in rd_update (state %d) is creating a new evt by thd %d\n", 
 		       state, cos_get_thd_id());
@@ -318,8 +315,6 @@ redo:
 	}
 	
 	assert(ret > 0);
-	/* assert(!ns_update(cos_spd_id(), ret, ret, ser_fcounter)); */
-
 	printc("cli: evt_create create a new rd in spd %ld\n", cos_spd_id());		
 	rd = rdevt_alloc(ret);
 	assert(rd);	
@@ -426,7 +421,7 @@ redo:
 		  sched_wakeup).In this case, reflection will wake up
 		  threads in blocking wait and replay. Then new event
 		  will be created for evt_id. Replayed evt_trigger on
-		  evt_id will see the new id.
+		  evt_id should see the new id.
 
 		  2) fault occurs in evt_trigger (after sched_wakeup).
 		  However, in this case eve_id might be already freed
@@ -450,6 +445,10 @@ redo:
 		printc("decide if going to redo for evt_trigger here\n");
 		if (evt_reflection(cos_spd_id(), extern_evt)) goto redo; // 1) and 3)
 		else rd = rd_update(extern_evt, EVT_TRIGGERED);          // 2) and 3)
+		/* If we get here, set ret to 0 to ensure that return
+		 * value won't trigger BUG() at client (as if
+		 * evt_trigger has succeeded) */
+		ret = 0;
 	}
 
 	return ret;

@@ -1,13 +1,10 @@
-/**
- */
-
 #include <stdlib.h>
 #include <cos_component.h>
 #include <print.h>
 #include <sched.h>
 #include <cbuf.h>
 #include <evt.h>
-#include <torrent.h>
+#include <mbtorrent.h>
 #include <periodic_wake.h>
 
 #define ITER 10
@@ -70,6 +67,7 @@ void cos_init(void *arg)
 		assert(0);
 	}
 	j = 1000*ITER;
+	j = 4;
 	rdtscll(start);
 	for (i=0; i<j; i++) {
 		while (1) {
@@ -81,6 +79,11 @@ void cos_init(void *arg)
 		printc("ser:received in data is %lld (sz %d)\n", ((u64_t *)buf)[0], sz);
 		cbufp_deref(cb1);
 	}
+
+	trelease(cos_spd_id(), cli);
+	trelease(cos_spd_id(), t1);
+
+	return;
 	rdtscll(end);
 	printc("Server rcv %d times %llu\n", j, (end-start)/j);
 	parse_args(&period, &num);

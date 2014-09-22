@@ -6,8 +6,8 @@
  */
 
 #include <cos_component.h>
-#include <torrent.h>
-#include <torlib.h>
+#include <mbtorrent.h>
+#include <mbtorlib.h>
 
 #include <cbuf.h>
 #include <print.h>
@@ -19,12 +19,26 @@
 #include <ck_ring.h>
 
 #include <objtype.h>
-/* #define TEST_MBOX_TSPLIT_1  // server side create */
-/* #define TEST_MBOX_TSPLIT_2  // client side create */
-/* #define TEST_MBOX_TSPLIT_3  // accept a new connection on server side */
-#define TEST_MBOX_TREADP
-/* #define TEST_MBOX_TWRITEP */
-/* #define TEST_MBOX_TRELEASE */
+/* #define TEST_MBOX_TSPLIT_SERVER_BEFORE  // server side create */
+/* #define TEST_MBOX_TSPLIT_SERVER_AFTER  // server side create */
+/* #define TEST_MBOX_TSPLIT_CLIENT_BEFORE  // client side create */
+/* #define TEST_MBOX_TSPLIT_CLIENT_AFTER  // client side create */
+/* #define TEST_MBOX_TSPLIT_READY_BEFORE */
+/* #define TEST_MBOX_TSPLIT_READY_AFTER */
+
+/* #define TEST_MBOX_TREADP */
+/* #define TEST_MBOX_TWRITEP_BEFORE */
+/* #define TEST_MBOX_TWRITEP_AFTER */
+
+/* #define TEST_MBOX_TRELEASE_SERVER_BEFORE  // server side trelease */
+/* #define TEST_MBOX_TRELEASE_SERVER_AFTER  // server side trelease */
+/* #define TEST_MBOX_TRELEASE_CLIENT_BEFORE  // client side trelease */
+/* #define TEST_MBOX_TRELEASE_CLIENT_AFTER  // client side trelease */
+/* #define TEST_MBOX_TRELEASE_READY_BEFORE */
+/* #define TEST_MBOX_TRELEASE_READY_AFTER */
+
+extern void print_tormap_cvect();
+extern cvect_t tormap_vect;
 
 #define MBOX_BUFFER_SIZE 256
 struct cbuf_info {
@@ -147,6 +161,7 @@ mbox_create_server(struct torrent *t, struct as_conn_root *acr)
 
 	printc("mbox create server by thd %d\n", cos_get_thd_id());
 	if (EMPTY_LIST(&acr->cs, next, prev)) return -EAGAIN;
+	printc("mbox create server by thd %d (found acr->cs)\n", cos_get_thd_id());
 	ac = FIRST_LIST(&acr->cs, next, prev);
 	REM_LIST(&acr->cs, next, prev);
 
@@ -206,11 +221,13 @@ mbox_put(struct torrent *t, cbufp_t cb, int sz, int off, int ep)
 	// Jiguo: ENQUEUE does memcpy (struct to struct, same type)
 	ret = CK_RING_ENQUEUE_SPSC(cb_buffer, &ac->cbs[ep], &cbi);
 	if (ret == 0) return -EALREADY;
-	/* printc("thread %d is trying to trigger evt %ld <<3>>\n",  */
-	/*        cos_get_thd_id(), ac->ts[other_ep]->evtid); */
 
-	// 
+	printc("thread %d is trying to trigger evt %ld.....\n",
+	       cos_get_thd_id(), ac->ts[other_ep]->evtid);
 	evt_trigger(cos_spd_id(), ac->ts[other_ep]->evtid);
+	printc("thread %d is back from triggering evt %ld.....\n",
+	       cos_get_thd_id(), ac->ts[other_ep]->evtid);
+	
 	return ret;
 }
 
@@ -269,37 +286,35 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	struct fsobj *fsc, *parent = NULL; /* child, and parent */
 	char *subpath;
 
-#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_1)
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_SERVER_BEFORE)
 	test_control++;
-	printc("thd %d tsplit_1 (test_control %d) \n", cos_get_thd_id(), test_control);
-	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 1) {
+	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 1) {
 		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
 #endif
 
-#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_2)
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_CLIENT_BEFORE)
 	test_control++;
-	printc("thd %d tsplit_2 (test_control %d) \n", cos_get_thd_id(), test_control);
-	if (spdid == 15 && cos_get_thd_id() == 13 && test_control == 2) {
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
 		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
 #endif
 
-#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_3)
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_READY_BEFORE)
 	test_control++;
-	printc("thd %d tsplit (test_control %d) \n", cos_get_thd_id(), test_control);
-	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 3) {
+	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 3) {
 		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
 #endif
-
+	printc("<<0000 (thd %d) before LOCK()>>\n", cos_get_thd_id());
 	LOCK();
+	printc("<<0000 (thd %d)>>\n", cos_get_thd_id());
 	t = tor_lookup(td);
 	printc("1\n");
 	if (!t) ERR_THROW(-EINVAL, done);
@@ -307,8 +322,8 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	nt = tor_alloc(NULL, tflags);
 	if (!nt) ERR_THROW(-ENOMEM, done);
 	nt->evtid = evtid;
-
 	printc("3\n");
+	printc("t td %d\n", td);
 	fsc = fsobj_path2obj(param, len, t->data, &parent, &subpath);
 	if (!fsc) {
 		printc("4.5\n");
@@ -316,30 +331,119 @@ tsplit(spdid_t spdid, td_t td, char *param,
 		fsc = mbox_create_addr(spdid, nt, parent, subpath, tflags, (int*)&ret);
 		printc("4\n");
 		if (!fsc) goto free; /* ret set above... */
-		printc("5\n");
+		printc("5 (thd %d)\n", cos_get_thd_id());
 		nt->data = fsc;
 		nt->flags = tflags & TOR_SPLIT;
 	} else {
 		struct as_conn_root *acr = (struct as_conn_root*)fsc->data;
 		assert(acr);
-		printc("6.5\n");
+		printc("6.5 (thd %d)\n", cos_get_thd_id());
 	        if ((~fsc->flags) & tflags) ERR_THROW(-EACCES, free);
 		/* Case 2: a client attempt to connect to a server*/
 	        if (len>0)      ret = (td_t)mbox_create_client(nt, acr);
 		/* Case 3: a server create a connection to a client*/
 	        else            ret = (td_t)mbox_create_server(nt, acr); 
-		printc("6\n");
+		printc("6 (thd %d)\n", cos_get_thd_id());
 	        if (ret < 0) goto free;
-		printc("7\n");
+		printc("7 (thd %d)\n", cos_get_thd_id());
 	        nt->flags = tflags & TOR_RW;
 	}
 	ret = nt->td;
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_SERVER_AFTER)
+	test_control++;
+	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 1) {
+		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_CLIENT_AFTER)
+	test_control++;
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
+		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_READY_AFTER)
+	test_control++;
+	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 3) {
+		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 done:
 	UNLOCK();
 	return ret;
 free:
 	tor_free(nt);
 	goto done;
+}
+
+
+td_t 
+tresplit(spdid_t spdid, td_t td, char *param, 
+	 int len, tor_flags_t tflags, long evtid, td_t old_td) 
+{
+	td_t new_td = 0;
+	struct torrent *old, *new;
+
+	new_td = tsplit(spdid, td, param, len, tflags, evtid);  // lock is taken there
+
+	LOCK();
+	printc("in retsplit: new id %d old td %d (thd %d)\n", 
+	       new_td, old_td, cos_get_thd_id());
+	if (new_td <= 1) goto done;  // failed to tsplit a new one (e.g, one side has released)
+	assert(old_td > 1);
+
+	new = cvect_lookup(&tormap_vect, new_td);
+	assert(new);
+	printc("in tresplit: create a new torrent %d\n", new_td);
+	
+	/* old event and caching... */
+	old = cvect_lookup(&tormap_vect, old_td);
+	assert(!old);
+	old = malloc(sizeof(struct torrent));
+	if (!old) goto err;
+	old->td     = old_td;
+	old->par_td = td;
+	old->cur_td = new_td;
+	cvect_add(&tormap_vect, old, old_td);
+	old = cvect_lookup(&tormap_vect, old_td);
+	assert(old);
+
+	printc("old torrent %d -- its new event id %d\n", old->td, old->cur_td);
+done:
+	UNLOCK();
+	return new_td;
+err:
+	free(old);
+	new_td = 0;
+	goto done;
+
+}
+
+/* Check if a torrent entry of td is presented in mail box */
+int 
+treflection(spdid_t spdid, td_t td)
+{
+	struct torrent *t;
+	int ret = 0;
+	
+	LOCK();
+
+	assert(spdid && td > 1);
+	t = cvect_lookup(&tormap_vect, td);
+	if (t) ret = 1;
+	
+	UNLOCK();
+
+	return ret;
 }
 
 int 
@@ -360,10 +464,29 @@ trelease(spdid_t spdid, td_t td)
 	if (!tor_is_usrdef(td)) return;
 
 	LOCK();
+	
+	printc("In trelease (thd %d)\n", cos_get_thd_id());
+	
+	test_control++;
 
-#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE)
-	printc("thd %d trelease\n", cos_get_thd_id());
-	if (spdid == 14 && cos_get_thd_id() == 12) {
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_READY_BEFORE)
+	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 1) {
+		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_CLIENT_BEFORE)
+	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 2) {
+		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_SERVER_BEFORE)
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 3) {
 		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -390,19 +513,11 @@ trelease(spdid_t spdid, td_t td)
 		if (ac->ts[0] == t) {
 			ac->ts[0] = NULL;
 			if (!ac->ts[1]) other = 0;
-			else            {
-				printc("thread %d is trying to trigger evt %ld <<4>>\n", 
-				       cos_get_thd_id(), ac->ts[1]->evtid);
-				evt_trigger(cos_spd_id(), ac->ts[1]->evtid);
-			}
+			else evt_trigger(cos_spd_id(), ac->ts[1]->evtid);
 		} else if (ac->ts[1] == t) {
 			ac->ts[1] = NULL;
 			if (!ac->ts[0]) other = 0;
-			else            {
-				printc("thread %d is trying to trigger evt %ld <<5>>\n", 
-				       cos_get_thd_id(), ac->ts[0]->evtid);
-				evt_trigger(cos_spd_id(), ac->ts[0]->evtid);
-			}
+			else evt_trigger(cos_spd_id(), ac->ts[0]->evtid);
 		} else {
 			assert(0);
 		}
@@ -420,6 +535,31 @@ trelease(spdid_t spdid, td_t td)
 		}
 	}
 	tor_free(t);
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_READY_AFTER)
+	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 1) {
+		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_CLIENT_AFTER)
+	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 2) {
+		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_SERVER_AFTER)
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 3) {
+		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 done:
 	UNLOCK();
 	return;
@@ -438,17 +578,13 @@ treadp(spdid_t spdid, td_t td, int *off, int *sz)
 	struct torrent *t;
 	struct as_conn *ac;
 
-	printc("treadp (thd %d) 1\n", cos_get_thd_id());
-	printc("treadp passed in par: td %d off %d sz %d\n", td, (int *)off, (int *)sz);
-	
 	if (tor_isnull(td)) return -EINVAL;
 
 	LOCK();
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TREADP)
 	test_control++;
-	printc("thd %d treadp (test_control %d) \n", cos_get_thd_id(), test_control);
-	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 4) {
+	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 2) {
 		printc("trigger fault in mbox treadp: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -459,28 +595,14 @@ treadp(spdid_t spdid, td_t td, int *off, int *sz)
 	if (!t) ERR_THROW(-EINVAL, done);
 	assert(!tor_is_usrdef(td) || t->data);
 	if (!(t->flags & TOR_READ)) ERR_THROW(-EACCES, done);
-	printc("treadp (thd %d) 2\n", cos_get_thd_id());
 	ac = t->data;
 	ret = mbox_get(t, sz, off, ac->owner != spdid);
-	printc("treadp (thd %d) 2.5 ret %d\n", cos_get_thd_id(), ret);
 	if ((int)ret < 0) goto done;
 	t->offset += ret;
-	printc("treadp (thd %d) 3\n", cos_get_thd_id());
-
-	/* Jiguo: The reserved cbuf should not be made back to
-	 * read/write here since an thread can be preempted at any
-	 * point before cbufp2buf is called to get the data. I think
-	 * this should be done in cbufp_deref (before deref)....which
-	 * means the client does not need the data in cbufp anymore
-	 */
-/* #if (RECOVERY_ENABLE == 1) */
-/* 	cbuf_c_claim(spdid, cbid); */
-/* #endif */
 
 done:	
 	UNLOCK();
 	printc("treadp (thd %d) return, ret %d\n", cos_get_thd_id(), ret);
-	printc("treadp (thd %d) off %d sz %d\n", cos_get_thd_id(), *off, *sz);
 	return ret;
 }
 
@@ -495,16 +617,14 @@ twritep(spdid_t spdid, td_t td, int cbid, int sz)
 	if (tor_isnull(td)) return -EINVAL;
 	LOCK();
 
-#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TWRITEP)
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TWRITEP_BEFORE)
 	test_control++;
-	printc("thd %d twritep (test_control %d) \n", cos_get_thd_id(), test_control);
-	if (spdid == 15 && cos_get_thd_id() == 13 && test_control == 4) {
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
 		printc("trigger fault in mbox twritep: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
 #endif
-
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);
 	assert(t->data);
@@ -514,6 +634,16 @@ twritep(spdid_t spdid, td_t td, int cbid, int sz)
 	ret = mbox_put(t, cb, sz, 0, ac->owner != spdid );
 	if (ret < 0) goto done;
 	t->offset += ret;
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TWRITEP_AFTER)
+	test_control++;
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
+		printc("trigger fault in mbox twritep: thd %d spd %ld passed spd %d\n",
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 done:	
 	UNLOCK();
 	return ret;
@@ -526,15 +656,20 @@ int cos_init(void)
 
 	fs_init_root(&root);
 	root_torrent.data = &root;
+	assert(root_torrent.data);
+	printc("root_torrent id %d (by thd %d)\n", root_torrent.td, cos_get_thd_id());
+	
+	print_tormap_cvect();
+
+	struct torrent *t;
+	t = tor_lookup(root_torrent.td);
+	assert(t);
+	assert(t->data);
+
 	root.flags = TOR_READ | TOR_SPLIT;
 
-	return 0;
-}
+	LOCK();
+	UNLOCK();
 
-// Jiguo: dummy function for the non-tracking tsplit (remove later??)
-td_t 
-__tsplit(spdid_t spdid, td_t td, char *param, 
-       int len, tor_flags_t tflags, long evtid) 
-{
 	return 0;
 }

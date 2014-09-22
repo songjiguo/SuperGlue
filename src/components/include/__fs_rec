@@ -361,6 +361,10 @@ fsobj_path2obj(char *path, int len, struct fsobj *root,
 	char *next;
 	struct fsobj *dir = root;
 
+	assert(path);
+	assert(root);
+	assert(len >= 0);
+
 	assert(path && root && len >= 0);
 
 	*parent = NULL;

@@ -594,6 +594,54 @@ done:
 }
 
 
+
+int
+cbufp_introspect(spdid_t spdid, int iter)
+{
+	return 0;
+/* 	struct spd_tmem_info *sti; */
+/* 	spdid_t s_spdid; */
+/* 	struct cos_cbuf_item *cci = NULL, *list; */
+	
+/* 	int counter = 0; */
+
+/* 	TAKE(); */
+
+/* 	sti = get_spd_info(spdid); */
+/* 	assert(sti); */
+/* 	s_spdid = sti->spdid; */
+/* 	list = &spd_tmem_info_list[s_spdid].tmem_list; */
+/* 	printc("try to find cbuf for this spd 1\n"); */
+/* 	if (iter == -1){ */
+/* 		for (cci = FIRST_LIST(list, next, prev) ; */
+/* 		     cci != list; */
+/* 		     cci = FIRST_LIST(cci, next, prev)) { */
+/* 			printc("try to find cbuf for this spd 2\n"); */
+/* 			struct cbuf_meta cm; */
+/* 			cm.nfo.v = cci->desc.owner.meta->nfo.v; */
+/* 			if (CBUF_OWNER(cm.nfo.c.flags) &&  */
+/* 			    cm.nfo.c.refcnt) counter++; */
+/* 		} */
+/* 		RELEASE(); */
+/* 		return counter; */
+/* 	} else { */
+/* 		for (cci = FIRST_LIST(list, next, prev) ; */
+/* 		     cci != list; */
+/* 		     cci = FIRST_LIST(cci, next, prev)) { */
+/* 			struct cbuf_meta cm; */
+/* 			cm.nfo.v = cci->desc.owner.meta->nfo.v; */
+/* 			if (CBUF_OWNER(cm.nfo.c.flags) &&  */
+/*                             cm.nfo.c.refcnt && */
+/*                             !(--iter)) goto found; */
+/* 		} */
+/* 	} */
+	
+/* found: */
+/* 	RELEASE(); */
+/* 	return cci->desc.cbid; */
+}
+
+
 /* /\*  */
 /*  * Exchange the cbuf descriptor (flags of ownership) of old spd and */
 /*  * requested spd */
@@ -664,7 +712,7 @@ done:
  * r_spdid is the requested spd
  */
 int   
-cbuf_c_claim(spdid_t r_spdid, int cbid)
+cbufp_claim(spdid_t r_spdid, int cbid)
 {
 	int ret = 0;
 /* 	spdid_t o_spdid; */

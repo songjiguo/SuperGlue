@@ -375,6 +375,7 @@ static int sched_switch_thread_target(int flags, report_evt_t evt, struct sched_
 		 * scheduled.
 		 */
 		if (cos_sched_pending_event()) {
+			/* printc("\nthere is pending event\n\n"); */
 			cos_sched_clear_events();
 			cos_sched_process_events(evt_callback, 0);
 		}
@@ -414,6 +415,8 @@ static int sched_switch_thread_target(int flags, report_evt_t evt, struct sched_
 				 * dependencies have been introduced (i.e. we
 				 * are waiting on a component-lock for
 				 * another thread), then we're done */
+				/* printc("next thread is %d\n", next->id); */
+				/* printc("current thread is %d\n", current->id); */
 				if (next == current && !sched_thd_dependency(current)) goto done;
 			}
 		} else {
@@ -421,6 +424,9 @@ static int sched_switch_thread_target(int flags, report_evt_t evt, struct sched_
 			next = target;
 		}
 		next = resolve_dependencies(next);
+		/* printc("resolve - next thread is %d\n", next->id); */
+		/* printc("resolve - current thread is %d\n", current->id); */
+
 		if (next == current) goto done;
 		if (sched_is_child() && unlikely(next == PERCPU_GET(sched_base_state)->idle)) {
 			/* This is a kludge: child schedulers don't
