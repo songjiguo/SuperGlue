@@ -3,7 +3,7 @@
 ./cos_loader \
 "c0.o, ;llboot.o, ;*fprr.o, ;mm.o, ;print.o, ;boot.o, ;\
 \
-!mpool.o,a3;!tasc_rec.o,a6;!sm.o,a4;!l.o,a1;!te.o,a3;!eg.o,a4;!mboxns.o, ;!buf.o,a5;!bufp.o, a6;!micro_mbox_server.o,a7 '5 3';!micro_mbox_client.o,a9 '10 7';!pfr.o, ;!vm.o,a1;!va.o,a2:\
+!mpool.o,a3;!tasc_rec.o,a6;!sm.o,a4;!l.o,a1;!te.o,a3;!eg.o,a4;!buf.o,a5;!bufp.o, a6;!micro_mbox_server.o,a7 '5 3';!micro_mbox_client.o,a9 '10 7';!pfr.o, ;!vm.o,a1;!va.o,a2;!unique_map.o, :\
 \
 c0.o-llboot.o;\
 fprr.o-print.o|[parent_]mm.o|[faulthndlr_]llboot.o;\
@@ -20,9 +20,9 @@ mpool.o-print.o|fprr.o|mm.o|boot.o|va.o|l.o;\
 vm.o-fprr.o|print.o|mm.o|l.o|boot.o;\
 va.o-fprr.o|print.o|mm.o|l.o|boot.o|vm.o;\
 pfr.o-fprr.o|mm.o|print.o|boot.o;\
-mboxns.o-fprr.o|print.o|mm.o|l.o|va.o;\
-tasc_rec.o-sm.o|fprr.o|l.o|buf.o|bufp.o|mm.o|va.o|eg.o|print.o|pfr.o|mboxns.o;\
+unique_map.o-sm.o|va.o|fprr.o|print.o|mm.o|l.o|buf.o|bufp.o;\
+tasc_rec.o-sm.o|fprr.o|l.o|buf.o|bufp.o|mm.o|va.o|eg.o|print.o|unique_map.o|pfr.o;\
 \
-micro_mbox_server.o-sm.o|fprr.o|tasc_rec.o|buf.o|bufp.o|mm.o|eg.o|va.o|l.o|print.o|te.o;\
-micro_mbox_client.o-sm.o|fprr.o|tasc_rec.o|buf.o|bufp.o|mm.o|eg.o|va.o|l.o|print.o|te.o\
+micro_mbox_server.o-sm.o|fprr.o|tasc_rec.o|buf.o|bufp.o|mm.o|unique_map.o|eg.o|va.o|l.o|print.o|te.o;\
+micro_mbox_client.o-sm.o|fprr.o|tasc_rec.o|buf.o|bufp.o|mm.o|unique_map.o|eg.o|va.o|l.o|print.o|te.o\
 " ./gen_client_stub

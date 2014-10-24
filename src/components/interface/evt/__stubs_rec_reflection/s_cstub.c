@@ -64,10 +64,10 @@ long __sg_evt_wait(spdid_t spdid, long extern_evt)
 	assert(spdid && extern_evt);
 
 	C_TAKE(cos_spd_id());
-	printc("thd %d is going to evt_wait\n", cos_get_thd_id());
+	/* printc("thd %d is going to evt_wait\n", cos_get_thd_id()); */
 
 	if (unlikely(!evts_head)) {
-		printc("Init evts_head\n");
+		/* printc("Init evts_head\n"); */
 		evts_head = te_alloc(0);
 		assert(evts_head);
 	}
@@ -75,7 +75,7 @@ long __sg_evt_wait(spdid_t spdid, long extern_evt)
 	/* te = te_alloc(extern_evt); */
 	/* assert(te); */
 	te.evtid = extern_evt;
-	printc("add to the list\n");
+	/* printc("add to the list\n"); */
 	ADD_LIST(evts_head, &te, next, prev);
 	/* printc("add to the list done %p \n", (void *)evts_head->next->evtid); */
 	
@@ -83,7 +83,7 @@ long __sg_evt_wait(spdid_t spdid, long extern_evt)
 	ret = evt_wait(spdid, extern_evt);
 	C_TAKE(cos_spd_id());
 
-	printc("return from evt_wait....(thd %d)\n", cos_get_thd_id());
+	/* printc("return from evt_wait....(thd %d)\n", cos_get_thd_id()); */
 
         /* te is still on stack and will be popped off when return */
 	REM_LIST(&te, next, prev);  	
@@ -97,22 +97,22 @@ int __sg_evt_trigger_all(spdid_t spdid)
 {
 	long ret = 0;
 	
-	printc("thread %d is going to trigger all events\n", cos_get_thd_id());
+	/* printc("thread %d is going to trigger all events\n", cos_get_thd_id()); */
 	
 	C_TAKE(cos_spd_id());
 
 	/* evt_trigger evt_ids tracked for all thd block waited
 	 * through this interface */
 	if (!evts_head) goto done;
-	printc("mbox triggers all evts in spd %ld\n", cos_spd_id());
+	/* printc("mbox triggers all evts in spd %ld\n", cos_spd_id()); */
 	struct trigger_evt *evt_t, *evt_next;
 	for (evt_t = FIRST_LIST(evts_head, next, prev);
 	     evt_t != evts_head;
 	     evt_t = FIRST_LIST(evt_t, next, prev)){
-		printc("found evt id %ld to trigger\n", evt_t->evtid);
+		/* printc("found evt id %ld to trigger\n", evt_t->evtid); */
 		evt_trigger(cos_spd_id(), evt_t->evtid);
 	}
-	printc("trigger all events done (thd %d)\n\n", cos_get_thd_id());
+	/* printc("trigger all events done (thd %d)\n\n", cos_get_thd_id()); */
 
 done:
 	C_RELEASE(cos_spd_id());

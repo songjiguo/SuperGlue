@@ -60,6 +60,7 @@ void cos_init(void *arg)
 	}
 	printc("mb server: thd %d (waiting on event %ld)\n", cos_get_thd_id(), evt1);
 	evt_wait(cos_spd_id(), evt1);
+	printc("mb server: params2 length %d\n", strlen(params2));
 	printc("mb server: thd %d (back from evt_wait %ld)\n", cos_get_thd_id(), evt1);
 	cli = tsplit(cos_spd_id(), t1, params2, strlen(params2), TOR_RW, evt2);
 	if (cli < 1) {
@@ -67,7 +68,7 @@ void cos_init(void *arg)
 		assert(0);
 	}
 	j = 1000*ITER;
-	j = 4;
+	j = 10;
 	rdtscll(start);
 	for (i=0; i<j; i++) {
 		while (1) {
@@ -80,7 +81,12 @@ void cos_init(void *arg)
 		cbufp_deref(cb1);
 	}
 
+	printc("mb server: 1st trelease by thd %d in spd %ld\n", 
+	       cos_get_thd_id(), cos_spd_id());
 	trelease(cos_spd_id(), cli);
+
+	printc("mb server: 2nd trelease by thd %d in spd %ld\n", 
+	       cos_get_thd_id(), cos_spd_id());
 	trelease(cos_spd_id(), t1);
 
 	return;

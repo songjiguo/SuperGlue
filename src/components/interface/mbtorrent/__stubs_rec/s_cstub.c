@@ -1,3 +1,4 @@
+#include <cos_component.h>
 #include <mbtorrent.h>
 
 struct __sg_tsplit_data {
@@ -23,47 +24,18 @@ td_t __sg_tsplit(spdid_t spdid, cbuf_t cbid, int len)
 	if (unlikely(((int)(d->len[1] + sizeof(struct __sg_tsplit_data))) != len)) return -4;
 	if (unlikely(d->tid == 0)) return -EINVAL;
 
-	printc("server interface: calling tsplit....thd %d\n", cos_get_thd_id());	
+	printc("server interface: calling tsplit....thd %d\n", cos_get_thd_id());
+	
 	return tsplit(spdid, d->tid, &d->data[0], 
 		      d->len[1] - d->len[0], d->tflags, d->evtid);
 }
 
-
-struct __sg_tresplit_data {
-	td_t tid;
-	td_t old_tid;
-	tor_flags_t tflags;
-	long evtid;
-	int len[2];
-	char data[0];
-};
-td_t __sg_tresplit(spdid_t spdid, cbuf_t cbid, int len)
-{
-	struct __sg_tresplit_data *d;
-
-	d = cbuf2buf(cbid, len);
-	if (unlikely(!d)) return -5;
-
-	printc("__retsplit ser: spdid %d tid %d evtid %ld (cbid %d)\n", 
-	       spdid, d->tid, d->evtid, cbid);
-
-	/* mainly to inform the compiler that optimizations are possible */
-	if (unlikely(d->len[0] != 0)) return -2; 
-	if (unlikely(d->len[0] > d->len[1])) return -3;
-	if (unlikely(((int)(d->len[1] + sizeof(struct __sg_tresplit_data))) != len)) return -4;
-	if (unlikely(d->tid == 0)) return -EINVAL;
-	if (unlikely(d->old_tid == 0)) return -EINVAL;
-
-	printc("server interface: calling tresplit....thd %d\n", cos_get_thd_id());
-	return tresplit(spdid, d->tid, &d->data[0], 
-			d->len[1] - d->len[0], d->tflags, d->evtid, d->old_tid);
-}
-
-
 int
 __sg_treadp(spdid_t spdid, int tid, int __pad0, int __pad1, int *off_len)
 {
-        return treadp(spdid, tid, &off_len[0], &off_len[1]);
+	printc("server: treadp (thd %d from spd %d)\n", cos_get_thd_id(), spdid);	
+	assert(tid);
+	return treadp(spdid, tid, &off_len[0], &off_len[1]);
 }
 
 struct __sg_tmerge_data {

@@ -36,8 +36,8 @@ int trmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, char *ret
 int twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen);
 
 // tsplit new torrent and cache on the server side
-td_t tresplit(spdid_t spdid, td_t tid, char *param, 
-	       int len, tor_flags_t tflags, long evtid, td_t old_tid);
+/* td_t tresplit(spdid_t spdid, td_t tid, char *param,  */
+/* 	       int len, tor_flags_t tflags, long evtid, td_t old_tid); */
 // reflect the existence of entry of a torrent's parent
 int treflection(spdid_t spdid, td_t td);
 

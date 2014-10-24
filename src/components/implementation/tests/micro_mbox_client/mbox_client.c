@@ -65,7 +65,7 @@ void cos_init(void *arg)
 	printc("client split successfully\n");
 	sz = 4096;
 	j = 1000*ITER;
-	j = 4;
+	j = 40;
 	rdtscll(start);
 	for (i=1; i<=j; i++) {
 		if (i == j) rdtscll(end);
@@ -79,10 +79,13 @@ void cos_init(void *arg)
 		((u64_t *)d)[0] = end;
 		printc("cli:passed out data is %lld\n", ((u64_t *)d)[0]);
 		ret = twritep(cos_spd_id(), serv, cb1, sz);
-		printc("Kevin (thd %d)\n", cos_get_thd_id());
 		cbufp_deref(cb1); 
 	}
+
+	printc("mb client: finally trelease by thd %d in spd %ld\n", 
+	       cos_get_thd_id(), cos_spd_id());
 	trelease(cos_spd_id(), serv);
+
 	return;
 
 	printc("Client snd %d times %llu\n", j-1, (end-start)/(j-1));

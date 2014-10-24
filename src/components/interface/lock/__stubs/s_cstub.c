@@ -55,28 +55,28 @@ int __sg_lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short 
 	assert(spd && lock_id && thd);
 
 	C_TAKE(cos_spd_id());
-	printc("thd %d is going to lock_component_take\n", cos_get_thd_id());
+	/* printc("thd %d is going to lock_component_take\n", cos_get_thd_id()); */
 
 	tl.lockid = lock_id;
 	INIT_LIST(&tl, next, prev);
 	if (unlikely(!first_lock_track)) {
 		first_lock_track = 1;
 		int i;
-		printc("initialize lock tracking....\n");
+		/* printc("initialize lock tracking....\n"); */
 		for (i = 0; i < MAX_NUM_SPDS; i++) {  // assume min spd id is 0
 			spdlocks[i].spdid = i;
 			spdlocks[i].list_head.lockid = 0;
 			INIT_LIST(&spdlocks[i].list_head, next, prev);
 		}
 	} 
-	printc("\n<<thd %d is adding on list in lock_component_take>>>\n", cos_get_thd_id());
+	/* printc("\n<<thd %d is adding on list in lock_component_take>>>\n", cos_get_thd_id()); */
 	ADD_LIST(&spdlocks[spd].list_head, &tl, next, prev);
 	C_RELEASE(cos_spd_id());
 
 	ret = lock_component_take(spd, lock_id, thd);
-	printc("\n<<<thd %d is back from lock_component_take>>>\n", cos_get_thd_id());
+	/* printc("\n<<<thd %d is back from lock_component_take>>>\n", cos_get_thd_id()); */
 	C_TAKE(cos_spd_id());
-	printc("\n<<<thd %d is removing from lock_component_take list>>>\n", cos_get_thd_id());
+	/* printc("\n<<<thd %d is removing from lock_component_take list>>>\n", cos_get_thd_id()); */
 	REM_LIST(&tl, next, prev);
 	C_RELEASE(cos_spd_id());
 
@@ -99,8 +99,8 @@ int __sg_lock_trigger_all(spdid_t spdid, int dest)
 	long ret = 0;
 	struct track_lock *tl, *list_head, *tmp;
 	
-	printc("thread %d is going to release all locks from component %d\n", 
-	       cos_get_thd_id(), dest);
+	/* printc("thread %d is going to release all locks from component %d\n",  */
+	/*        cos_get_thd_id(), dest); */
 	
 	C_TAKE(cos_spd_id());
 	
@@ -111,15 +111,15 @@ int __sg_lock_trigger_all(spdid_t spdid, int dest)
 	int test = 0;
 	for (tl = FIRST_LIST(list_head, next, prev);
 	     tl != list_head;) {
-		printc("found lock id %ld to release\n", tl->lockid);
+		/* printc("found lock id %ld to release\n", tl->lockid); */
 		C_RELEASE(cos_spd_id());
 		tmp = FIRST_LIST(tl, next, prev);
 		lock_component_release(dest, tl->lockid);
 		tl = tmp;
-		if (test++ > 5) assert(0);
+		if (test++ > 5) assert(0);  // testing only
 		C_TAKE(cos_spd_id());
 	}
-	printc("all locks are released done (thd %d)\n\n", cos_get_thd_id());
+	/* printc("all locks are released done (thd %d)\n\n", cos_get_thd_id()); */
 	
 done:
 	C_RELEASE(cos_spd_id());

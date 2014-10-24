@@ -36,5 +36,5 @@ cos_asm_server_fn_stub_spdid(trmeta, __sg_trmeta)
 cos_asm_server_fn_stub_spdid(twmeta, __sg_twmeta)
 
 // retsplit the torrent and cache for the old torrent id
-cos_asm_server_fn_stub_spdid(tresplit, __sg_tresplit)
+// cos_asm_server_fn_stub_spdid(tresplit, __sg_tresplit)
 cos_asm_server_stub_spdid(treflection)

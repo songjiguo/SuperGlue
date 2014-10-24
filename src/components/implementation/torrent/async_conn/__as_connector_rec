@@ -37,8 +37,10 @@
 /* #define TEST_MBOX_TRELEASE_READY_BEFORE */
 /* #define TEST_MBOX_TRELEASE_READY_AFTER */
 
-extern void print_tormap_cvect();
-extern cvect_t tormap_vect;
+/* still track the client/server side id over the client interface,
+ * not using the separate name server */
+/* extern void print_tormap_cvect(); */
+/* extern cvect_t tormap_vect; */
 
 #define MBOX_BUFFER_SIZE 256
 struct cbuf_info {
@@ -95,8 +97,8 @@ free_as_conn_root(void *d)
 	     i = FIRST_LIST(i, next, prev)) {
 		i->status = -EPIPE;
 		__mbox_remove_cbufp(i);
-		printc("thread %d is trying to trigger evt %ld <<6>>\n", 
-		       cos_get_thd_id(), i->ts[CLIENT]->evtid);
+		/* printc("thread %d is trying to trigger evt %ld <<6>>\n",  */
+		/*        cos_get_thd_id(), i->ts[CLIENT]->evtid); */
 		evt_trigger(cos_spd_id(), i->ts[CLIENT]->evtid);
 	}
 	for (i = FIRST_LIST(&acr->cs, next, prev) ;
@@ -125,7 +127,7 @@ mbox_create_addr(spdid_t spdid, struct torrent *t, struct fsobj *parent,
 	struct fsobj *fsc = NULL;;
 	struct as_conn_root *acr;
 
-	printc("mbox create addr by thd %d\n", cos_get_thd_id());
+	/* printc("mbox create addr by thd %d\n", cos_get_thd_id()); */
 	assert(parent);
 	if (!(parent->flags & TOR_SPLIT)) ERR_THROW(-EACCES, done);
 	fsc = fsobj_alloc(subpath, parent);
@@ -159,17 +161,17 @@ mbox_create_server(struct torrent *t, struct as_conn_root *acr)
 	struct as_conn *ac;
 	assert(!t->data);
 
-	printc("mbox create server by thd %d\n", cos_get_thd_id());
+	/* printc("mbox create server by thd %d\n", cos_get_thd_id()); */
 	if (EMPTY_LIST(&acr->cs, next, prev)) return -EAGAIN;
-	printc("mbox create server by thd %d (found acr->cs)\n", cos_get_thd_id());
+	/* printc("mbox create server by thd %d (found acr->cs)\n", cos_get_thd_id()); */
 	ac = FIRST_LIST(&acr->cs, next, prev);
 	REM_LIST(&acr->cs, next, prev);
 
 	ac->ts[SERV] = t;
 	t->data = ac;
 	assert(ac->ts[CLIENT]);
-	printc("thread %d is trying to trigger evt %ld <<1>>\n", 
-	       cos_get_thd_id(), ac->ts[CLIENT]->evtid);
+	/* printc("thread %d is trying to trigger evt %ld <<1>>\n",  */
+	/*        cos_get_thd_id(), ac->ts[CLIENT]->evtid); */
 	evt_trigger(cos_spd_id(), ac->ts[CLIENT]->evtid);
 
 	return ret;
@@ -183,7 +185,7 @@ mbox_create_client(struct torrent *t, struct as_conn_root *acr)
 	int i, ret = 0;
 	assert(!t->data);
 	
-	printc("mbox create client by thd %d\n", cos_get_thd_id());
+	/* printc("mbox create client by thd %d\n", cos_get_thd_id()); */
 	ac = malloc(sizeof(struct as_conn));
 	if (!ac) return -ENOMEM;
 	ac->status = 0;
@@ -196,8 +198,8 @@ mbox_create_client(struct torrent *t, struct as_conn_root *acr)
 	}
 	ADD_END_LIST(&acr->cs, ac, next, prev);
 	if (acr->t) {
-		printc("thread %d is trying to trigger evt %ld <<2>>\n", 
-		       cos_get_thd_id(), acr->t->evtid);
+		/* printc("thread %d is trying to trigger evt %ld <<2>>\n",  */
+		/*        cos_get_thd_id(), acr->t->evtid); */
 		evt_trigger(cos_spd_id(), acr->t->evtid);
 	}
 	return ret;
@@ -222,11 +224,11 @@ mbox_put(struct torrent *t, cbufp_t cb, int sz, int off, int ep)
 	ret = CK_RING_ENQUEUE_SPSC(cb_buffer, &ac->cbs[ep], &cbi);
 	if (ret == 0) return -EALREADY;
 
-	printc("thread %d is trying to trigger evt %ld.....\n",
-	       cos_get_thd_id(), ac->ts[other_ep]->evtid);
+	/* printc("thread %d is trying to trigger evt %ld.....\n", */
+	/*        cos_get_thd_id(), ac->ts[other_ep]->evtid); */
 	evt_trigger(cos_spd_id(), ac->ts[other_ep]->evtid);
-	printc("thread %d is back from triggering evt %ld.....\n",
-	       cos_get_thd_id(), ac->ts[other_ep]->evtid);
+	/* printc("thread %d is back from triggering evt %ld.....\n", */
+	/*        cos_get_thd_id(), ac->ts[other_ep]->evtid); */
 	
 	return ret;
 }
@@ -288,7 +290,7 @@ tsplit(spdid_t spdid, td_t td, char *param,
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_SERVER_BEFORE)
 	test_control++;
-	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 1) {
+	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 1) {
 		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -297,7 +299,7 @@ tsplit(spdid_t spdid, td_t td, char *param,
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_CLIENT_BEFORE)
 	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
+	if (spdid == 15 && cos_get_thd_id() == 13 && test_control == 2) {
 		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -306,53 +308,41 @@ tsplit(spdid_t spdid, td_t td, char *param,
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_READY_BEFORE)
 	test_control++;
-	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 3) {
+	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 3) {
 		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
 #endif
-	printc("<<0000 (thd %d) before LOCK()>>\n", cos_get_thd_id());
 	LOCK();
-	printc("<<0000 (thd %d)>>\n", cos_get_thd_id());
 	t = tor_lookup(td);
-	printc("1\n");
 	if (!t) ERR_THROW(-EINVAL, done);
-	printc("2\n");
 	nt = tor_alloc(NULL, tflags);
 	if (!nt) ERR_THROW(-ENOMEM, done);
 	nt->evtid = evtid;
-	printc("3\n");
-	printc("t td %d\n", td);
 	fsc = fsobj_path2obj(param, len, t->data, &parent, &subpath);
 	if (!fsc) {
-		printc("4.5\n");
 		if (!(tflags & TOR_NONPERSIST)) ERR_THROW(-EINVAL, free);
 		fsc = mbox_create_addr(spdid, nt, parent, subpath, tflags, (int*)&ret);
-		printc("4\n");
 		if (!fsc) goto free; /* ret set above... */
-		printc("5 (thd %d)\n", cos_get_thd_id());
 		nt->data = fsc;
 		nt->flags = tflags & TOR_SPLIT;
 	} else {
 		struct as_conn_root *acr = (struct as_conn_root*)fsc->data;
 		assert(acr);
-		printc("6.5 (thd %d)\n", cos_get_thd_id());
 	        if ((~fsc->flags) & tflags) ERR_THROW(-EACCES, free);
 		/* Case 2: a client attempt to connect to a server*/
 	        if (len>0)      ret = (td_t)mbox_create_client(nt, acr);
 		/* Case 3: a server create a connection to a client*/
 	        else            ret = (td_t)mbox_create_server(nt, acr); 
-		printc("6 (thd %d)\n", cos_get_thd_id());
 	        if (ret < 0) goto free;
-		printc("7 (thd %d)\n", cos_get_thd_id());
 	        nt->flags = tflags & TOR_RW;
 	}
 	ret = nt->td;
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_SERVER_AFTER)
 	test_control++;
-	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 1) {
+	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 1) {
 		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -361,7 +351,7 @@ tsplit(spdid_t spdid, td_t td, char *param,
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_CLIENT_AFTER)
 	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
+	if (spdid == 15 && cos_get_thd_id() == 13 && test_control == 2) {
 		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -370,7 +360,7 @@ tsplit(spdid_t spdid, td_t td, char *param,
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TSPLIT_READY_AFTER)
 	test_control++;
-	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 3) {
+	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 3) {
 		printc("trigger fault in mbox tsplit: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -386,63 +376,56 @@ free:
 }
 
 
-td_t 
-tresplit(spdid_t spdid, td_t td, char *param, 
-	 int len, tor_flags_t tflags, long evtid, td_t old_td) 
-{
-	td_t new_td = 0;
-	struct torrent *old, *new;
+/* td_t  */
+/* tresplit(spdid_t spdid, td_t td, char *param,  */
+/* 	 int len, tor_flags_t tflags, long evtid, td_t old_td)  */
+/* { */
+/* 	td_t new_td = 0; */
+/* 	struct torrent *old, *new; */
 
-	new_td = tsplit(spdid, td, param, len, tflags, evtid);  // lock is taken there
+/* 	new_td = tsplit(spdid, td, param, len, tflags, evtid);  // lock is taken there */
 
-	LOCK();
-	printc("in retsplit: new id %d old td %d (thd %d)\n", 
-	       new_td, old_td, cos_get_thd_id());
-	if (new_td <= 1) goto done;  // failed to tsplit a new one (e.g, one side has released)
-	assert(old_td > 1);
+/* 	LOCK(); */
+/* 	printc("in retsplit: new id %d old td %d (thd %d)\n",  */
+/* 	       new_td, old_td, cos_get_thd_id()); */
+/* 	if (new_td <= 1) goto done;  // failed to tsplit a new one (e.g, one side has released) */
+/* 	assert(old_td > 1); */
 
-	new = cvect_lookup(&tormap_vect, new_td);
-	assert(new);
-	printc("in tresplit: create a new torrent %d\n", new_td);
+/* 	new = cvect_lookup(&tormap_vect, new_td); */
+/* 	assert(new); */
+/* 	printc("in tresplit: create a new torrent %d\n", new_td); */
 	
-	/* old event and caching... */
-	old = cvect_lookup(&tormap_vect, old_td);
-	assert(!old);
-	old = malloc(sizeof(struct torrent));
-	if (!old) goto err;
-	old->td     = old_td;
-	old->par_td = td;
-	old->cur_td = new_td;
-	cvect_add(&tormap_vect, old, old_td);
-	old = cvect_lookup(&tormap_vect, old_td);
-	assert(old);
+/* 	/\* old event and caching... *\/ */
+/* 	old = cvect_lookup(&tormap_vect, old_td); */
+/* 	assert(!old); */
+/* 	old = malloc(sizeof(struct torrent)); */
+/* 	if (!old) goto err; */
+/* 	old->td     = old_td; */
+/* 	old->par_td = td; */
+/* 	old->cur_td = new_td; */
+/* 	cvect_add(&tormap_vect, old, old_td); */
+/* 	old = cvect_lookup(&tormap_vect, old_td); */
+/* 	assert(old); */
 
-	printc("old torrent %d -- its new event id %d\n", old->td, old->cur_td);
-done:
-	UNLOCK();
-	return new_td;
-err:
-	free(old);
-	new_td = 0;
-	goto done;
+/* 	printc("old torrent %d -- its new event id %d\n", old->td, old->cur_td); */
+/* done: */
+/* 	UNLOCK(); */
+/* 	return new_td; */
+/* err: */
+/* 	free(old); */
+/* 	new_td = 0; */
+/* 	goto done; */
 
-}
+/* } */
 
 /* Check if a torrent entry of td is presented in mail box */
 int 
 treflection(spdid_t spdid, td_t td)
 {
-	struct torrent *t;
-	int ret = 0;
-	
+	int ret = 0;	
 	LOCK();
-
-	assert(spdid && td > 1);
-	t = cvect_lookup(&tormap_vect, td);
-	if (t) ret = 1;
-	
-	UNLOCK();
-
+	if (tor_lookup(td)) ret = 1;
+	UNLOCK();	
 	return ret;
 }
 
@@ -469,8 +452,8 @@ trelease(spdid_t spdid, td_t td)
 	
 	test_control++;
 
-#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_READY_BEFORE)
-	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 1) {
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_SERVER_BEFORE)
+	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 1) {
 		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -478,15 +461,15 @@ trelease(spdid_t spdid, td_t td)
 #endif
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_CLIENT_BEFORE)
-	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 2) {
+	if (spdid == 15 && cos_get_thd_id() == 13 && test_control == 3) {
 		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
 #endif
 
-#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_SERVER_BEFORE)
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 3) {
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_READY_BEFORE)
+	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 2) {
 		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -536,8 +519,17 @@ trelease(spdid_t spdid, td_t td)
 	}
 	tor_free(t);
 
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_SERVER_AFTER)
+	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 1) {
+		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_READY_AFTER)
-	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 1) {
+	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 2) {
 		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -545,15 +537,7 @@ trelease(spdid_t spdid, td_t td)
 #endif
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_CLIENT_AFTER)
-	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 2) {
-		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
-		       cos_get_thd_id(), cos_spd_id(), spdid);
-		assert(0);
-	}
-#endif
-
-#if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TRELEASE_SERVER_AFTER)
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 3) {
+	if (spdid == 15 && cos_get_thd_id() == 13 && test_control == 3) {
 		printc("trigger fault in mbox trelease: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -584,7 +568,8 @@ treadp(spdid_t spdid, td_t td, int *off, int *sz)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TREADP)
 	test_control++;
-	if (spdid == 15 && cos_get_thd_id() == 12 && test_control == 2) {
+	printc("test_control %d\n", test_control);
+	if (spdid == 14 && cos_get_thd_id() == 12 && test_control == 6) {
 		printc("trigger fault in mbox treadp: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -619,7 +604,7 @@ twritep(spdid_t spdid, td_t td, int cbid, int sz)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TWRITEP_BEFORE)
 	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
+	if (spdid == 15 && cos_get_thd_id() == 13 && test_control == 2) {
 		printc("trigger fault in mbox twritep: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -630,14 +615,13 @@ twritep(spdid_t spdid, td_t td, int cbid, int sz)
 	assert(t->data);
 	if (!(t->flags & TOR_WRITE)) ERR_THROW(-EACCES, done);
 	ac = t->data;
-
 	ret = mbox_put(t, cb, sz, 0, ac->owner != spdid );
 	if (ret < 0) goto done;
 	t->offset += ret;
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MBOX_TWRITEP_AFTER)
 	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
+	if (spdid == 15 && cos_get_thd_id() == 13 && test_control == 2) {
 		printc("trigger fault in mbox twritep: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -659,7 +643,7 @@ int cos_init(void)
 	assert(root_torrent.data);
 	printc("root_torrent id %d (by thd %d)\n", root_torrent.td, cos_get_thd_id());
 	
-	print_tormap_cvect();
+	/* print_tormap_cvect(); */
 
 	struct torrent *t;
 	t = tor_lookup(root_torrent.td);

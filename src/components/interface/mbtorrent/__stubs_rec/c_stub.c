@@ -50,13 +50,15 @@
    1) ramfs -- one file (path) can have multiple torrents associated
    2) mbox  -- one mailbox always have 3 torrent associated
 
-   Since we are using unique id from name server now, it should not be
-   a problem to restore the data. However, mbox has 3 torrents so the
-   tracking per mailbox data is ok. Ramfs can have multiple torrents
-   so the tracking per file data is not realistic. Instead, for ramfs
-   we need track per file data for a group of torrents. The point is
-   the number of tracking data should be bounded by the number of
-   object (mailbox or file), not by torrent.
+   !!!!!! Not good. This will incur the extra invocation head and
+   contradict the design goal!!!!!." Since we are using unique id from
+   name server now, it should not be a problem to restore the
+   data. However, mbox has 3 torrents so the tracking per mailbox data
+   is ok. Ramfs can have multiple torrents so the tracking per file
+   data is not realistic. Instead, for ramfs we need track per file
+   data for a group of torrents. The point is the number of tracking
+   data should be bounded by the number of object (mailbox or file),
+   not by torrent."
 
 4. We need reserve cbuf id before call twritep: fault can occurs at
    any point while running in mailbox. We want to make sure the same
@@ -65,9 +67,8 @@
 
    We need un-reserve cbuf id after treadp: once a cbufp id is
    returned from treadp, we know that we have read that cbufid off RB.
-
+   
    Question: does cbufp (reference) have already taken care this?
-
  */
 
 #include <cos_component.h>
@@ -76,6 +77,7 @@
 #include <mbtorrent.h>
 #include <cstub.h>
 #include <print.h>
+#include <cos_map.h>
 
 #include <objtype.h>
 
@@ -109,19 +111,15 @@ enum {
 
 static unsigned long fcounter = 0;
 
-/* Linked list for tracking cbufp ids that are passed in twritep. Any
-   cbufp on RB (not received yet and deref yet should be claimed)
-*/
-struct cb_node {
-	int cbid;
-	int sz;
-	struct cb_node *next, *prev;
-};
-
 // tracking data structure
 struct rec_data_tor {
-	td_t	ptid;
-        td_t	tid;
+	td_t	p_tid;   // parent torrent id
+
+	/* The following two ids could be different after a server
+	 * crash, we need this mapping to find the correct server
+	 * id  */
+        td_t	c_tid;    // torrent id in client's view
+        td_t	s_tid;  // torrent id in server's view
 
 	char		*param;
 	int		 param_len;
@@ -130,42 +128,51 @@ struct rec_data_tor {
 	long		 evtid;
 
 	unsigned int     evt_wait;  // for evt_wait after split	
-	struct cb_node   clist_head;  // see above explanation
+
+	int              being_recovered;  // used to indicate if need to track the data
 
 	int              state;
 	unsigned long	 fcnt;
 };
 
-CSLAB_CREATE(cbn, sizeof(struct cb_node));
-
+COS_MAP_CREATE_STATIC(uniq_tids);
 CSLAB_CREATE(rd, sizeof(struct rec_data_tor));
-CVECT_CREATE_STATIC(rec_vect);
 
 static struct rec_data_tor *
-rd_lookup(td_t td)
-{
-	return cvect_lookup(&rec_vect, td); 
+map_rd_lookup(td_t tid)
+{ 
+	return (struct rec_data_tor *)cos_map_lookup(&uniq_tids, tid);
 }
 
-static struct rec_data_tor *
-rd_alloc(int tid)
+static int
+map_rd_create()
 {
-	struct rec_data_tor *rd;
-	rd = cslab_alloc_rd();
-	assert(rd);
-	if (cvect_add(&rec_vect, rd, tid)) {
-		printc("can not add into cvect\n");
-		BUG();
+	struct rec_data_tor *rd = NULL;
+	int map_id = 0;
+	// ramfs return torrent id from 2 (rd_root is 1), and cos_map starts from 0
+	// here want cos_map to return some ids at least from 2 and later
+	while(1) {
+		rd = cslab_alloc_rd();
+		assert(rd);	
+		map_id = cos_map_add(&uniq_tids, rd);
+		/* printc("record added %d\n", map_id); */
+		if (map_id >= 2) break;
+		rd->s_tid = -1;  // -1 means that this is a dummy record
 	}
-	return rd;
+	assert(map_id >= 2);
+	return map_id;	
 }
 
 static void
-rd_dealloc(struct rec_data_tor *rd)
+map_rd_delete(td_t tid)
 {
+	assert(tid >= 0);
+	struct rec_data_tor *rd;
+	rd = map_rd_lookup(tid);
 	assert(rd);
-	if (cvect_del(&rec_vect, rd->tid)) BUG();
 	cslab_free_rd(rd);
+	cos_map_del(&uniq_tids, tid);
+	return;
 }
 
 /* return the state of a torrent object, only called after tsplit when
@@ -174,20 +181,21 @@ static int
 rd_get_state(char *param, tor_flags_t tflags)
 {
 	if (tflags & TOR_NONPERSIST) return STATE_TSPLIT_SERVER;  // begin of mail box
-	if (!strcmp(param, "")) return STATE_TSPLIT_READY;  // tsplit for a connection
+	if (!strlen(param)) return STATE_TSPLIT_READY;  // tsplit for a connection ("")
 	return STATE_TSPLIT_CLIENT;   // else it must be the client tsplit
 }
 
 static void
-rd_cons(struct rec_data_tor *rd, td_t ptid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid)
+rd_cons(struct rec_data_tor *rd, td_t p_tid, td_t c_tid, td_t s_tid, char *param, int len, tor_flags_t tflags, long evtid)
 {
-	printc("rd_cons: tid %d (its parent tid %d)\n",  ptid, tid);
+	/* printc("rd_cons: parent tid %d c_tid %d s_tid %d\n",  p_tid, c_tid, s_tid); */
 	assert(rd);
 
 	C_TAKE(cos_spd_id());
 
-	rd->ptid	 = ptid;
-	rd->tid 	 = tid;
+	rd->p_tid	 = p_tid;
+	rd->c_tid 	 = c_tid;
+	rd->s_tid 	 = s_tid;
 	rd->param	 = param;
 	rd->param_len	 = len;
 	rd->tflags	 = tflags;
@@ -197,10 +205,7 @@ rd_cons(struct rec_data_tor *rd, td_t ptid, td_t tid, char *param, int len, tor_
 	rd->state = rd_get_state(param, tflags);
 	
 	rd->evt_wait	 = tflags & TOR_WAIT;  // add for now, wait after tsplit
-	rd->clist_head.cbid = 0;
-	INIT_LIST(&rd->clist_head, next, prev);
-	assert(EMPTY_LIST(&rd->clist_head, next, prev));
-	
+
 	C_RELEASE(cos_spd_id());
 	return;
 }
@@ -240,6 +245,49 @@ cap_to_dest(int cap)
 	return dest;
 }
 
+#include <uniq_map.h>   // obtain unique id for a string path name
+
+/**********************************************/
+/* tracking path name and cbid for data recovery */
+/**********************************************/
+struct tid_uniqid_data {
+	int tid;
+	int uniq_id;
+};
+
+CVECT_CREATE_STATIC(idmapping_vect);
+CSLAB_CREATE(tiduniq, sizeof(struct tid_uniqid_data));
+
+static struct tid_uniqid_data *
+tiduniq_lookup(int tid)
+{
+	return cvect_lookup(&idmapping_vect, tid);
+}
+
+static struct tid_uniqid_data *
+tiduniq_alloc(int tid)
+{
+	struct tid_uniqid_data *idmapping;
+
+	idmapping = cslab_alloc_tiduniq();
+	assert(idmapping);
+	if (cvect_add(&idmapping_vect, idmapping, tid)) {
+		printc("can not add into cvect\n");
+		BUG();
+	}
+	return idmapping;
+}
+
+static void
+tiduniq_dealloc(struct tid_uniqid_data *idmapping)
+{
+	assert(idmapping);
+	if (cvect_del(&idmapping_vect, idmapping->tid)) BUG();
+	cslab_free_tiduniq(idmapping);
+}
+
+
+
 extern int sched_reflect(spdid_t spdid, int src_spd, int cnt);
 extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
 extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
@@ -268,47 +316,80 @@ rd_reflection(int cap)
 	/* } */
 
 	/* see top comments */
-	printc("in rd_reflection dest is %d\n", dest_spd);
+	/* printc("in rd_reflection dest is %d\n", dest_spd); */
 	evt_trigger_all(cos_spd_id());  // due to protocol
 	lock_trigger_all(cos_spd_id(), dest_spd);     // due to lock contention in mailbox
 
 	C_RELEASE(cos_spd_id());
-	printc("mailbox reflection done (thd %d)\n\n", cos_get_thd_id());
+	/* printc("mailbox reflection done (thd %d)\n\n", cos_get_thd_id()); */
 	return;
 }
 #endif
 
-td_t tresplit(spdid_t spdid, td_t tid, char *param, 
-	      int len, tor_flags_t tflags, long evtid, td_t old_tid);
-
-/* Bounded by the depth of torrent (how many time tsplit from)*/
+/* Bounded by the depth of torrent (how many time tsplit from). We can
+ * also convert the following recursive to the stack based
+ * non-recursive version. For now, just leave it. */
 static void
 rd_recover_state(struct rec_data_tor *rd)
 {
-	struct rec_data_tor *prd;
+	struct rec_data_tor *prd, *tmp = NULL;
 	
-	assert(rd && rd->ptid >= 1 && rd->tid > 1);
-	
-	/* printc("thd %d restoring mbox for torrent id %d (parent id %d evt id %ld) \n",  */
-	/*        cos_get_thd_id(), rd->tid, rd->ptid, rd->evtid); */
+	assert(rd && rd->p_tid >= 1 && rd->c_tid > 1);
 
-	if (rd->ptid > 1) {     // not tsplit from td_root
-		assert((prd = rd_lookup(rd->ptid)));
+	/* printc("calling recover!!!!!!\n"); */
+	/* printc("thd %d restoring mbox for torrent id %d (parent id %d evt id %ld) \n", */
+	/*        cos_get_thd_id(), rd->c_tid, rd->p_tid, rd->evtid); */
+	
+	/* If this is the server side final trelease, it is ok to just
+	 * restore the "final" tid since only it is needed by the
+	 * client to tsplit successfully */
+	if (rd->p_tid > 1) {     // not tsplit from td_root
+		assert((prd = map_rd_lookup(rd->p_tid)));
 		prd->fcnt = fcounter;
 		rd_recover_state(prd);
 	}
 	
 	// has reached td_root, start rebuilding and no tracking...
-	td_t new_tid = tresplit(cos_spd_id(), rd->ptid, 
-				rd->param, rd->param_len, rd->tflags, rd->evtid, rd->tid);
-	/* assert(new_tid > 1); */
-	if (new_tid <= 1) return;
-	printc("got the new server side torrent %d \n", new_tid);
+	td_t tmp_tid = tsplit(cos_spd_id(), rd->p_tid, 
+			      rd->param, rd->param_len, rd->tflags, rd->evtid);
+	if (tmp_tid <= 1) return;
+	
+	assert((tmp = map_rd_lookup(tmp_tid)));
+	rd->s_tid = tmp->s_tid;
+	/* printc("got the new client side %d and its new server id %d\n",  */
+	/*        tmp_tid, tmp->s_tid); */
+
+        /* do not track the new tid for retsplitting..  add this to
+	 * ramfs as well */
+	map_rd_delete(tmp_tid);  
 
 	if (rd->evt_wait == TOR_WAIT) {
-		printc("thd %d is waiting on event %ld \n", cos_get_thd_id(), rd->evtid);
+		/* printc("thd %d is waiting on event %ld \n", cos_get_thd_id(), rd->evtid); */
 		evt_wait(cos_spd_id(), rd->evtid);
-		printc("thd %d is back from evt_wait %ld \n", cos_get_thd_id(), rd->evtid);
+		/* printc("thd %d is back from evt_wait %ld \n", cos_get_thd_id(), rd->evtid); */
+	}
+
+	/* printc("....rd->state %d......\n", rd->state); */
+	if (rd->state == STATE_TSPLIT_CLIENT) {
+		/* printc("....recover data now......\n"); */
+		int tmp_sz, tmp_cbid, tmp_tot, tmp_i;
+		struct tid_uniqid_data *idmapping = tiduniq_lookup(rd->s_tid);
+		assert(idmapping);
+
+		rd->being_recovered = 1; // will be reset after twritep
+
+		tmp_tot = uniq_map_reflection(cos_spd_id(), idmapping->uniq_id, 0);
+		/* printc("there are %d entries in total in uniq trie\n", tmp_tot); */
+		/* Ignore the last one, since it is still on the stack */
+		for (tmp_i = 1; tmp_i < tmp_tot; tmp_i++) {
+			tmp_cbid = uniq_map_reflection(cos_spd_id(), 
+						       idmapping->uniq_id, tmp_i);
+			/* printc("cbid %d sz %d\n",  */
+			/*        (tmp_cbid >> 16) & 0xFFFF, tmp_cbid & 0xFFFF); */
+
+			twritep(cos_spd_id(), rd->c_tid,
+				(tmp_cbid >> 16) & 0xFFFF, tmp_cbid & 0xFFFF);
+		}
 	}
 
 	return;
@@ -319,8 +400,6 @@ rd_update(td_t tid, int state)
 {
         struct rec_data_tor *rd = NULL;
 
-	/* C_TAKE(cos_spd_id()); */
-
 	/* in state machine, normally we do not track the td_root,
 	 * however, the state of mail box case involves server and
 	 * client. And protocol requires that server is presented
@@ -330,27 +409,22 @@ rd_update(td_t tid, int state)
 	 * tsplit/tread/twrite/trelease is always in the same
 	 * component */
 
-	if (tid <= 1) goto done;   // both first tsplit and last trelease
-        rd = rd_lookup(tid);
+	// first tsplit 
+	if (tid <= 1 && state == STATE_TSPLIT_PARENT) goto done;
+        rd = map_rd_lookup(tid);
 	if (unlikely(!rd)) goto done;
 	if (likely(rd->fcnt == fcounter)) goto done;
 
 	rd->fcnt = fcounter;
 
-	/* If the fault occurs at the tsplit/trelease, we need to do
-	 * tsplit again (and its parent torrent if it has any ). This
-	 * is different from event interface (EVT_CREATE) because
-	 * recreating event does not require a parent event to be
-	 * presented first, torrent does
-	
-	 * One issue: when recover both client/server, since the
+	/* One issue: when recover both client/server, since the
 	 * thread needs to be evt_wait as part of the protocol, do we
 	 * need two threads to do the recovery?
 
 	 * When replay (e.g, by upcall):	   
 	 * Step 1: rebuild the protocol upon the fault (tsplits in
 	 *         server and client respectively)	   
-	 * Step 2: bring data back here too  
+	 * Step 2: bring data back
 	 * Step 3: resume the previous execution
 	 */
 
@@ -361,9 +435,8 @@ rd_update(td_t tid, int state)
 	case STATE_TSPLIT_PARENT:
 		/* we get here because the fault occurs during the
 		 * tsplit. Then rd is referring to the parent torrent
-		 * . Therefore we do not need update the state. We
-		 * need start rebuilding parent's state if the parent
-		 * is not rd_root */
+		 * therefore we do not need update the state. We need
+		 * start rebuilding parent's state */
 		rd_recover_state(rd);
 		break; 
 	case STATE_TRELEASE:
@@ -371,21 +444,15 @@ rd_update(td_t tid, int state)
 		 * trelease, there are two situations: read more than
 		 * write or write more than read. For example, t1
 		 * writes many to RB and before t2 can read, t3
-		 * crashes mail box server. Another example is that
-		 * what is the priority of the thread that tries to
-		 * read/write is not always high/low. In these cases,
-		 * we need rebuild the mailbox in order to bring back
-		 * the data and prepare for the late data accessing */
+		 * crashes mail box server. In these cases, we need
+		 * rebuild the mailbox in order to bring back the data
+		 * and prepare for the late data accessing */
 		release_state = rd->state;
 		switch (release_state) {
-		case STATE_TSPLIT_SERVER:
 		case STATE_TSPLIT_CLIENT:
-			/* at the proper priority, reflection over
-			 * event manager should alreay wake up server
-			 * side evt_wait thread and "see" the fault
-			 * when returns from event component */
+			break; // this is the end of the current mbox, no need recovery !!!!!
+		case STATE_TSPLIT_SERVER:
 		case STATE_TSPLIT_READY:
-			/* Similar to above case */
 			rd_recover_state(rd);
 			break;
 		default:
@@ -397,47 +464,38 @@ rd_update(td_t tid, int state)
 		/* we need check protocol state since for
 		 * treadp/twritep, we do not want to recreate protocol
 		 * each time when we see the fault (reflect if parent
-		 * torrent ids are presented in the mial box server,
+		 * torrent ids are presented in the mail box server,
 		 * maybe after rebuilt due to a early fault. Then we
 		 * do not need rebuild protocol). However, if the
 		 * parent id is not in mail box server, we know they
 		 * have not been rebuilt yet.
 		 */
-		printc("check if the protocol has been rebuilt\n");
-		if (treflection(cos_spd_id(), tid)) break;
-		else rd_recover_state(rd);
+		/* if (treflection(cos_spd_id(), rd->s_tid) == 1) { */
+		/* 	printc("the protocol has been rebuilt!!\n"); */
+		/* 	break; */
+		/* } */
+		/* else { */
+		/* 	printc("the protocol has not been rebuilt!!\n"); */
+		/* 	rd_recover_state(rd); */
+		/* }		 */
+		// for now, just assume that tsplit->tread/twrite->trelease
+		rd_recover_state(rd);
 		break;
 	default:
 		assert(0);
 	}
-
-	/* /\* rd's parent should not be a mailbox channel, so just check */
-	/*  * this for rd and write cbid back to channel if found any *\/ */
-	/* if (!EMPTY_LIST(&rd->clist_head, next, prev)) { */
-	/* 	struct cb_node *cbn, *tmp; */
-	/* 	cbn = LAST_LIST(&rd->clist_head, next, prev); */
-	/* 	assert(cbn); */
-	/* 	while (cbn != &rd->clist_head) { */
-	/* 		/\* printc("cli: recovering twritep s_tid %d cbid %d sz %d\n", *\/ */
-	/* 		/\*        rd->s_tid, cbn->cbid, cbn->sz); *\/ */
-	/* 		twritep(cos_spd_id(), rd->s_tid, cbn->cbid, cbn->sz); // > 0? */
-	/* 		tmp = cbn; */
-	/* 		cbn = LAST_LIST(cbn, next, prev); */
-	/* 		REM_LIST(tmp, next, prev); */
-	/* 	} */
-	/* } */	
-	printc("thd %d restore mbox done!!!\n", cos_get_thd_id());
+	/* printc("thd %d restore mbox done!!!\n", cos_get_thd_id()); */
 done:
-	/* C_RELEASE(cos_spd_id()); */
 	return rd;
 }
 
 /************************************/
 /******  client stub functions ******/
 /************************************/
+static int first = 0;
 
 struct __sg_tsplit_data {
-	td_t tid;
+	td_t parent_tid;
 	tor_flags_t tflags;
 	long evtid;
 	int len[2];
@@ -445,8 +503,8 @@ struct __sg_tsplit_data {
 };
 
 CSTUB_FN(td_t, tsplit)(struct usr_inv_cap *uc,
-		       spdid_t spdid, td_t tid, char * param,
-		       int len, tor_flags_t tflags, long evtid)
+		       spdid_t spdid, td_t parent_tid, char * param,
+			 int len, tor_flags_t tflags, long evtid)
 {
 	long fault = 0;
 	td_t ret;
@@ -455,190 +513,205 @@ CSTUB_FN(td_t, tsplit)(struct usr_inv_cap *uc,
 	int sz = len + sizeof(struct __sg_tsplit_data);
 
         struct rec_data_tor *rd = NULL;
-	printc("\n[[cli: thd %d is calling tsplit from spd %ld (parent tid %d, evt %ld)]]\n", 
-	       cos_get_thd_id(), cos_spd_id(), tid, evtid);
+        td_t		cli_tid	   = 0;
+        td_t		ser_tid	   = 0;
+	
+	/* printc("\n[[cli: thd %d is calling tsplit from spd %ld (parent tid %d, evt %ld)]]\n",  */
+	/*        cos_get_thd_id(), cos_spd_id(), parent_tid, evtid); */
 
-	assert(tid >= 1);
+	assert(parent_tid >= 1);
         assert(param && len >= 0);
         assert(param[len] == '\0');
+
+        if (first == 0) {
+		cos_map_init_static(&uniq_tids);
+		first = 1;
+	}
+	
 redo:
-        printc("<<< In: call tsplit  (thread %d) >>>\n", cos_get_thd_id());
-	rd = rd_update(tid, STATE_TSPLIT_PARENT);
+        /* printc("<<< In: call tsplit  (thread %d) >>>\n", cos_get_thd_id()); */
+	rd = rd_update(parent_tid, STATE_TSPLIT_PARENT);
 	/* assert(rd); */
 	
 	d = cbuf_alloc(sz, &cb);
 	if (!d) return -1;
-        d->tid    = tid;   
-	d->tflags = tflags;
-	d->evtid  = evtid;
-        d->len[0] = 0;
-        d->len[1] = len;
+        d->parent_tid = parent_tid;   
+	d->tflags     = tflags;
+	d->evtid      = evtid;
+        d->len[0]     = 0;
+        d->len[1]     = len;
 	memcpy(&d->data[0], param, len + 1);
 
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, cb, sz);
 
         if (unlikely(fault)) {
-		printc("tsplit found a fault (thd %d)\n", cos_get_thd_id());
+		/* printc("tsplit found a fault (thd %d)\n", cos_get_thd_id()); */
 		CSTUB_FAULT_UPDATE();
 		memset(&d->data[0], 0, len);  // why?
 		cbuf_free(cb);
 		goto redo;
 	}
-
-	assert (ret >= 1);
-	printc("cli: tsplit create a new rd in spd %ld\n", cos_spd_id());
-        rd = rd_alloc(ret);
-        assert(rd);
-	char *l_param = param_save(param, len);
-        rd_cons(rd, tid, ret, l_param, len, tflags, evtid);  // tid is parent tid
-
-	printc("tsplit done!!!\n\n");
         cbuf_free(cb);
 
-	return ret;
-}
-
-/* This function is used to create a new server side id for the old
- * torrent id, and do the cache in the server. Caching on the server
- * side can avoid tracking mapping between old and new id at client
- * interface (the mapping should be only valid between faults!!)
-
- * More generally if we keep the mapping between old id and new id in
- * the server (say, by caching), we need this function and we do not
- * need to track the mapping on the client side. However, if we keep
- * the mappings at client interface, we do not need this function
- * since the client can find the correct server id. 
- 
- NO tracking here!!!! If failed, just replay. This function can return
- ERRON if it can not create a new torrent. For example, one side of
- mailbox has been tore down via trelease.
- */
-struct __sg_tresplit_data {
-	td_t tid;
-	td_t old_tid;
-	tor_flags_t tflags;
-	long evtid;
-	int len[2];
-	char data[0];
-};
-CSTUB_FN(td_t, tresplit)(struct usr_inv_cap *uc,
-			 spdid_t spdid, td_t tid, char * param,
-			 int len, tor_flags_t tflags, long evtid, td_t old_tid)
-{
-	long fault = 0;
-	unsigned long ret;
-
-	struct __sg_tresplit_data *d;
-	cbuf_t cb;
-	int sz = len + sizeof(struct __sg_tresplit_data);
+	// ret is server side id
+	ser_tid = ret;
+	/* printc("cli: tsplit create a new rd %d in spd %ld\n", ser_tid, cos_spd_id()); */
+	assert (ser_tid >= 1);
 	
-        assert(param && len >= 0);
-        assert(param[len] == '\0');
-redo:
-        printc("<<< In: call tresplit  (thread %d) >>>\n", cos_get_thd_id());
-	d = cbuf_alloc(sz, &cb);
-	if (!d) return -1;
-        d->tid    = tid;
-	d->old_tid = old_tid;
-	d->tflags = tflags;
-	d->evtid  = evtid;
-        d->len[0] = 0;
-        d->len[1] = len;
-	memcpy(&d->data[0], param, len + 1);
+	struct uniqmap_data *dm = NULL;
+	cbuf_t cb_p;
+	int uniq_id;
+	int tmp_sz = strlen(&d->data[0]);
+	/* printc("sz of the passed in string path name is %d\n", sz); */
+	if (tmp_sz > 0) {
+		dm = cbuf_alloc(tmp_sz, &cb_p);
+		assert(dm);
+		dm->server_tid = ser_tid;
+		dm->sz         = tmp_sz;
+		memcpy(dm->data, &d->data[0], tmp_sz);
+	
+		/* if does not exist, create it in uniqmap. Use the
+		 * most recent server tid to find uniq_id in uniqmap
+		 * when twritep/treadp. So we do not track here. */
+		uniq_id = uniq_map_lookup(cos_spd_id(), cb_p, 
+					(tmp_sz + sizeof(struct uniqmap_data)));
+		assert(uniq_id);
+		
+		struct tid_uniqid_data *idmapping;
+		if (!(idmapping = tiduniq_lookup(ser_tid))) {
+			idmapping = tiduniq_alloc(ser_tid);
+		}
+		assert(idmapping);
 
-	CSTUB_INVOKE(ret, fault, uc, 3, spdid, cb, sz);
-	if (unlikely (fault)){
-		printc("re tsplit found a fault (thd %d)\n", cos_get_thd_id());		
-		CSTUB_FAULT_UPDATE();
-		cbuf_free(cb);
-		goto redo;
+		/* printc("server: check lookup uniqid for tid %d\n", ser_tid); */
+		struct tid_uniqid_data *tmp = tiduniq_lookup(ser_tid);
+		assert(tmp);		
+
+		idmapping->uniq_id = uniq_id;
+		
+		cbuf_free(cb_p);
+	} else {
+                /* mbox protocol asks for "" as the last tsplit. So we
+		 * only need the uniq id for parent */
+		struct tid_uniqid_data *emptymapping, *tmp;
+		if (!(emptymapping = tiduniq_lookup(ser_tid))) {
+			emptymapping = tiduniq_alloc(ser_tid);
+		}
+		assert(emptymapping);
+		/* printc("server: check lookup uniqid for tid %d\n", d->parent_tid); */
+		tmp = tiduniq_lookup(d->parent_tid);
+		assert(tmp);
+		emptymapping->uniq_id = tmp->uniq_id;
+	}
+	
+	char *l_param = ""; // len can be zero (this is not the case for mbox "")
+	if (len > 0) { 
+		l_param = param_save(param, len);
+		assert(l_param);
 	}
 
-	cbuf_free(cb);
-	return ret;
+	cli_tid = map_rd_create();
+	assert(cli_tid >= 2);
+
+	rd = map_rd_lookup(cli_tid);
+        assert(rd);
+
+        rd_cons(rd, parent_tid, cli_tid, ser_tid, l_param, len, tflags, evtid);
+	
+	/* printc("tsplit done!!! ... ser %d cli %d\n\n", ret, cli_tid); */
+
+	/* we return the entry's id allocated by map_rd_create, not
+	 * server side id */
+	return cli_tid;
 }
 
-
+/* after the fault, recovery should replay the twrite, but without
+ * tracking these data again !!!! */
 CSTUB_FN(int, twritep)(struct usr_inv_cap *uc,
-		       spdid_t spdid, td_t tid, int cbid, int sz)
+		       spdid_t spdid, td_t c_tid, int cbid, int sz)
 {
 	int ret;
 	long fault = 0;
 
         struct rec_data_tor *rd = NULL;
 redo:
-        printc("<<< In: call twritep  (thread %d) >>>\n", cos_get_thd_id());
-        rd = rd_update(tid, STATE_TWRITE);
+        /* printc("<<< In: call twritep  (thread %d) >>>\n", cos_get_thd_id()); */
+        rd = rd_update(c_tid, STATE_TWRITE);
 	assert(rd);
 
-	/* struct cb_node *cn;	 */
-	/* assert(rd); */
-	/* cn = cslab_alloc_cbn(); */
-	/* assert(cn); */
-	/* cn->cbid = cbid; */
-	/* cn->sz   = sz; */
-	/* printc("<<< add written cbuf id (thd %d)>>>\n", cos_get_thd_id()); */
-	/* ADD_LIST(&rd->clist_head, cn, next, prev); */
-
-	/* Jiguo: Before return from twritep, make cbufp page read
-	 * only and track in cbuf_manager. The purpose is to avoid
-	 * corrupt the content in the shared pages before they are
-	 * read (dequeued from mailbox) cbuf_c_claim(dest_spd, cbid);
-	 * do this in server
-	*/
-	CSTUB_INVOKE(ret, fault, uc, 4, spdid, tid, cbid, sz);
+	/* At here we know that the data(e.g, cbid is going to RB),
+	 * and we track this info in the name server for data
+	 * recovery) */
+	if (!rd->being_recovered) {
+		struct tid_uniqid_data *idmapping = tiduniq_lookup(rd->s_tid);
+		assert(idmapping);
+		/* printc("<<<unqi_id %d cbid %d sz %d>>>\n", idmapping->uniq_id, cbid, sz); */
+		if (uniq_map_add(cos_spd_id(), idmapping->uniq_id, cbid, sz)) assert(0);
+	}
+	
+	CSTUB_INVOKE(ret, fault, uc, 4, spdid, rd->s_tid, cbid, sz);
 	if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
 
 	/* printc("<<< remove written cbuf id (thd %d)>>>\n", cos_get_thd_id()); */
-	/* REM_LIST(cn, next, prev); */
+	rd->being_recovered = 0;  // this is due to the current data is still on stack
 
 	return ret;
 }
 
 CSTUB_FN(int, treadp)(struct usr_inv_cap *uc,
-		      spdid_t spdid, td_t tid, int *off, int *sz)
+		      spdid_t spdid, td_t c_tid, int *off, int *sz)
 {
 	int ret = 0;
 	long fault = 0;
         struct rec_data_tor *rd = NULL;
 redo:
-        printc("<<< In: call treadp  (thread %d) >>>\n", cos_get_thd_id());
-        rd = rd_update(tid, STATE_TREAD);
+        /* printc("<<< In: call treadp  (thread %d) >>>\n", cos_get_thd_id()); */
+        rd = rd_update(c_tid, STATE_TREAD);
 	assert(rd);
+        /* printc("<<< In: call treadp  (thread %d)... after rd_update >>>\n", cos_get_thd_id()); */
 
-	CSTUB_INVOKE_3RETS(ret, fault, *off, *sz, uc, 2, spdid, tid);
+	CSTUB_INVOKE_3RETS(ret, fault, *off, *sz, uc, 2, spdid, rd->s_tid);
 	if (unlikely(fault)){
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
+
+	// ret is the cbufid for mbox
+	if (ret > 0) {
+		/* printc("server: treadp lookup uniqid for tid %d\n", rd->s_tid); */
+		struct tid_uniqid_data *idmapping = tiduniq_lookup(rd->s_tid);
+		assert(idmapping);
+		/* printc("unqi_id %d\n", idmapping->uniq_id); */
+		if (uniq_map_del(cos_spd_id(), idmapping->uniq_id, ret)) assert(0);
+	}
+
 
 	return ret;
 }
 
 
 CSTUB_FN(void, trelease)(struct usr_inv_cap *uc,
-			 spdid_t spdid, td_t tid)
+			 spdid_t spdid, td_t c_tid)
 {
 	int ret;
 	long fault = 0;
         struct rec_data_tor *rd = NULL;
 
 redo:
-        printc("<<< In: call trelease  (thread %d) >>>\n", cos_get_thd_id());
-        rd = rd_update(tid, STATE_TRELEASE);
+        /* printc("<<< In: call trelease  (thread %d) >>>\n", cos_get_thd_id()); */
+        rd = rd_update(c_tid, STATE_TRELEASE);
 	assert(rd);
 
-	CSTUB_INVOKE(ret, fault, uc, 2, spdid, tid);
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_tid);
 	if (unlikely(fault)){
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
 	
-	assert(rd);
-	rd_dealloc(rd);
+	map_rd_delete(c_tid);
 
 	return;
 }
