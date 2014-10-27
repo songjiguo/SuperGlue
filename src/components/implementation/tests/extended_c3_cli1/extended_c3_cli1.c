@@ -16,7 +16,8 @@ int warm;
 #define ITER 5
 
 //#define EXAMINE_LOCK
-#define EXAMINE_EVT
+//#define EXAMINE_EVT
+#define EXAMINE_TE
 
 #define US_PER_TICK 10000
 
@@ -102,6 +103,21 @@ cos_init(void)
 		/* 	ec3_ser2_test(); */
 		/* } */
 #endif
+
+#ifdef EXAMINE_TE
+		if (cos_get_thd_id() == high) {
+			printc("<<<high thd %d>>>\n", cos_get_thd_id());
+			ec3_ser1_test();
+		}
+			
+		if (cos_get_thd_id() == med) {
+			printc("<<<med thd %d>>>\n", cos_get_thd_id());
+			ec3_ser1_test();
+		}
+#endif
+
+
+
 	}
 
 	return;

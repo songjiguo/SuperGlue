@@ -286,8 +286,6 @@ tiduniq_dealloc(struct tid_uniqid_data *idmapping)
 	cslab_free_tiduniq(idmapping);
 }
 
-
-
 extern int sched_reflect(spdid_t spdid, int src_spd, int cnt);
 extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
 extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
@@ -359,8 +357,8 @@ rd_recover_state(struct rec_data_tor *rd)
 	/* printc("got the new client side %d and its new server id %d\n",  */
 	/*        tmp_tid, tmp->s_tid); */
 
-        /* do not track the new tid for retsplitting..  add this to
-	 * ramfs as well */
+        /* do not track the new tid for retsplitting.. (wish to avoid
+	 * this) add this to ramfs as well */
 	map_rd_delete(tmp_tid);  
 
 	if (rd->evt_wait == TOR_WAIT) {
@@ -370,6 +368,12 @@ rd_recover_state(struct rec_data_tor *rd)
 	}
 
 	/* printc("....rd->state %d......\n", rd->state); */
+
+	/* The data should be tracked for both direction, based on
+	 * component id. TODO: small change to the uniq_map and use
+	 * component id to save the data for different channel on the
+	 * same mbox. For now, just simplify this-- only one direction
+	 * in the test program. */
 	if (rd->state == STATE_TSPLIT_CLIENT) {
 		/* printc("....recover data now......\n"); */
 		int tmp_sz, tmp_cbid, tmp_tot, tmp_i;

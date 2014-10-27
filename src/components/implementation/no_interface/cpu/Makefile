@@ -2,7 +2,7 @@ C_OBJS=spin.o
 ASM_OBJS=
 COMPONENT=cpu.o
 INTERFACES=
-DEPENDENCIES=periodic_wake sched printc mem_mgr timed_blk ll_log valloc_local
+DEPENDENCIES=periodic_wake sched printc mem_mgr timed_blk evt ll_log valloc_local
 IF_LIB=
 
 include ../../Makefile.subsubdir

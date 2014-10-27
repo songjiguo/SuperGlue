@@ -22,6 +22,8 @@
 
 #include <sched.h>
 
+#include <evt.h>  // Jiguo: now have thread block through event
+
 #include <sys/param.h> 		/* MIN/MAX */
 #include <res_spec.h> /* For creating timer thread */
 /* Lets save some typing... */
@@ -42,6 +44,8 @@ struct thread_event {
 	event_time_t event_expiration;
 	unsigned short int thread_id, flags;
 	struct thread_event *next, *prev;
+
+	long evt;   // Jiguo: Now each created timed thread is associated with an event
 
 	/* if flags & TE_PERIODIC */
 	unsigned int period, missed;
@@ -217,10 +221,14 @@ static void __event_expiration(event_time_t time, struct thread_event *events)
 			insert_pevent(tmp);
 		}
 
-		if (b) sched_wakeup(spdid, tmp->thread_id);
+		/* if (b) sched_wakeup(spdid, tmp->thread_id); */
 		/* We don't have to deallocate the thread_events as
 		 * they are stack allocated on the sleeping
 		 * threads. */
+		
+		// Jiguo: wake up the thread through evt
+		if (b) evt_trigger(spdid, tmp->evt);
+
 	}
 }
 
@@ -489,10 +497,12 @@ int periodic_wake_create(spdid_t spdinv, unsigned int period)
 	unsigned short int tid = cos_get_thd_id();
 	spdid_t spdid = cos_spd_id();
 	event_time_t n, t;
+	long evt;
 
 	if (period < 1) return -1;
 
 	TAKE(spdid);
+
 	te = te_pget(tid);
 	if (NULL == te) BUG();
 	if (te->flags & TE_PERIODIC) {
@@ -506,6 +516,11 @@ int periodic_wake_create(spdid_t spdinv, unsigned int period)
 	te->event_expiration = n = ticks + period;
 	assert(n > ticks);
 
+	// Jiguo: a thread is associated with an event now
+	evt = evt_split(cos_spd_id(), 0, 0);
+	assert(evt > 0);
+	te->evt = evt;
+	
 	t = next_event_time();
 	assert(t > ticks);
 	insert_pevent(te);
@@ -583,8 +598,11 @@ int periodic_wake_wait(spdid_t spdinv)
 	te->flags |= TE_BLOCKED;
 	RELEASE(spdid);
 
-	if (-1 == sched_block(spdid, 0)) {
-		prints("fprr: sched block failed in timed_event_periodic_wait.");	}
+	// Jiguo: change to use event	
+	printc("periodic_wake_wait: thd %d calls evt_wait\n", cos_get_thd_id());
+	evt_wait(cos_spd_id(), te->evt);	
+	/* if (-1 == sched_block(spdid, 0)) { */
+	/* 	prints("fprr: sched block failed in timed_event_periodic_wait.");	} */
 
 
 	return 0;

@@ -1,1 +1,1 @@
-__Makefile_rec
+__Makefile

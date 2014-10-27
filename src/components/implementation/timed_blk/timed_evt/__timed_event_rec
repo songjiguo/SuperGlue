@@ -22,6 +22,8 @@
 #include <timed_blk.h>
 #include <periodic_wake.h>
 
+#include <evt.h>  // Jiguo: now have thread block through event
+
 #include <sched.h>
 #include "../../sched/cos_sched_sync.h"
 
@@ -31,8 +33,13 @@
 #define TAKE(spdid) 	if (sched_component_take(spdid)) return -1;
 #define RELEASE(spdid)	if (sched_component_release(spdid)) return -1;
 
-extern int sched_cs_state(spdid_t spdid);
+static int test_control = 0;
+/* #define TEST_PTE_CREATE_BEFORE  // pte create  -- still has lock */
+/* #define TEST_PTE_CREATE_AFTER   // pte create  -- does not have lock */
+/* #define TEST_PTE_WAIT_BEFORE  // pte wait  -- before evt_wait */
+/* #define TEST_PTE_WAIT_AFTER   // pte wait  -- after evt_wait */
 
+extern int sched_cs_state(spdid_t spdid);
 
 /* Monotonically increasing timer counting clicks */
 typedef unsigned long long event_time_t;
@@ -48,6 +55,8 @@ struct thread_event {
 	event_time_t event_expiration;
 	unsigned short int thread_id, flags;
 	struct thread_event *next, *prev;
+
+	long evt;   // Jiguo: Now each created timed thread is associated with an event
 
 	/* if flags & TE_PERIODIC */
 	unsigned int period, missed;
@@ -223,10 +232,13 @@ static void __event_expiration(event_time_t time, struct thread_event *events)
 			insert_pevent(tmp);
 		}
 
-		if (b) sched_wakeup(spdid, tmp->thread_id);
+		/* if (b) sched_wakeup(spdid, tmp->thread_id); */
 		/* We don't have to deallocate the thread_events as
 		 * they are stack allocated on the sleeping
 		 * threads. */
+
+		// Jiguo: wake up the thread through evt
+		if (b) evt_trigger(spdid, tmp->evt);
 	}
 }
 
@@ -271,6 +283,7 @@ int timed_event_block(spdid_t spdinv, unsigned int amnt)
 	int block_time;
 	event_time_t t;
 
+	long evt;
 
 	if (amnt == 0) return 0;
 	/* 
@@ -285,24 +298,26 @@ int timed_event_block(spdid_t spdinv, unsigned int amnt)
 	/* update: seems like +1 should be enough */
 	amnt++;
 
-	//Jiguo: a thread can already take the critical section and
-        // fail before release, so check if the critical section is
-	// being hold here
-	if (unlikely(sched_cs_state(cos_spd_id()))) {
-		sched_component_release(cos_spd_id());
-	}
+	/* //Jiguo: a thread can already take the critical section and */
+        /* // fail before release, so check if the critical section is */
+	/* // being hold here */
+	/* if (unlikely(sched_cs_state(cos_spd_id()))) { */
+	/* 	sched_component_release(cos_spd_id()); */
+	/* } */
 
 	TAKE(spdid);
 	te = te_get(cos_get_thd_id());
 	if (NULL == te) BUG();
 	assert(EMPTY_LIST(te, next, prev));
 
-
-	assert(0);
-
 	te->thread_id = cos_get_thd_id();
 	te->flags &= ~TE_TIMED_OUT;
 	te->flags |= TE_BLOCKED;
+
+	// Jiguo: a thread is associated with an event now
+	evt = evt_split(cos_spd_id(), 0, 0);
+	assert(evt > 0);
+	te->evt = evt;
 
 	ticks = sched_timestamp();
 	printc("ticks %llu, amnt %d\n", ticks, amnt);
@@ -315,19 +330,11 @@ int timed_event_block(spdid_t spdinv, unsigned int amnt)
 	RELEASE(spdid);
 
 	if (t != next_event_time()) sched_timeout(spdid, amnt);
-	if (-1 == sched_block(spdid, 0)) {
-		prints("fprr: sched block failed in timed_event_block.");
-	}
 
-	/* /\* */
-	/*   Jiguo: check if the thread is still timed_event thread  */
-	/*   1) normally while being blocked, it should be removed from cvect */
-	/*   2) when fault, this information is no longer within cvect */
-	/*  *\/ */
-	/* te = cos_vect_lookup(v, tid); */
-	/* if (NULL == te) { */
-	/* 	printc("The woken-up thread has no info in cvect.. No such INFO!!!\n"); */
-	/* 	return -ENOENT; */
+	// Jiguo: change to use event	
+	evt_wait(cos_spd_id(), te->evt);
+	/* if (-1 == sched_block(spdid, 0)) { */
+	/* 	prints("fprr: sched block failed in timed_event_block."); */
 	/* } */
 
 	/* we better have been taking off the list! */
@@ -512,7 +519,12 @@ int periodic_wake_get_period(unsigned short int tid)
 	return p;
 }
 
-int periodic_wake_create(spdid_t spdinv, unsigned int period)
+/* Jiguo: the ticks is unsigned long long, but for now I assume this
+ * can be hold by the register and return the ticks that a pte thread
+ * is created. C3 needs to remember when the pte thread is created and
+ * synchronize the thread with the original period. Assume all pte
+ * threads are created in the first 2^32-1 ticks  */
+static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned int c3_ticks)
 {
 	/* printc("thd %d calling period_wake_create\n", cos_get_thd_id()); */
 
@@ -520,6 +532,8 @@ int periodic_wake_create(spdid_t spdinv, unsigned int period)
 	unsigned short int tid = cos_get_thd_id();
 	spdid_t spdid = cos_spd_id();
 	event_time_t n, t;
+	long evt;
+	int ret;
 
 	if (period < 1) return -1;
 
@@ -533,9 +547,37 @@ int periodic_wake_create(spdid_t spdinv, unsigned int period)
 	assert(EMPTY_LIST(te, next, prev));
 	te->flags |= TE_PERIODIC;
 	te->period = period;
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_CREATE_BEFORE)
+	/* printc("in periodic_wake_create: thd %d spd %d\n",  */
+	/*        cos_get_thd_id(), spdinv);		 */
+	test_control++;
+	if (spdinv == 11 && cos_get_thd_id() == 11 && test_control == 1) {
+		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
+		       cos_get_thd_id(), spdid);
+		assert(0);
+	}
+#endif
+
+	// Jiguo: a thread is associated with an event now
+	evt = evt_split(cos_spd_id(), 0, 0);
+	assert(evt > 0);
+	te->evt = evt;
+
 	ticks = sched_timestamp();
-	te->event_expiration = n = ticks + period;
+	ret   = ticks;   // Jiguo: see above assumption. This only track once
+	if (!c3_ticks) {
+		te->event_expiration = n = ticks + period;
+		/* printc("normal event_expiration %d\n", te->event_expiration); */
+	} else {
+		/* printc("ticks info: c3_ticks %d, period %d ticks %d\n", c3_ticks, period, ticks); */
+		/* printc("(ticks - c3_ticks) mode period %d", (ticks - c3_ticks)%period); */
+		te->event_expiration = n = c3_ticks + period*((ticks - c3_ticks)/period + 1);
+		printc("rounded up event_expiration %d\n", te->event_expiration);
+	}
+
 	assert(n > ticks);
+	/* printc("ticks %llu period %d\n", ticks, period); */
 
 	t = next_event_time();
 	assert(t > ticks);
@@ -545,8 +587,30 @@ int periodic_wake_create(spdid_t spdinv, unsigned int period)
 
 	RELEASE(spdid);
 
+#if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_CREATE_AFTER)
+	test_control++;
+	/* printc("in periodic_wake_create: thd %d spd %d, test_control %d\n", */
+	/*        cos_get_thd_id(), spdinv, test_control); */
+	if (spdinv == 11 && cos_get_thd_id() == 11 && test_control == 1) {
+		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
+		       cos_get_thd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 	/* printc("leaving the periodic wake create\n"); */
-	return 0;
+	/* return 0; */
+	return ret;
+}
+
+int periodic_wake_create(spdid_t spdinv, unsigned int period)
+{
+	return __periodic_wake_create(spdinv, period, 0);
+}
+
+int c3_periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned int c3_ticks)
+{
+	return __periodic_wake_create(spdinv, period, c3_ticks);
 }
 
 int periodic_wake_remove(spdid_t spdinv, unsigned short int tid)
@@ -577,7 +641,7 @@ int periodic_wake_wait(spdid_t spdinv)
 	struct thread_event *te;
 	u16_t tid = cos_get_thd_id();
 	long long t;
-	/* printc("thd %d calling period_wake_wait\n", cos_get_thd_id()); */
+	printc("thd %d calling period_wake_wait\n", cos_get_thd_id());
 
 	TAKE(spdid);
 	te = te_pget(tid);
@@ -587,6 +651,17 @@ int periodic_wake_wait(spdid_t spdinv)
 	assert(!EMPTY_LIST(te, next, prev));
 
 	rdtscll(t);
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_WAIT_BEFORE)
+	test_control++;
+	printc("in periodic_wake_wait: thd %d spd %d, test_control %d\n",
+	       cos_get_thd_id(), spdinv, test_control);
+	if (spdinv == 11 && cos_get_thd_id() == 11 && test_control >= 2) {
+		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
+		       cos_get_thd_id(), spdid);
+		assert(0);
+	}
+#endif
 
 	if (te->missed) {	/* we're late */
 		long long diff;
@@ -616,11 +691,25 @@ int periodic_wake_wait(spdid_t spdinv)
 	te->flags |= TE_BLOCKED;
 	RELEASE(spdid);
 
-	/* printc("period wake wait calling block..\n"); */
-	if (-1 == sched_block(spdid, 0)) {
-		prints("fprr: sched block failed in timed_event_periodic_wait.");	}
+	// Jiguo: change to use event	
+	printc("periodic_wake_wait: thd %d calls evt_wait\n", cos_get_thd_id());
+	evt_wait(cos_spd_id(), te->evt);
+	/* if (-1 == sched_block(spdid, 0)) { */
+	/* 	prints("fprr: sched block failed in timed_event_periodic_wait.");	} */
 
 	/* printc("leaving the periodic wake wait\n"); */
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_WAIT_AFTER)
+	test_control++;
+	/* printc("in periodic_wake_wait: thd %d spd %d, test_control %d\n", */
+	/*        cos_get_thd_id(), spdinv, test_control); */
+	if (spdinv == 11 && cos_get_thd_id() == 11 && test_control >= 2) {
+		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
+		       cos_get_thd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 
 	return 0;
 err:
@@ -633,7 +722,7 @@ static void start_timer_thread(void)
 	spdid_t spdid = cos_spd_id();
 	unsigned int tick_freq;
 
-	printc("start timer thread %d\n", cos_get_thd_id());
+	printc("start timer thread %d (Kevinandy)\n", cos_get_thd_id());
 	sched_timeout_thd(spdid);
 	tick_freq = sched_tick_freq();
 	assert(tick_freq == 100);
@@ -643,16 +732,10 @@ static void start_timer_thread(void)
 	cyc_per_tick = sched_cyc_per_tick();
 	//	printc("cyc_per_tick = %lld\n", cyc_per_tick);
 
-
-	//Jiguo: just wake up all threads that call sched_block() from
-        //       this component (one by one), given the te timer_thread is
-        //       high priority (for FT te here)
-	sched_wakeup_spd_all(spdid);
-
 	/* When the system boots, we have no pending waits */
 	assert(EMPTY_LIST(&events, next, prev));
 	sched_block(spdid, 0);
-
+	
 	/* Wait for events, then act on expired events.  Loop. */
 	while (1) {
 		event_time_t next_wakeup;
@@ -666,8 +749,6 @@ static void start_timer_thread(void)
 			prints("fprr: scheduler lock failed!!!");
 			BUG();
 		}
-
-		/* assert(0); */
 
 		event_expiration(ticks);
 		next_wakeup = next_event_time();
@@ -696,32 +777,10 @@ static void start_timer_thread(void)
 	}
 }
 
-/* void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3) */
-/* { */
-/* 	static int first = 1; */
 
-/* 	switch (t) { */
-/* 	case COS_UPCALL_BOOTSTRAP: */
-/* 		if (first) { */
-/* 			start_timer_thread(); */
-/* 			first = 0; */
-/* 		} else { */
-/* 			printc("timed_event component received too many bootstrap threads."); */
-/* 		} */
-/* 		break; */
-/* 	default: */
-/* 		printc("wf_text: cos_upcall_fn error - type %x, arg1 %d, arg2 %d",  */
-/* 		      (unsigned int)t, (unsigned int)arg1, (unsigned int)arg2); */
-/* 		BUG(); */
-/* 		return; */
-/* 	} */
-/* 	BUG(); */
-/* 	return; */
-/* } */
-void te_init()
+void cos_init()
 {
 	union sched_param sp;
-	int thdid;
 	static int first = 1;
 
 	if (first) {
@@ -737,36 +796,9 @@ void te_init()
 		sp.c.type = SCHEDP_PRIO;
 		sp.c.value = 3;
 
-		/* printc("first is 1: create the thread by %d\n", cos_get_thd_id()); */
-		if (sched_create_thd(cos_spd_id(), sp.v, 0, 0) == 0) BUG();
-
+		if (cos_thd_create(start_timer_thread, NULL, sp.v, 0, 0) <= 0) BUG();
 	} else {
-		/* printc("timed_event_timer_thread %d\n", cos_get_thd_id()); */
-		start_timer_thread();
+		printc("timed_event component received too many bootstrap threads.");
 	}
-}
-
-
-void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
-{
-	switch (t) {
-	case COS_UPCALL_BOOTSTRAP:
-		//Jiguo: should destroy the thread from where it is created
-		//Jiguo: te, or pfg, is not trusted by scheduler when make upcall
-		if ((unsigned int)arg3 != 1) te_init(); 
-		else {
-			//Check if the dying thread is still holding the lock
-			//(scheduler lock), if so, release it before fp_kill, check the lock owner??
-			if (unlikely(sched_cs_state(cos_spd_id()))) {
-				sched_component_release(cos_spd_id());
-			}
-		}
-		break;
-	default:
-		BUG(); 
-		return;
-	}
-
-	return;
 }
 

@@ -231,7 +231,7 @@ def set_interface(name, par):
         else:
             os.system("ln -s " + p_nor + " " + p_dst)
 
-        if (name == 'mbtorrent'):
+        if (name == 'mbtorrent') or (name == 'periodic_wake'):
             set_reflection_interface('evt', ret)
             
         return ret
@@ -328,7 +328,6 @@ def main():
             print service_names[i]
             set_link(service_names[i], pe_component_path, pe_c, pe_nor_c, pe_rec_c, 0)
             print
-
         # component LOCK
         if (service_names[i] == 'lock'):
             print service_names[i]
@@ -340,7 +339,7 @@ def main():
             set_link(service_names[i], evt_component_path, evt_c, evt_nor_c, evt_rec_c, 0)
             print
             
-        # # component MM
+        # # component CBUF
         if (service_names[i] == 'cbuf_c'):
             print service_names[i]
             ret = set_link(service_names[i], cbuf_component_path, cbuf_c, cbuf_nor_c, cbuf_rec_c, 0)

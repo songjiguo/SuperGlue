@@ -1,4 +1,4 @@
-#include <torrent.h>
+#include <mbtorrent.h>
 
 struct __sg_tsplit_data {
 	td_t tid;

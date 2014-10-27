@@ -6,7 +6,9 @@
 
   Note: this interface should be set by set_symbol_link together with
   other interface in recovery mode.
-*/
+
+  Note: for now, just assume all threads are tracked. TODO: per
+  component track */
 
 #include <cos_component.h>
 #include <evt.h>

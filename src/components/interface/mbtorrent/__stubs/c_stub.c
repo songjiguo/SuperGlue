@@ -1,4 +1,4 @@
-#include <torrent.h>
+#include <mbtorrent.h>
 #include <cstub.h>
 #include <print.h>
 

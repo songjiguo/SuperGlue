@@ -23,8 +23,18 @@ cos_asm_server_stub(sched_timestamp)
 cos_asm_server_stub(sched_timer_stopclock)
 cos_asm_server_stub(sched_priority)
 	
-cos_asm_server_stub_spdid(sched_component_take)
-cos_asm_server_stub_spdid(sched_component_release)
+//cos_asm_server_stub_spdid(sched_component_take)
+//cos_asm_server_stub_spdid(sched_component_release)
+
+/* with _spdid will enforce the same component to call these APIs,
+   however, for reflection in c^3, sometimes we need do the reflection
+   from the client component which is dofferent from the component
+   that makes these calls earlier. So change this to non _spdid version
+	-- Jiguo
+*/
+cos_asm_server_stub(sched_component_take)
+cos_asm_server_stub(sched_component_release)
+
 
 cos_asm_server_fn_stub_spdid(sched_block, __sg_sched_block)	
 cos_asm_server_fn_stub_spdid(sched_reflect, __sg_sched_reflect)

@@ -18,10 +18,10 @@ static int mid = 12;
 static int hig = 11;
 
 //#define EXAMINE_LOCK
-#define EXAMINE_EVT
+//#define EXAMINE_EVT
+#define EXAMINE_TE
 
 #ifdef EXAMINE_LOCK
-
 #include <cos_synchronization.h>
 cos_lock_t t_lock;
 #define LOCK_TAKE()    lock_take(&t_lock)
@@ -127,6 +127,48 @@ static void try_mp(void)
 	while(test_num2++ < 10) {
 		ec3_ser3_pass(evt1);  // go to evt_trigger
 	}
+	return;
+}
+
+vaddr_t ec3_ser1_test(void)
+{
+	if (cos_get_thd_id() == hig) {
+		printc("\n<< Test start in spd %d ... >>>\n\n", cos_get_thd_id());
+		try_hp();
+		printc("\n<< ... Test done in spd %d >>>\n\n", cos_get_thd_id());
+	}
+
+	if (cos_get_thd_id() == mid) try_mp();
+
+	while(1);  // quick fix the thread termination issue ???
+	return 0;
+}
+
+#endif
+
+
+#ifdef EXAMINE_TE
+
+static void try_hp(void)
+{
+	periodic_wake_create(cos_spd_id(), 50);
+	while(1) {
+		printc("period blocked (50 ticks) thd %d\n", cos_get_thd_id());
+		periodic_wake_wait(cos_spd_id());
+	}
+
+	return;
+}
+
+static void try_mp(void)
+{
+	timed_event_block(cos_spd_id(), 2);
+	periodic_wake_create(cos_spd_id(), 35);
+	while(1) {
+		printc("period blocked (35 ticks) thd %d\n", cos_get_thd_id());
+		periodic_wake_wait(cos_spd_id());
+	}
+
 	return;
 }
 

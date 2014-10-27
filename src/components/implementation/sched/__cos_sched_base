@@ -1118,7 +1118,7 @@ int sched_component_release(spdid_t spdid)
 {
 	struct sched_thd *curr;
 
-	//printc("sched release %d\n", spdid);
+	printc("sched component release %d\n", spdid);
 
 	report_event(COMP_RELEASE);
 	cos_sched_lock_take();
