@@ -39,6 +39,9 @@ static int test_control = 0;
 /* #define TEST_PTE_WAIT_BEFORE  // pte wait  -- before evt_wait */
 /* #define TEST_PTE_WAIT_AFTER   // pte wait  -- after evt_wait */
 
+/* #define TEST_PTE_TIMER_THD_BEFORE  // timer thread might fail */
+/* #define TEST_PTE_TIMER_THD_AFTER   // timer thread might fail */
+
 extern int sched_cs_state(spdid_t spdid);
 
 /* Monotonically increasing timer counting clicks */
@@ -717,8 +720,18 @@ err:
 	return -1;
 }
 
+
+static int first = 1;  // for creating timer thread. Only need one
+
 static void start_timer_thread(void)
 {
+	// Jiguo: use alignment here. Also set first to be 0 to ensure only one timer thd
+
+	// align the following instructions
+	// change this to __atrribute__((aligned(512))) later
+	/* __asm__ volatile(".balign 512"); */
+	first = 0;
+	
 	spdid_t spdid = cos_spd_id();
 	unsigned int tick_freq;
 
@@ -734,8 +747,17 @@ static void start_timer_thread(void)
 
 	/* When the system boots, we have no pending waits */
 	assert(EMPTY_LIST(&events, next, prev));
+	printc("start timer thread %d (Kevinandy) is blocking...\n", cos_get_thd_id());
 	sched_block(spdid, 0);
-	
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_TIMER_THD_BEFORE)
+	test_control++;
+	if (test_control == 1) {
+		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
+		       cos_get_thd_id(), spdid);
+		assert(0);
+	}
+#endif
 	/* Wait for events, then act on expired events.  Loop. */
 	while (1) {
 		event_time_t next_wakeup;
@@ -752,6 +774,7 @@ static void start_timer_thread(void)
 
 		event_expiration(ticks);
 		next_wakeup = next_event_time();
+
 		/* Are there no pending events??? */
 		if (TIMER_NO_EVENTS == next_wakeup) {
 			if (sched_component_release(spdid)) {
@@ -773,15 +796,24 @@ static void start_timer_thread(void)
 				BUG();
 			}
 			sched_timeout(spdid, wakeup);
+			
+#if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_TIMER_THD_AFTER)
+			test_control++;
+			if (test_control == 5) {
+				printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
+				       cos_get_thd_id(), spdid);
+				assert(0);
+			}
+#endif
 		}
 	}
 }
 
+static void rd_reflection();
 
 void cos_init()
 {
 	union sched_param sp;
-	static int first = 1;
 
 	if (first) {
 		first = 0;
@@ -797,8 +829,49 @@ void cos_init()
 		sp.c.value = 3;
 
 		if (cos_thd_create(start_timer_thread, NULL, sp.v, 0, 0) <= 0) BUG();
+		printc("after timed_event component creates a new timer thread.\n");
+
+		if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
+			printc("need do reflection now!!!!\n");
+			rd_reflection();
+		}
 	} else {
 		printc("timed_event component received too many bootstrap threads.");
 	}
 }
+	
 
+extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
+extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
+
+static void
+rd_reflection()
+{
+	int count_obj = 0; // reflected objects
+	int dest_spd = cos_spd_id();
+	
+	// remove the mapped page for mailbox spd
+	vaddr_t addr;
+	count_obj = mman_reflect(cos_spd_id(), dest_spd, 1);
+	printc("pte relfects on mmgr: %d objs (thd %d)\n", count_obj, cos_get_thd_id());
+	while (count_obj--) {
+		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
+		/* printc("evt mman_release: %p addr\n", (void *)addr); */
+		mman_release_page(cos_spd_id(), addr, dest_spd);
+	}
+
+	printc("pte reflection on evt_trigger_all (thd %d)\n\n", cos_get_thd_id());
+	evt_trigger_all(cos_spd_id());  // for now, only pte and mailbox use this
+		
+	/* The rd_reflection should be executed by the current running
+	 * thread who should hold the dest_spd lock if any. So we
+	 * release here. This is possible due to: 1) pte/timed_evt
+	 * uses sched_component_take, not lock component 2)
+	 * pte/timed_evt component has only one lock. */
+	/* printc("pte reflection release the spd lock (thd %d, dest %d)\n\n", */
+	/*        cos_get_thd_id(), dest_spd); */
+	/* sched_component_release(cos_spd_id());	 */
+
+	printc("\n\n reflection done!!!\n\n");
+	return;
+}

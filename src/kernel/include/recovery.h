@@ -350,12 +350,12 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 		break;
 	case COS_CAP_REFLECT_UPDATE: 		/* Update reflect counter for this client */
 		printk("check if reflection counter\n");
-		if (cap_entry->destination->reflection.cnt 
-		    == cap_entry->destination->fault.cnt) {
+		if (d_spd->fault.cnt == 0) return 0; // no fault ever
+		if (d_spd->reflection.cnt 
+		    == d_spd->fault.cnt) {
 			printk("(1)d_spd->reflection.cnt %d d_spd->fault.cnt %d\n",
-			       cap_entry->destination->reflection.cnt ,
-			       cap_entry->destination->fault.cnt);
-			cap_entry->destination->reflection.cnt++;
+			       d_spd->reflection.cnt, d_spd->fault.cnt);
+			d_spd->reflection.cnt++; // to avoid multiple calls
 			ret = 1;
 		}
 		break;

@@ -327,7 +327,8 @@ pop(struct pt_regs **regs_restore)
 #endif
 	if (unlikely(fault_ret = pop_fault_detect(inv_frame, curr_frame))){
 		/* KEVIN fill *regs_restore */
-		printk("%d: ->%d\n", thd_get_id(curr), spd_get_index(curr_frame->spd));
+		printk("thd %d: -> spd %d\n", 
+		       thd_get_id(curr), spd_get_index(curr_frame->spd));
 		printk("pop: detected fault\n");
 
 		pop_fault_update(inv_frame, curr_frame);
@@ -682,7 +683,6 @@ cos_syscall_create_thread(int spd_id, int dest_spd_id, int a, int b)
 
 	thd->flags |= THD_STATE_CYC_CNT;
 	initialize_sched_info(thd, sched_spd);
-
 
 	/* Jiguo: update fault counter in the case that a thread is
 	 * re-created in the faulty component. We want to avoid the

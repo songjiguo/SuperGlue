@@ -116,59 +116,6 @@ rd_cons(struct rec_data_pte *rd, unsigned int period, int state, unsigned int cr
 	return;
 }
 
-static int
-cap_to_dest(int cap)
-{
-	int dest = 0;
-	assert(cap > MAX_NUM_SPDS);
-	if ((dest = cos_cap_cntl(COS_CAP_GET_SER_SPD, 0, 0, cap)) <= 0) assert(0);
-	return dest;
-}
-
-extern int sched_reflect(spdid_t spdid, int src_spd, int cnt);
-extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
-extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
-extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
-extern int evt_trigger_all(spdid_t spdid);
-extern int lock_trigger_all(spdid_t spdid, int dest);  
-
-static int
-rd_reflection(int cap)
-{
-	assert(cap);
-
-	PTE_TAKE(cos_spd_id()); // prevent to switch to other threads before this is done
-
-	int count_obj = 0; // reflected objects
-	int dest_spd = cap_to_dest(cap);
-	
-	// remove the mapped page for mailbox spd
-	vaddr_t addr;
-	count_obj = mman_reflect(cos_spd_id(), dest_spd, 1);
-	printc("pte relfects on mmgr: %d objs (thd %d)\n", count_obj, cos_get_thd_id());
-	while (count_obj--) {
-		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
-		/* printc("evt mman_release: %p addr\n", (void *)addr); */
-		mman_release_page(cos_spd_id(), addr, dest_spd);
-	}
-
-	printc("pte reflection on evt_trigger_all (thd %d)\n\n", cos_get_thd_id());
-	evt_trigger_all(cos_spd_id());  // for now, only pte and mailbox use this
-
-	/* The rd_reflection should be executed by the current running
-	 * thread who should hold the dest_spd lock if any. So we
-	 * release here. This is possible due to: 1) pte/timed_evt
-	 * uses sched_component_take, not lock component 2)
-	 * pte/timed_evt component has only one lock. */
-	printc("pte reflection release the spd lock (thd %d, dest %d)\n\n",
-	       cos_get_thd_id(), dest_spd);
-	sched_component_release(dest_spd);
-
-	PTE_RELEASE(cos_spd_id());
-	printc("pte reflection done (thd %d)\n\n", cos_get_thd_id());
-	return 0;
-}
-
 static struct rec_data_pte *
 rd_update(unsigned int id, int state)
 {
@@ -203,6 +150,23 @@ done:
 	return rd;
 }
 
+static int
+cap_to_dest(int cap)
+{
+	int dest = 0;
+	assert(cap > MAX_NUM_SPDS);
+	if ((dest = cos_cap_cntl(COS_CAP_GET_SER_SPD, 0, 0, cap)) <= 0) assert(0);
+	return dest;
+}
+
+/* extern int sched_reflect(spdid_t spdid, int src_spd, int cnt); */
+/* extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id); */
+/* extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt); */
+/* extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags);  */
+/* extern int evt_trigger_all(spdid_t spdid); */
+/* extern int lock_trigger_all(spdid_t spdid, int dest);   */
+extern int sched_component_release(spdid_t spdid);
+
 /**********************************/
 /*          API functions         */
 /**********************************/
@@ -219,6 +183,7 @@ redo:
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, period, ticks);
 	if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
+		sched_component_release(cap_to_dest(uc->cap_no));// release the lock
 		goto redo;
 	}
 
@@ -227,7 +192,6 @@ redo:
 	
 	return ret;
 }
-
 
 CSTUB_FN(int, periodic_wake_create)(struct usr_inv_cap *uc,
 				    spdid_t spdid, unsigned int period)
@@ -242,6 +206,7 @@ redo:
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, period);
 	if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
+		sched_component_release(cap_to_dest(uc->cap_no));// release the lock
 		goto redo;
 	}
 
@@ -278,6 +243,7 @@ redo:
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
+		sched_component_release(cap_to_dest(uc->cap_no));// release the lock
 		goto redo;
 	}
 

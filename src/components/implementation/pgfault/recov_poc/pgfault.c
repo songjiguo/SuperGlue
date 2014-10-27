@@ -24,13 +24,18 @@ int fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip
 
 	int tid = cos_get_thd_id();
 
-	/* assert(0); */
-
-	/* if (spdid != cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) { */
+	if (spdid != cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) {
 	        assert(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0));
 		assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));
 		assert(!cos_thd_cntl(COS_THD_INVFRM_SET_IP, tid, 1, r_ip-8));
-	/* } */
+	} else {
+		printc("set thd %d 's eip (find next)\n", tid);
+		/* a temporary solution for now, when the thread
+		 * faults in its home component. Block the current thd
+		 * and run the regenerated thread in the same
+		 * spd. TODO: kill this thread instead */
+		sched_block(cos_spd_id(), 0);
+	}
 
 	return 0;
 }
@@ -51,11 +56,13 @@ int fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *i
 		assert(0);
 	}
 
+	printc("in the fault_page_fault_handler 1\n");
 	/* printc("Thread %d faults in spd %d @ %p\n", tid, spdid, fault_addr); */
 	if (spdid != cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) {
 		/* remove from the invocation stack the faulting component! */
 		assert(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0));
 
+		printc("in the fault_page_fault_handler 2\n");
 		/* Manipulate the return address of the component that called
 		 * the faulting component... */
 		assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));
@@ -65,7 +72,11 @@ int fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *i
 		
 		/* increase fault counter in component data structure */
 		assert(!cos_fault_cntl(COS_SPD_FAULT_TRIGGER, spdid, 0));
+	} else {  // home component
+                /* increase fault counter in component data structure */
+		assert(!cos_fault_cntl(COS_SPD_FAULT_TRIGGER, spdid, 0));
 	}
+	
 	/* 
 	 * Look at the booter: when recover is happening, the sstub is
 	 * set to 0x1, thus we should just wait till recovery is done.

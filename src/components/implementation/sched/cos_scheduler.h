@@ -476,8 +476,8 @@ static inline int sched_release_crit_sect(spdid_t spdid, struct sched_thd *curr)
 	assert(!sched_thd_blocked(curr));
 
 	/* This ostensibly should be the case */
-	/* printc("cs->holding_thd %d\n", cs->holding_thd->id); */
-	/* printc("curr %d\n", curr->id); */
+	printc("cs->holding_thd %d\n", cs->holding_thd->id);
+	printc("curr %d\n", curr->id);
 	assert(cs->holding_thd == curr);
 	assert(curr->contended_component == 0);
 	printc("cs->holding_thd is unset to NULL (spd %d)\n", spdid);
