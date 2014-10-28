@@ -349,7 +349,6 @@ int lock_stats_len(spdid_t spdid)
 unsigned long *lock_stats(spdid_t spdid, unsigned long *stats) { return NULL; }
 int lock_stats_len(spdid_t spdid) { return 0; }
 
-unsigned long __lock_component_alloc(spdid_t spd) { return 0;}
 int lock_trigger_all(spdid_t spdid, int dest) {return 0;}
 
 #endif

@@ -17,9 +17,9 @@ static int low = 13;
 static int mid = 12;
 static int hig = 11;
 
-//#define EXAMINE_LOCK
+#define EXAMINE_LOCK
 //#define EXAMINE_EVT
-#define EXAMINE_TE
+//#define EXAMINE_TE
 
 #ifdef EXAMINE_LOCK
 #include <cos_synchronization.h>
@@ -32,47 +32,56 @@ volatile int spin = 1;
 
 static void try_hp(void)
 {
-	printc("thread h : %d is doing something\n", cos_get_thd_id());
-	printc("thread h : %d is trying to take another lock...\n", cos_get_thd_id());
-	ec3_ser2_test();
+	while(1) {
+		printc("thread h : %d is doing something\n", cos_get_thd_id());
+		printc("thread h : %d is trying to take another lock...\n", cos_get_thd_id());
+		ec3_ser2_test();
+		
+		spin = 0;
+		printc("thread h : %d try to take lock\n", cos_get_thd_id());
+		LOCK_TAKE();
+		printc("thread h : %d has the lock\n", cos_get_thd_id());
+		LOCK_RELEASE();
+		printc("thread h : %d released lock\n", cos_get_thd_id());
 
-	spin = 0;
-	printc("thread h : %d try to take lock\n", cos_get_thd_id());
-	LOCK_TAKE();
-	printc("thread h : %d has the lock\n", cos_get_thd_id());
-	LOCK_RELEASE();
-	printc("thread h : %d released lock\n", cos_get_thd_id());
-
-	return;
+		spin = 1;
+		timed_event_block(cos_spd_id(), 1);
+	}
+		return;
 }
 
 static void try_mp(void)
 {
-	printc("thread m : %d try to take lock\n", cos_get_thd_id());
-	LOCK_TAKE();
-	printc("thread m : %d has the lock\n", cos_get_thd_id());
-	LOCK_RELEASE();
-	printc("thread m : %d released lock\n", cos_get_thd_id());
-
-	return;
+	while(1) {
+		printc("thread m : %d try to take lock\n", cos_get_thd_id());
+		LOCK_TAKE();
+		printc("thread m : %d has the lock\n", cos_get_thd_id());
+		LOCK_RELEASE();
+		printc("thread m : %d released lock\n", cos_get_thd_id());
+		
+		timed_event_block(cos_spd_id(), 1);
+	}
+		return;
 }
-
+	
 
 static void try_lp(void)
 {
-	printc("<<< thread l : %d is doing something \n", cos_get_thd_id());
-	printc("thread l : %d try to take lock\n", cos_get_thd_id());
-	LOCK_TAKE();
-	printc("thread l : %d has the lock\n", cos_get_thd_id());
-	
-	printc("thread l : %d is trying to take another lock...\n", cos_get_thd_id());
-	ec3_ser2_test();
-
-	printc("thread l : %d spinning\n", cos_get_thd_id());
-	while (spin);
-	printc("thread l : %d is doing something\n", cos_get_thd_id());
-	printc("thread l : %d try to release lock\n", cos_get_thd_id());
-	LOCK_RELEASE();
+	while(1) {
+		printc("<<< thread l : %d is doing something \n", cos_get_thd_id());
+		printc("thread l : %d try to take lock\n", cos_get_thd_id());
+		LOCK_TAKE();
+		printc("thread l : %d has the lock\n", cos_get_thd_id());
+		
+		printc("thread l : %d is trying to take another lock...\n", cos_get_thd_id());
+		ec3_ser2_test();
+		
+		printc("thread l : %d spinning\n", cos_get_thd_id());
+		while (spin);
+		printc("thread l : %d is doing something\n", cos_get_thd_id());
+		printc("thread l : %d try to release lock\n", cos_get_thd_id());
+		LOCK_RELEASE();
+	}
 
 	return;
 }

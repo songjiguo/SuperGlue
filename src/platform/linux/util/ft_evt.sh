@@ -14,9 +14,9 @@ l.o-fprr.o|mm.o|print.o|pfr.o;\
 pfr.o-fprr.o|mm.o|print.o|boot.o;\
 evtns.o-fprr.o|print.o|mm.o|l.o|va.o;\
 e.o-fprr.o|print.o|mm.o|l.o|va.o|pfr.o|evtns.o;\
-te.o-print.o|fprr.o|mm.o|va.o;\
+te.o-print.o|fprr.o|mm.o|va.o|e.o;\
 \
-ec3cli1.o-print.o|va.o|fprr.o|l.o|mm.o|ec3ser1.o|ec3ser2.o|te.o;\
+ec3cli1.o-print.o|va.o|fprr.o|l.o|mm.o|ec3ser1.o|ec3ser2.o|te.o|e.o;\
 ec3ser1.o-print.o|l.o|va.o|fprr.o|mm.o|te.o|e.o|evtns.o|ec3ser2.o|ec3ser3.o;\
 ec3ser2.o-print.o|l.o|va.o|fprr.o|mm.o|te.o|e.o|evtns.o;\
 ec3ser3.o-print.o|l.o|va.o|fprr.o|mm.o|te.o|e.o|evtns.o\

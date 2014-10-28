@@ -48,7 +48,7 @@
 /* #define TEST_EVT_CREATE */
 /* #define TEST_EVT_TRIGGER_BEFORE */
 /* #define TEST_EVT_TRIGGER_AFTER */
-#define TEST_EVT_WAIT_BEFORE
+/* #define TEST_EVT_WAIT_BEFORE */
 /* #define TEST_EVT_WAIT_AFTER */
 /* #define TEST_EVT_FREE */
 
@@ -572,6 +572,8 @@ err:
 	return -1;
 }
 
+static void rd_reflection();
+
 void cos_init(void *arg)
 {
 	lock_static_init(&evt_lock);
@@ -582,6 +584,15 @@ void cos_init(void *arg)
 	lock_release(&evt_lock);
 
 	INIT_LIST(&grps, next, prev);
+
+	// Jiguo: rdreflection
+	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
+		printc("\n\nneed do reflection now!!!!\n");
+		rd_reflection();
+		printc("\nreflection done!!!\n\n");
+	}
+
+
 	/* ns_invalidate();   // removed all not received by client ids in name server */
 }
 
@@ -614,3 +625,42 @@ int evt_stats_len(spdid_t spdid) { return 0; }
 #endif
 
 long evt_split(spdid_t spdid, long parent, int group) { return -1; }
+
+extern int sched_reflect(spdid_t spdid, int src_spd, int cnt);
+extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
+extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
+extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
+extern int lock_trigger_all(spdid_t spdid, int dest);  
+
+static void
+rd_reflection()
+{
+	int count_obj = 0; // reflected objects
+	int dest_spd = cos_spd_id();
+	
+	// remove the mapped page for evt spd
+	vaddr_t addr;
+	count_obj = mman_reflect(cos_spd_id(), dest_spd, 1);
+	/* printc("evt relfects on mmgr: %d objs\n", count_obj); */
+	while (count_obj--) {
+		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
+		/* printc("evt mman_release: %p addr\n", (void *)addr); */
+		mman_release_page(cos_spd_id(), addr, dest_spd);
+	}
+
+	// to reflect all threads blocked from evt component
+	int wake_thd;
+	count_obj = sched_reflect(cos_spd_id(), dest_spd, 1);
+	/* printc("evt relfects on sched: %d objs\n", count_obj); */
+	while (count_obj--) {
+		wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0);
+		/* printc("wake_thd %d\n", wake_thd); */
+		/* evt_trigger(cos_spd_id(), evt_id); */  // pointless to call evt mgr
+		sched_wakeup(cos_spd_id(), wake_thd);
+	}
+
+        //TODO: reflection on lock manager as well
+	lock_trigger_all(cos_spd_id(), cos_spd_id());
+
+	return;
+}

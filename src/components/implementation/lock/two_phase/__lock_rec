@@ -24,10 +24,15 @@
 
 #include <sched.h>
 
+
+static int test_control = 1;
+
 /* #define TEST_LOCK_ALLOC */
 /* #define TEST_LOCK_PRETAKE */
-/* #define TEST_LOCK_TAKE */
-/* #define TEST_LOCK_RELEASE */
+/* #define TEST_LOCK_TAKE_BEFORE */
+/* #define TEST_LOCK_TAKE_AFTER */
+/* #define TEST_LOCK_RELEASE_BEFORE */
+/* #define TEST_LOCK_RELEASE_AFTER */
 
 //#define ACT_LOG
 #ifdef ACT_LOG
@@ -213,15 +218,18 @@ int lock_component_pretake(spdid_t spd, unsigned long lock_id, unsigned short in
  	spdid_t spdid = cos_spd_id();
 	int ret = 0;
 
+	ACT_RECORD(ACT_PRELOCK, spd, lock_id, cos_get_thd_id(), thd);
+	TAKE(spdid);
+
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_PRETAKE)
-	if (spd == 11 && cos_get_thd_id() == 11) {
-		printc("trigger fault in lock pre_take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
-		assert(0);
+	if (spd == 10 && cos_get_thd_id() == 11) {
+		if (test_control++ == 2) {
+			printc("trigger fault in lock pre_take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
+			assert(0);
+		}
 	}
 #endif
 
-	ACT_RECORD(ACT_PRELOCK, spd, lock_id, cos_get_thd_id(), thd);
-	TAKE(spdid);
 //	lock_print_all();
 	ml = lock_find(lock_id, spd);
 	if (NULL == ml) {
@@ -249,15 +257,19 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	struct blocked_thds blocked_desc = {.thd_id = curr};
 	int ret = -1;
 
-#if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_TAKE)	
-	if (spd == 11 && cos_get_thd_id() == 11) {
-		printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
-		assert(0);
-	}
-#endif
-	
 	ACT_RECORD(ACT_LOCK, spd, lock_id, cos_get_thd_id(), thd_id);
 	TAKE(spdid);
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_TAKE_BEFORE)	
+	/* printc("test_control %d\n", test_control); */
+	/* printc("spd %d thd %d\n", spd, cos_get_thd_id()); */
+	if (spd == 10 && cos_get_thd_id() == 11) {
+		if (test_control++ == 2) {
+			printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
+			assert(0);
+		}
+	}
+#endif
 
 	ml = lock_find(lock_id, spd);
 	/* tried to access a lock not yet created */
@@ -292,6 +304,15 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 		if (-1 == sched_block(spdid, 0)) assert(0);
 	}
 
+#if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_TAKE_AFTER)
+	if (spd == 10 && cos_get_thd_id() == 11) {
+		if (test_control++ == 2) {
+			printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
+			assert(0);
+		}
+	}
+#endif
+
 	if (!EMPTY_LIST(&blocked_desc, next, prev)) BUG();
 	/* 
 	 * OK, this seems ridiculous but here is the rational: Assume
@@ -322,20 +343,23 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 	struct blocked_thds *sent, *bt;
 	spdid_t spdid = cos_spd_id();
 
-#if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_RELEASE)
-	if (spd == 11 && cos_get_thd_id() == 13) {
-		printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
-		       cos_get_thd_id(), cos_spd_id(), spd);
-		assert(0);
-	}
-#endif
-
 	ACT_RECORD(ACT_UNLOCK, spd, lock_id, cos_get_thd_id(), 0);
 	TAKE(spdid);
 
 	generation++;
 	ml = lock_find(lock_id, spd);
 	if (!ml) goto error;
+
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_RELEASE_BEFORE)
+	if (spd == 10 && cos_get_thd_id() == 13) {
+		if (test_control++ == 2) {
+			printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
+			       cos_get_thd_id(), cos_spd_id(), spd);
+			assert(0);
+		}
+	}
+#endif
 
 	/* Apparently, lock_take calls haven't been made. */
 	if (EMPTY_LIST(&ml->b_thds, next, prev)) {
@@ -382,6 +406,16 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 		/* printc("CPU %ld: %d waking up %d for lock %d\n", cos_cpuid(), cos_get_thd_id(), tid, lock_id); */
 		sched_wakeup(spdid, tid);
 
+#if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_RELEASE_AFTER)
+	if (spd == 10 && cos_get_thd_id() == 13) {
+		if (test_control++ == 2) {
+			printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
+			       cos_get_thd_id(), cos_spd_id(), spd);
+			assert(0);
+		}
+	}
+#endif
+
 		if (bt == next) break;
 		bt = next;
 	}
@@ -397,16 +431,16 @@ unsigned long lock_component_alloc(spdid_t spd)
 	struct meta_lock *l;
 	spdid_t spdid = cos_spd_id();
 
+	TAKE(spdid);
+	l = lock_alloc(spd);
+
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_ALLOC)
-	if (spd == 11) {
+	if (spd == 10) {
 		printc("trigger fault in lock alloc: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}
 #endif
 
-
-	TAKE(spdid);
-	l = lock_alloc(spd);
 	RELEASE(spdid);
 	
 	if (!l) return 0;
@@ -453,9 +487,51 @@ int lock_stats_len(spdid_t spdid) { return 0; }
 
 #endif
 
-unsigned long __lock_component_alloc(spdid_t spd) { return 0;}
+static void rd_reflection();
 
 void cos_init(void *arg)
 {
 	cos_vect_init_static(&bthds);
+
+	// Jiguo: rdreflection
+	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
+		printc("\n\nneed do reflection now!!!!\n");
+		rd_reflection();
+		printc("\nreflection done!!!\n\n");
+	}
+}
+
+extern int sched_reflect(spdid_t spdid, int src_spd, int cnt);
+extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
+extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
+extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
+
+static void
+rd_reflection()
+{
+	int count_obj = 0; // reflected objects
+	int dest_spd = cos_spd_id();
+	
+	// remove the mapped page for lock spd
+	vaddr_t addr;
+	count_obj = mman_reflect(cos_spd_id(), dest_spd, 1);
+	printc("lock relfects on mmgr: %d objs\n", count_obj);
+	while (count_obj--) {
+		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
+		printc("lock mman_release: %p addr\n", (void *)addr);
+		mman_release_page(cos_spd_id(), addr, dest_spd);
+	}
+
+	// to reflect all threads blocked from lock component
+	int wake_thd;
+	count_obj = sched_reflect(cos_spd_id(), dest_spd, 1);
+	printc("lock relfects on sched: %d objs\n", count_obj);
+	while (count_obj--) {
+		wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0);
+		printc("wake_thd %d\n", wake_thd);
+		sched_wakeup(cos_spd_id(), wake_thd);
+	}
+	printc("lock reflection done (thd %d)\n\n", cos_get_thd_id());
+
+	return;
 }

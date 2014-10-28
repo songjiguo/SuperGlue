@@ -25,6 +25,9 @@ int sched_create_net_acap(spdid_t spdid, int acap_id, unsigned short int port);
 int sched_component_take(spdid_t spdid);
 int sched_component_release(spdid_t spdid);
 
+/* to reflect the owner of a critical section -- Jiguo */
+int sched_reflection_component_owner(spdid_t spdid);
+
 int sched_reflect(spdid_t spdid, int src_spd, int cnt);
 
 #include "cos_thd_creation.h"

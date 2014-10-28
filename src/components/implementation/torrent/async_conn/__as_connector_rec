@@ -315,27 +315,35 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	}
 #endif
 	LOCK();
+	printc("1\n");
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);
+	printc("2\n");
 	nt = tor_alloc(NULL, tflags);
 	if (!nt) ERR_THROW(-ENOMEM, done);
 	nt->evtid = evtid;
 	fsc = fsobj_path2obj(param, len, t->data, &parent, &subpath);
+	printc("3\n");
 	if (!fsc) {
+		printc("4\n");
 		if (!(tflags & TOR_NONPERSIST)) ERR_THROW(-EINVAL, free);
+		printc("4.5\n");
 		fsc = mbox_create_addr(spdid, nt, parent, subpath, tflags, (int*)&ret);
 		if (!fsc) goto free; /* ret set above... */
+		printc("5\n");
 		nt->data = fsc;
 		nt->flags = tflags & TOR_SPLIT;
 	} else {
 		struct as_conn_root *acr = (struct as_conn_root*)fsc->data;
 		assert(acr);
+		printc("6\n");
 	        if ((~fsc->flags) & tflags) ERR_THROW(-EACCES, free);
 		/* Case 2: a client attempt to connect to a server*/
 	        if (len>0)      ret = (td_t)mbox_create_client(nt, acr);
 		/* Case 3: a server create a connection to a client*/
 	        else            ret = (td_t)mbox_create_server(nt, acr); 
 	        if (ret < 0) goto free;
+		printc("7\n");
 	        nt->flags = tflags & TOR_RW;
 	}
 	ret = nt->td;
@@ -633,6 +641,8 @@ done:
 	return ret;
 }
 
+static void rd_reflection();
+
 int cos_init(void)
 {
 	lock_static_init(&fs_lock);
@@ -643,8 +653,6 @@ int cos_init(void)
 	assert(root_torrent.data);
 	printc("root_torrent id %d (by thd %d)\n", root_torrent.td, cos_get_thd_id());
 	
-	/* print_tormap_cvect(); */
-
 	struct torrent *t;
 	t = tor_lookup(root_torrent.td);
 	assert(t);
@@ -652,8 +660,48 @@ int cos_init(void)
 
 	root.flags = TOR_READ | TOR_SPLIT;
 
+	// Jiguo: rdreflection
+	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
+		printc("\n\nneed do reflection now!!!!\n");
+		rd_reflection();
+		printc("\nreflection done!!!\n\n");
+	}
+	
 	LOCK();
 	UNLOCK();
 
 	return 0;
+}
+
+
+/* extern int sched_reflect(spdid_t spdid, int src_spd, int cnt); */
+/* extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id); */
+/* extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt); */
+/* extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags);  */
+/* extern int evt_trigger_all(spdid_t spdid); */
+/* extern int lock_trigger_all(spdid_t spdid, int dest);   */
+extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
+extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
+extern int lock_trigger_all(spdid_t spdid, int dest);  
+
+static void
+rd_reflection()
+{
+	int count_obj = 0; // reflected objects
+	int dest_spd = cos_spd_id();
+	
+	/* // remove the mapped page for mailbox spd */
+	/* vaddr_t addr; */
+	/* count_obj = mman_reflect(cos_spd_id(), dest_spd, 1); */
+	/* printc("pte relfects on mmgr: %d objs (thd %d)\n", count_obj, cos_get_thd_id()); */
+	/* while (count_obj--) { */
+	/* 	addr = mman_reflect(cos_spd_id(), dest_spd, 0); */
+	/* 	/\* printc("evt mman_release: %p addr\n", (void *)addr); *\/ */
+	/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
+	/* } */
+
+	printc("pte reflection on evt_trigger_all (thd %d)\n\n", cos_get_thd_id());
+	evt_trigger_all(cos_spd_id());
+	lock_trigger_all(cos_spd_id(), cos_spd_id());
+	return;
 }

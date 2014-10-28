@@ -444,9 +444,9 @@ static inline struct sched_thd *sched_take_crit_sect(spdid_t spdid, struct sched
 		assert(!sched_thd_blocked(cs->holding_thd));
 		/* no recursive lock taking allowed */
 		
-		printc("cs->holding_thd %d\n", cs->holding_thd->id);
-		printc("curr %d\n", curr->id);
-		printc("spdid %d\n", spdid);
+		/* printc("cs->holding_thd %d\n", cs->holding_thd->id); */
+		/* printc("curr %d\n", curr->id); */
+		/* printc("spdid %d\n", spdid); */
 
 		assert(curr != cs->holding_thd);
 		curr->contended_component = spdid;
@@ -456,7 +456,7 @@ static inline struct sched_thd *sched_take_crit_sect(spdid_t spdid, struct sched
 	curr->ncs_held++;
 	curr->contended_component = 0;
 
-	printc("cs->holding_thd is set to %d (spd %d)\n", curr->id, spdid);
+	/* printc("cs->holding_thd is set to %d (spd %d)\n", curr->id, spdid); */
 	cs->holding_thd = curr;
 	return NULL;
 }
@@ -476,15 +476,29 @@ static inline int sched_release_crit_sect(spdid_t spdid, struct sched_thd *curr)
 	assert(!sched_thd_blocked(curr));
 
 	/* This ostensibly should be the case */
-	printc("cs->holding_thd %d\n", cs->holding_thd->id);
-	printc("curr %d\n", curr->id);
+	/* printc("cs->holding_thd %d\n", cs->holding_thd->id); */
+	/* printc("curr %d\n", curr->id); */
 	assert(cs->holding_thd == curr);
 	assert(curr->contended_component == 0);
-	printc("cs->holding_thd is unset to NULL (spd %d)\n", spdid);
 	cs->holding_thd = NULL;
 	curr->ncs_held--;
 	return 0;
 }
+
+
+/* Jiguo: reflect the owner of a critical section */
+static inline struct sched_thd *sched_reflect_crit_sect(spdid_t spdid, struct sched_thd *curr)
+{
+	struct sched_crit_section *cs;
+	assert(spdid < MAX_NUM_SPDS);
+	assert(!sched_thd_free(curr));
+	assert(!sched_thd_blocked(curr));
+	cs = &per_core_sched[cos_cpuid()].sched_spd_crit_sections[spdid];
+	
+	if (cs->holding_thd) return cs->holding_thd;
+	else return NULL;
+}
+
 
 /*************** Scheduler Synchronization Fns ***************/
 

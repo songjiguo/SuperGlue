@@ -259,7 +259,7 @@ ipc_walk_static_cap(unsigned int capability, vaddr_t sp,
 		rdtscll(end);
 		printk("cos:ipc notification cost %llu\n", (end-start));
 #endif
-		/* print_regs((struct pt_regs *)&thd->regs); */
+		print_regs((struct pt_regs *)&thd->regs);
 		return addr;
 	}
 	inv_frame_fault_cnt_update(thd, curr_spd);
@@ -455,10 +455,12 @@ __fault_ipc_invoke(struct thread *thd, vaddr_t fault_addr, int flags, struct pt_
 	printk("found dest spd %d \n", spd_get_index(s));
 	printk("fault_num %d \n", fault_num);
 	printk("fault_cap %d \n", fault_cap);
-	printk("s %d r.spd_id %d a %p\n", spd_get_index(s), r.spd_id, a);
+	printk("s %d r.spd_id %d a %p r.thd_id %d\n", 
+	       spd_get_index(s), r.spd_id, a, r.thd_id);
 
 	/* setup the registers for the fault handler invocation */
-	regs->ax = r.thd_id;
+	regs->ax = r.thd_id;  // Jiguo: why do we need pass the thread id?
+	/* regs->ax = r.spd_id; */
 	regs->bx = regs->cx = r.spd_id;
 	regs->sp = 0;
 	/* arguments (including bx above) */
@@ -756,7 +758,7 @@ cos_syscall_thd_cntl(int spd_id, int op_thdid, long arg1, long arg2)
 	{
 		int frame_offset = arg1;
 
-		/* printk("I am in frame_rem....thd %d curr %d frame offset %d\n",thd_get_id(thd), thd_get_id(curr), frame_offset); */
+		printk("I am in frame_rem....thd %d curr %d frame offset %d\n",thd_get_id(thd), thd_get_id(curr), frame_offset);
 
 		if (thd == curr && frame_offset < 1)       return -1;
 		if (thd_invstk_rem_nth(thd, frame_offset)) return -1;

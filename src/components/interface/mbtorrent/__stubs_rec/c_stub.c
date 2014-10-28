@@ -175,41 +175,6 @@ map_rd_delete(td_t tid)
 	return;
 }
 
-/* return the state of a torrent object, only called after tsplit when
- * creating mail box. This is specific for mail box protocol */
-static int
-rd_get_state(char *param, tor_flags_t tflags)
-{
-	if (tflags & TOR_NONPERSIST) return STATE_TSPLIT_SERVER;  // begin of mail box
-	if (!strlen(param)) return STATE_TSPLIT_READY;  // tsplit for a connection ("")
-	return STATE_TSPLIT_CLIENT;   // else it must be the client tsplit
-}
-
-static void
-rd_cons(struct rec_data_tor *rd, td_t p_tid, td_t c_tid, td_t s_tid, char *param, int len, tor_flags_t tflags, long evtid)
-{
-	/* printc("rd_cons: parent tid %d c_tid %d s_tid %d\n",  p_tid, c_tid, s_tid); */
-	assert(rd);
-
-	C_TAKE(cos_spd_id());
-
-	rd->p_tid	 = p_tid;
-	rd->c_tid 	 = c_tid;
-	rd->s_tid 	 = s_tid;
-	rd->param	 = param;
-	rd->param_len	 = len;
-	rd->tflags	 = tflags;
-	rd->evtid	 = evtid;
-	rd->fcnt	 = fcounter;
-	// set object state to server/client/ready, for trelease
-	rd->state = rd_get_state(param, tflags);
-	
-	rd->evt_wait	 = tflags & TOR_WAIT;  // add for now, wait after tsplit
-
-	C_RELEASE(cos_spd_id());
-	return;
-}
-
 static char*
 param_save(char *param, int param_len)
 {
@@ -235,7 +200,6 @@ param_del(char *param)
 	return;
 }
 
-#ifdef REFLECTION
 static int
 cap_to_dest(int cap)
 {
@@ -286,43 +250,41 @@ tiduniq_dealloc(struct tid_uniqid_data *idmapping)
 	cslab_free_tiduniq(idmapping);
 }
 
-extern int sched_reflect(spdid_t spdid, int src_spd, int cnt);
-extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
-extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
-extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
-extern int evt_trigger_all(spdid_t spdid);
-extern int lock_trigger_all(spdid_t spdid, int dest);  
+
+/* return the state of a torrent object, only called after tsplit when
+ * creating mail box. This is specific for mail box protocol */
+static int
+rd_get_state(char *param, tor_flags_t tflags)
+{
+	if (tflags & TOR_NONPERSIST) return STATE_TSPLIT_SERVER;  // begin of mail box
+	if (!strlen(param)) return STATE_TSPLIT_READY;  // tsplit for a connection ("")
+	return STATE_TSPLIT_CLIENT;   // else it must be the client tsplit
+}
 
 static void
-rd_reflection(int cap)
+rd_cons(struct rec_data_tor *rd, td_t p_tid, td_t c_tid, td_t s_tid, char *param, int len, tor_flags_t tflags, long evtid)
 {
-	assert(cap);
+	/* printc("rd_cons: parent tid %d c_tid %d s_tid %d\n",  p_tid, c_tid, s_tid); */
+	assert(rd);
 
 	C_TAKE(cos_spd_id());
 
-	int count_obj = 0; // reflected objects
-	int dest_spd = cap_to_dest(cap);
+	rd->p_tid	 = p_tid;
+	rd->c_tid 	 = c_tid;
+	rd->s_tid 	 = s_tid;
+	rd->param	 = param;
+	rd->param_len	 = len;
+	rd->tflags	 = tflags;
+	rd->evtid	 = evtid;
+	rd->fcnt	 = fcounter;
+	// set object state to server/client/ready, for trelease
+	rd->state = rd_get_state(param, tflags);
 	
-	/* // remove the mapped page for mailbox spd */
-	/* vaddr_t addr; */
-	/* count_obj = mman_reflect(cos_spd_id(), dest_spd, 1); */
-	/* printc("mbox relfects on mmgr: %d objs\n", count_obj); */
-	/* while (count_obj--) { */
-	/* 	addr = mman_reflect(cos_spd_id(), dest_spd, 0); */
-	/* 	/\* printc("evt mman_release: %p addr\n", (void *)addr); *\/ */
-	/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
-	/* } */
-
-	/* see top comments */
-	/* printc("in rd_reflection dest is %d\n", dest_spd); */
-	evt_trigger_all(cos_spd_id());  // due to protocol
-	lock_trigger_all(cos_spd_id(), dest_spd);     // due to lock contention in mailbox
+	rd->evt_wait	 = tflags & TOR_WAIT;  // add for now, wait after tsplit
 
 	C_RELEASE(cos_spd_id());
-	/* printc("mailbox reflection done (thd %d)\n\n", cos_get_thd_id()); */
 	return;
 }
-#endif
 
 /* Bounded by the depth of torrent (how many time tsplit from). We can
  * also convert the following recursive to the stack based
@@ -348,6 +310,7 @@ rd_recover_state(struct rec_data_tor *rd)
 	}
 	
 	// has reached td_root, start rebuilding and no tracking...
+	// tsplit returns the client id !!!!
 	td_t tmp_tid = tsplit(cos_spd_id(), rd->p_tid, 
 			      rd->param, rd->param_len, rd->tflags, rd->evtid);
 	if (tmp_tid <= 1) return;
@@ -559,7 +522,7 @@ redo:
 
 	// ret is server side id
 	ser_tid = ret;
-	/* printc("cli: tsplit create a new rd %d in spd %ld\n", ser_tid, cos_spd_id()); */
+	printc("cli: tsplit create a new rd %d in spd %ld\n", ser_tid, cos_spd_id());
 	assert (ser_tid >= 1);
 	
 	struct uniqmap_data *dm = NULL;

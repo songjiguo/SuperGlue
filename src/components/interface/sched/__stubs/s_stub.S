@@ -35,6 +35,8 @@ cos_asm_server_stub(sched_priority)
 cos_asm_server_stub(sched_component_take)
 cos_asm_server_stub(sched_component_release)
 
+/* Jiguo: this is used to reflect the owner of a critical section  */
+cos_asm_server_stub(sched_reflection_component_owner)
 
 cos_asm_server_fn_stub_spdid(sched_block, __sg_sched_block)	
 cos_asm_server_fn_stub_spdid(sched_reflect, __sg_sched_reflect)

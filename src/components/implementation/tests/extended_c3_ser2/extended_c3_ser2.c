@@ -11,8 +11,8 @@
 
 // test evt: 10 and 13, 11 and 12
 
-//#define EXAMINE_LOCK
-#define EXAMINE_EVT
+#define EXAMINE_LOCK
+//#define EXAMINE_EVT
 
 long passed_evtid;
 
@@ -86,6 +86,11 @@ vaddr_t ec3_ser2_test(void)
 	if (cos_get_thd_id() == mid) try_mp();
 	if (cos_get_thd_id() == low) try_lp();
 
+	return 0;
+}
+
+int ec3_ser2_pass(long id)
+{
 	return 0;
 }
 

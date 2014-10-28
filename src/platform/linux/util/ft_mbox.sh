@@ -10,7 +10,7 @@ fprr.o-print.o|[parent_]mm.o|[faulthndlr_]llboot.o;\
 mm.o-[parent_]llboot.o|print.o;\
 boot.o-print.o|fprr.o|mm.o|llboot.o;\
 l.o-fprr.o|mm.o|print.o;\
-te.o-sm.o|print.o|fprr.o|mm.o|va.o;\
+te.o-sm.o|print.o|fprr.o|mm.o|va.o|eg.o;\
 eg.o-sm.o|fprr.o|print.o|mm.o|l.o|va.o;\
 sm.o-print.o|fprr.o|mm.o|boot.o|va.o|l.o|mpool.o;\
 \

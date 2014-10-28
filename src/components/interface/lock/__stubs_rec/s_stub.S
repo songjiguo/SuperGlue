@@ -18,7 +18,6 @@ cos_asm_server_fn_stub_spdid(lock_component_release, __sg_lock_component_release
 cos_asm_server_fn_stub_spdid(lock_component_alloc, __sg_lock_component_alloc)
 
 //cos_asm_server_stub_spdid(lock_component_alloc)
-cos_asm_server_fn_stub_spdid(__lock_component_alloc, __sg_lock_component_alloc)
 
 cos_asm_server_stub_spdid(lock_component_free)
 

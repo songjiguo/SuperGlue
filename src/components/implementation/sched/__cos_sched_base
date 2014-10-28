@@ -1118,21 +1118,45 @@ int sched_component_release(spdid_t spdid)
 {
 	struct sched_thd *curr;
 
-	printc("sched component release %d\n", spdid);
+	/* printc("sched component release %d\n", spdid); */
 
 	report_event(COMP_RELEASE);
 	cos_sched_lock_take();
 	curr = sched_get_current();
 	assert(curr);
 
+	// Jiguo: do not print this msg since we might reflect and release the lock
 	if (sched_release_crit_sect(spdid, curr)) {
-		printc("fprr: error releasing spd %d's critical section (contended %d)\n", 
-		       spdid, curr->contended_component);
+		/* printc("fprr: error releasing spd %d's critical section (contended %d)\n",  */
+		/*        spdid, curr->contended_component); */
 	}
 	sched_switch_thread(0, NULL_EVT);
 	assert(!sched_thd_dependent(curr));
 
 	return 0;
+}
+
+
+/* Jiguo: reflection for the lock owner of a component*/
+int sched_reflection_component_owner(spdid_t spdid)
+{
+	struct sched_thd *holder, *curr;
+	int ret = 0;
+
+	cos_sched_lock_take();
+
+	curr = sched_get_current();
+	assert(curr);
+	assert(!sched_thd_blocked(curr));
+	assert(spdid);
+	holder = sched_reflect_crit_sect(spdid, curr);
+	if (holder) ret = holder->id;
+
+
+	printc("sched_reflection_component_owner -> %d (thd %d)\n", ret, cos_get_thd_id());
+	cos_sched_lock_release();
+
+	return ret;
 }
 
 /* Should not hold scheduler lock when calling. */

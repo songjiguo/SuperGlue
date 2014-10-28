@@ -227,6 +227,7 @@ static void __event_expiration(event_time_t time, struct thread_event *events)
 		 * threads. */
 		
 		// Jiguo: wake up the thread through evt
+		printc("timed_evt trying to wake up a thread\n");
 		if (b) evt_trigger(spdid, tmp->evt);
 
 	}
@@ -272,6 +273,7 @@ int timed_event_block(spdid_t spdinv, unsigned int amnt)
 	struct thread_event *te;
 	int block_time;
 	event_time_t t;
+	long evt;
 
 	if (amnt == 0) return 0;
 	/* 
@@ -295,6 +297,11 @@ int timed_event_block(spdid_t spdinv, unsigned int amnt)
 	te->flags &= ~TE_TIMED_OUT;
 	te->flags |= TE_BLOCKED;
 
+	// Jiguo: a thread is associated with an event now
+	evt = evt_split(cos_spd_id(), 0, 0);
+	assert(evt > 0);
+	te->evt = evt;
+
 	ticks = sched_timestamp();
 	te->event_expiration = ticks + amnt;
 	block_time = ticks;
@@ -305,9 +312,12 @@ int timed_event_block(spdid_t spdinv, unsigned int amnt)
 	RELEASE(spdid);
 
 	if (t != next_event_time()) sched_timeout(spdid, amnt);
-	if (-1 == sched_block(spdid, 0)) {
-		prints("fprr: sched block failed in timed_event_block.");
-	}
+
+	// Jiguo: change to use event	
+	evt_wait(cos_spd_id(), te->evt);
+	/* if (-1 == sched_block(spdid, 0)) { */
+	/* 	prints("fprr: sched block failed in timed_event_block."); */
+	/* } */
 
 	/* we better have been taking off the list! */
 	assert(EMPTY_LIST(te, next, prev));

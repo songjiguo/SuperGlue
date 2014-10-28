@@ -110,8 +110,6 @@ static void
 rd_cons(struct rec_data_evt *rd, spdid_t spdid, unsigned long evtid, int state)
 {
 	assert(rd);
-
-	// LOCK??
 	
 	rd->spdid	 = spdid;
 	rd->evtid	 = evtid;
@@ -128,47 +126,6 @@ cap_to_dest(int cap)
 	assert(cap > MAX_NUM_SPDS);
 	if ((dest = cos_cap_cntl(COS_CAP_GET_SER_SPD, 0, 0, cap)) <= 0) assert(0);
 	return dest;
-}
-
-extern int sched_reflect(spdid_t spdid, int src_spd, int cnt);
-extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
-extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
-extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
-
-static int
-rd_reflection(int cap)
-{
-	assert(cap);
-
-	TAKE(cos_spd_id());
-
-	int count_obj = 0; // reflected objects
-	int dest_spd = cap_to_dest(cap);
-	
-	// remove the mapped page for evt spd
-	vaddr_t addr;
-	count_obj = mman_reflect(cos_spd_id(), dest_spd, 1);
-	/* printc("evt relfects on mmgr: %d objs\n", count_obj); */
-	while (count_obj--) {
-		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
-		/* printc("evt mman_release: %p addr\n", (void *)addr); */
-		mman_release_page(cos_spd_id(), addr, dest_spd);
-	}
-
-	// to reflect all threads blocked from evt component
-	int wake_thd;
-	count_obj = sched_reflect(cos_spd_id(), dest_spd, 1);
-	/* printc("evt relfects on sched: %d objs\n", count_obj); */
-	while (count_obj--) {
-		wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0);
-		/* printc("wake_thd %d\n", wake_thd); */
-		/* evt_trigger(cos_spd_id(), evt_id); */  // pointless to call evt mgr
-		sched_wakeup(cos_spd_id(), wake_thd);
-	}
-
-	RELEASE(cos_spd_id());
-	/* printc("evt reflection done (thd %d)\n\n", cos_get_thd_id()); */
-	return 0;
 }
 
 /* extern int ns_update(spdid_t spdid, int old_id, int curr_id, long par); */
@@ -283,6 +240,7 @@ rd_update(int evtid, int state)
 		*/
 		break;
 	default:
+		assert(0);
 		break;
 	}
 
