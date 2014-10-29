@@ -77,6 +77,10 @@ enum {
 	LOCK_RELEASE
 };
 
+static int test_flag = 0;
+
+volatile unsigned long long meas_start, meas_end; // uBenchmark
+
 /**********************************************/
 /* slab allocalk and cvect for tracking lock */
 /**********************************************/
@@ -148,7 +152,7 @@ static void
 rd_recover_state(struct rec_data_lk *rd)
 {
 	assert(rd && rd->c_lkid);
-	printc("thd %d is creating a new server side lock id\n", cos_get_thd_id());
+	/* printc("thd %d is creating a new server side lock id\n", cos_get_thd_id()); */
 
 	struct rec_data_lk *tmp;
 	int tmp_lkid = lock_component_alloc(cos_spd_id());
@@ -183,6 +187,7 @@ rd_update(int lkid, int state)
 		/* lock_component_alloc will get a server side lock id
 		 * every time client side id should always be
 		 * unique */
+		assert(0);  // for alloc, should never be here. Just realloc
 	case LOCK_PRETAKE:
 		/* pretake still needs trying to contend the lock
 		 * since the client has not changed the owner yet. So
@@ -225,10 +230,29 @@ CSTUB_FN(unsigned long, lock_component_alloc) (struct usr_inv_cap *uc,
 		first = 1;
 	}
 
+#ifdef BENCHMARK_MEAS_CREATION_TIME
+	rdtscll(meas_start);
+#endif
+
 redo:
+
+#ifdef BENCHMARK_MEAS_ALLOC
+	rdtscll(meas_end);
+	if (test_flag) {
+		test_flag = 0;
+		printc("recovery a lock cost: %llu\n", meas_end - meas_start);
+	}
+#endif		
+
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	
 	if (unlikely (fault)){
+
+#ifdef BENCHMARK_MEAS_ALLOC
+		test_flag = 1;
+		rdtscll(meas_start);
+#endif		
+
 		CSTUB_FAULT_UPDATE();
 		int dest = cap_to_dest(uc->cap_no);
 		int tmp_owner = sched_reflection_component_owner(dest);
@@ -248,6 +272,11 @@ redo:
 	rd_cons(rd, cos_spd_id(), cli_lkid, ret, LOCK_ALLOC);
 	ret = cli_lkid;
 
+#ifdef BENCHMARK_MEAS_CREATION_TIME
+	rdtscll(meas_end);
+	printc("creating a lock costs %llu\n", meas_end - meas_start);
+#endif
+
 	return ret;
 }
 
@@ -261,16 +290,26 @@ CSTUB_FN(int, lock_component_pretake) (struct usr_inv_cap *uc,
 	
         struct rec_data_lk *rd = NULL;
 redo:
-	printc("lock cli: pretake calling rd_update %d\n", cos_get_thd_id());
         rd = rd_update(lock_id, LOCK_PRETAKE);
-	if (!rd) {
-		printc("try to pretake a non-tracking lock\n");
-		return -1;
+	assert(rd);
+
+#ifdef BENCHMARK_MEAS_PRETAKE
+	rdtscll(meas_end);
+	if (test_flag) {
+		test_flag = 0;
+		printc("recovery a lock cost: %llu\n", meas_end - meas_start);
 	}
+#endif		
 	
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, rd->s_lkid, thd);
 	
 	if (unlikely(fault)){
+
+#ifdef BENCHMARK_MEAS_PRETAKE
+		test_flag = 1;
+		rdtscll(meas_start);
+#endif		
+
 		CSTUB_FAULT_UPDATE();
 		int dest = cap_to_dest(uc->cap_no);
 		int tmp_owner = sched_reflection_component_owner(dest);
@@ -291,16 +330,26 @@ CSTUB_FN(int, lock_component_take) (struct usr_inv_cap *uc,
 	int ret;
 
 	struct rec_data_lk *rd = NULL;
-	
+
         rd = rd_update(lock_id, LOCK_TAKE);
-	if (!rd) {
-		printc("try to take a non-tracking lock\n");
-		return -1;
+	assert(rd);
+
+#ifdef BENCHMARK_MEAS_TAKE
+	rdtscll(meas_end);
+	if (test_flag) {
+		test_flag = 0;
+		printc("recovery a lock cost: %llu\n", meas_end - meas_start);
 	}
-	
+#endif		
+
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, rd->s_lkid, thd);
 	
 	if (unlikely (fault)){
+
+#ifdef BENCHMARK_MEAS_TAKE
+		test_flag = 1;
+		rdtscll(meas_start);
+#endif		
 		CSTUB_FAULT_UPDATE();
 		int dest = cap_to_dest(uc->cap_no);
 		int tmp_owner = sched_reflection_component_owner(dest);

@@ -34,13 +34,6 @@
 #define RELEASE(spdid)	if (sched_component_release(spdid)) return -1;
 
 static int test_control = 0;
-/* #define TEST_PTE_CREATE_BEFORE  // pte create  -- still has lock */
-/* #define TEST_PTE_CREATE_AFTER   // pte create  -- does not have lock */
-/* #define TEST_PTE_WAIT_BEFORE  // pte wait  -- before evt_wait */
-/* #define TEST_PTE_WAIT_AFTER   // pte wait  -- after evt_wait */
-
-/* #define TEST_PTE_TIMER_THD_BEFORE  // timer thread might fail */
-/* #define TEST_PTE_TIMER_THD_AFTER   // timer thread might fail */
 
 extern int sched_cs_state(spdid_t spdid);
 
@@ -576,7 +569,7 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 		/* printc("ticks info: c3_ticks %d, period %d ticks %d\n", c3_ticks, period, ticks); */
 		/* printc("(ticks - c3_ticks) mode period %d", (ticks - c3_ticks)%period); */
 		te->event_expiration = n = c3_ticks + period*((ticks - c3_ticks)/period + 1);
-		printc("rounded up event_expiration %d\n", te->event_expiration);
+		/* printc("rounded up event_expiration %d\n", te->event_expiration); */
 	}
 
 	assert(n > ticks);
@@ -644,7 +637,7 @@ int periodic_wake_wait(spdid_t spdinv)
 	struct thread_event *te;
 	u16_t tid = cos_get_thd_id();
 	long long t;
-	printc("thd %d calling period_wake_wait\n", cos_get_thd_id());
+	/* printc("thd %d calling period_wake_wait\n", cos_get_thd_id()); */
 
 	TAKE(spdid);
 	te = te_pget(tid);
@@ -657,8 +650,8 @@ int periodic_wake_wait(spdid_t spdinv)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_WAIT_BEFORE)
 	test_control++;
-	printc("in periodic_wake_wait: thd %d spd %d, test_control %d\n",
-	       cos_get_thd_id(), spdinv, test_control);
+	/* printc("in periodic_wake_wait: thd %d spd %d, test_control %d\n", */
+	/*        cos_get_thd_id(), spdinv, test_control); */
 	if (spdinv == 11 && cos_get_thd_id() == 11 && test_control >= 2) {
 		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
@@ -695,7 +688,7 @@ int periodic_wake_wait(spdid_t spdinv)
 	RELEASE(spdid);
 
 	// Jiguo: change to use event	
-	printc("periodic_wake_wait: thd %d calls evt_wait\n", cos_get_thd_id());
+	/* printc("periodic_wake_wait: thd %d calls evt_wait\n", cos_get_thd_id()); */
 	evt_wait(cos_spd_id(), te->evt);
 	/* if (-1 == sched_block(spdid, 0)) { */
 	/* 	prints("fprr: sched block failed in timed_event_periodic_wait.");	} */
@@ -735,7 +728,7 @@ static void start_timer_thread(void)
 	spdid_t spdid = cos_spd_id();
 	unsigned int tick_freq;
 
-	printc("start timer thread %d (Kevinandy)\n", cos_get_thd_id());
+	/* printc("start timer thread %d (Kevinandy)\n", cos_get_thd_id()); */
 	sched_timeout_thd(spdid);
 	tick_freq = sched_tick_freq();
 	assert(tick_freq == 100);
@@ -747,7 +740,7 @@ static void start_timer_thread(void)
 
 	/* When the system boots, we have no pending waits */
 	assert(EMPTY_LIST(&events, next, prev));
-	printc("start timer thread %d (Kevinandy) is blocking...\n", cos_get_thd_id());
+	/* printc("start timer thread %d (Kevinandy) is blocking...\n", cos_get_thd_id()); */
 	sched_block(spdid, 0);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_TIMER_THD_BEFORE)

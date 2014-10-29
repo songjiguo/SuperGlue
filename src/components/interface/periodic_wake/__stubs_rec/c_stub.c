@@ -49,6 +49,9 @@ extern int sched_component_release(spdid_t spdid);
 #define PTE_TAKE(spdid) 	do { if (sched_component_take(spdid))    return 0; } while (0)
 #define PTE_RELEASE(spdid)	do { if (sched_component_release(spdid)) return 0; } while (0)
 
+static int meas_flag = 0;
+static unsigned long long meas_start, meas_end;
+
 static unsigned long fcounter = 0;
 
 struct rec_data_pte {
@@ -133,10 +136,10 @@ rd_update(unsigned int id, int state)
 		assert(0);  
 		break;
 	case PTE_WAIT:
-		printc("in rd_update (state %d) needs recreate pte thread by thd %d\n", 
-		       state, cos_get_thd_id());
-		printc("rd->period %d rd->creation_ticks %d\n", 
-		       rd->period, rd->creation_ticks);
+		/* printc("in rd_update (state %d) needs recreate pte thread by thd %d\n",  */
+		/*        state, cos_get_thd_id()); */
+		/* printc("rd->period %d rd->creation_ticks %d\n",  */
+		/*        rd->period, rd->creation_ticks); */
 		assert(rd->state == PTE_CREATED);
 		c3_periodic_wake_create(cos_spd_id(), rd->period, rd->creation_ticks);
 		break;
@@ -166,6 +169,7 @@ cap_to_dest(int cap)
 /* extern int evt_trigger_all(spdid_t spdid); */
 /* extern int lock_trigger_all(spdid_t spdid, int dest);   */
 extern int sched_component_release(spdid_t spdid);
+extern int sched_reflection_component_owner(spdid_t spdid);
 
 /**********************************/
 /*          API functions         */
@@ -177,18 +181,25 @@ CSTUB_FN(int, c3_periodic_wake_create)(struct usr_inv_cap *uc,
 	int ret;
 	long fault = 0;
 redo:
-	printc("cli: __periodic_wake_create (thd %d ticks %d period %d) for recovery\n",
-	       cos_get_thd_id(), ticks, period);
-	
+	/* printc("cli: __periodic_wake_create (thd %d ticks %d period %d) for recovery\n", */
+	/*        cos_get_thd_id(), ticks, period); */
+
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, period, ticks);
 	if (unlikely (fault)){
+
 		CSTUB_FAULT_UPDATE();
-		sched_component_release(cap_to_dest(uc->cap_no));// release the lock
+
+		int dest = cap_to_dest(uc->cap_no);
+		int tmp_owner = sched_reflection_component_owner(dest);
+		if (tmp_owner == cos_get_thd_id()) {
+			sched_component_release(cap_to_dest(uc->cap_no));
+		}
+
 		goto redo;
 	}
 
 	assert(ret >= 0);
-	printc("cli: __periodic_wake_create -- in spd %ld period %d \n", cos_spd_id(), period);
+	/* printc("cli: __periodic_wake_create -- in spd %ld period %d \n", cos_spd_id(), period); */
 	
 	return ret;
 }
@@ -200,19 +211,40 @@ CSTUB_FN(int, periodic_wake_create)(struct usr_inv_cap *uc,
 	long fault = 0;
 	struct rec_data_pte *rd = NULL;
 redo:
-	printc("cli: periodic_wake_create (thd %d period %d)\n",
-	       cos_get_thd_id(), period);
+	/* printc("cli: periodic_wake_create (thd %d period %d)\n", */
+	/*        cos_get_thd_id(), period); */
+
+#ifdef BENCHMARK_MEAS_CREATE
+	rdtscll(meas_end);
+	printc("end measuring.....\n");
+	if (meas_flag) {
+		meas_flag = 0;
+		printc("recovery a pte cost: %llu\n", meas_end - meas_start);
+	}
+#endif		
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, period);
 	if (unlikely (fault)){
+
+#ifdef BENCHMARK_MEAS_CREATE
+		meas_flag = 1;
+		printc("start measuring.....\n");
+		rdtscll(meas_start);
+#endif		
 		CSTUB_FAULT_UPDATE();
-		sched_component_release(cap_to_dest(uc->cap_no));// release the lock
+
+		int dest = cap_to_dest(uc->cap_no);
+		int tmp_owner = sched_reflection_component_owner(dest);
+		if (tmp_owner == cos_get_thd_id()) {
+			sched_component_release(cap_to_dest(uc->cap_no));
+		}
+
 		goto redo;
 	}
 
 	assert(ret > 0);
-	printc("cli: periodic_wake_create -- in spd %ld ticks %d period %d \n", 
-	       cos_spd_id(), ret, period);
+	/* printc("cli: periodic_wake_create -- in spd %ld ticks %d period %d \n",  */
+	/*        cos_spd_id(), ret, period); */
 
 	/* /\* Even assume a thread only is made as periodic thread once, */
 	/*  * the reuse of a dead thread still can happen. TODO: remove */
@@ -236,14 +268,36 @@ CSTUB_FN(int, periodic_wake_wait)(struct usr_inv_cap *uc,
 	long fault = 0;
 	struct rec_data_pte *rd = NULL;
 redo:
-	printc("cli: periodic_wake_wait (thd %d)\n", cos_get_thd_id());
+	/* printc("cli: periodic_wake_wait (thd %d)\n", cos_get_thd_id()); */
         rd = rd_update(cos_get_thd_id(), PTE_WAIT);
 	assert(rd);
 
+#ifdef BENCHMARK_MEAS_WAIT
+	rdtscll(meas_end);
+	printc("end measuring.....\n");
+	if (meas_flag) {
+		meas_flag = 0;
+		printc("recovery a pte cost: %llu\n", meas_end - meas_start);
+	}
+#endif		
+
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
+
+#ifdef BENCHMARK_MEAS_WAIT
+		meas_flag = 1;
+		printc("start measuring.....\n");
+		rdtscll(meas_start);
+#endif		
+
 		CSTUB_FAULT_UPDATE();
-		sched_component_release(cap_to_dest(uc->cap_no));// release the lock
+
+		int dest = cap_to_dest(uc->cap_no);
+		int tmp_owner = sched_reflection_component_owner(dest);
+		if (tmp_owner == cos_get_thd_id()) {
+			sched_component_release(cap_to_dest(uc->cap_no));
+		}
+
 		goto redo;
 	}
 

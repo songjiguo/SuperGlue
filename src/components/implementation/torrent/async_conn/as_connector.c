@@ -1,1 +1,1 @@
-__as_connector
+__as_connector_rec

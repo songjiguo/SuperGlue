@@ -21,6 +21,8 @@
   that can have global name space issue. For torrent interface, we
   restrict that the operation must be in the same component in which
   the torrent is created (they do not need name server!)
+
+  NOTE: do not mix-use evt_create(e) and evt_split (eg). Only one
 */
 
 #include <cos_component.h>
@@ -51,50 +53,58 @@ extern void free_page(void *ptr);
 #define CVECT_FREE(x) free_page(x)
 #include <cvect.h>
 
+static unsigned long long meas_start, meas_end;
+static int meas_flag = 0;
+
 /* global fault counter, only increase, never decrease */
 static unsigned long fcounter;
-static long ser_fcounter;  // mainly for the evt_trigger (see below explanation)
 
 /* recovery data structure evt service */
 struct rec_data_evt {
 	spdid_t       spdid;
-	unsigned long evtid;
+	unsigned long c_evtid;
+	unsigned long s_evtid;
+
+	unsigned long p_evtid;  // parent event id (eg needs this)
+	int grp;   // same as above
+
 	unsigned int  state;
 	unsigned long fcnt;
 };
 
 /* the state of an event obect (each operation expects to change) */
 enum {
-	EVT_CREATED,
-	EVT_WAITING,
-	EVT_TRIGGERED,
-	EVT_FREED
+	EVT_STATE_CREATE,
+	EVT_STATE_SPLIT,   // same as create, except it is for event group
+	EVT_STATE_WAITING,
+	EVT_STATE_TRIGGER,
+	EVT_STATE_FREE
 };
 
 /**********************************************/
 /* slab allocaevt and cvect for tracking evts */
 /**********************************************/
 
-CVECT_CREATE_STATIC(rec_evt_vect);
+CVECT_CREATE_STATIC(rec_evt_map);   // track each event object and its id (create/free/wait)
 CSLAB_CREATE(rdevt, sizeof(struct rec_data_evt));
 
 static struct rec_data_evt *
 rdevt_lookup(int id)
 { 
-	return cvect_lookup(&rec_evt_vect, id); 
+	return (struct rec_data_evt *)cvect_lookup(&rec_evt_map, id); 
 }
 
 static struct rec_data_evt *
-rdevt_alloc(int evtid)
+rdevt_alloc(int id)
 {
-	struct rec_data_evt *rd;
-
+	struct rec_data_evt *rd = NULL;
+	
+	assert(id >= 1);
+	
 	rd = cslab_alloc_rdevt();
-	assert(rd);
-	if (cvect_add(&rec_evt_vect, rd, evtid)) {
-		printc("can not add into cvect\n");
-		BUG();
-	}
+	assert(rd);	
+	cvect_add(&rec_evt_map, rd, id);   // this must be greater than 1
+
 	return rd;
 }
 
@@ -102,46 +112,78 @@ static void
 rdevt_dealloc(struct rec_data_evt *rd)
 {
 	assert(rd);
-	if (cvect_del(&rec_evt_vect, rd->evtid)) BUG();
+	if (cvect_del(&rec_evt_map, rd->c_evtid)) BUG();
 	cslab_free_rdevt(rd);
+	return;
 }
 
 static void 
-rd_cons(struct rec_data_evt *rd, spdid_t spdid, unsigned long evtid, int state)
+rd_cons(struct rec_data_evt *rd, spdid_t spdid, unsigned long c_evtid, 
+	unsigned long s_evtid, unsigned long parent, int grp, int state)
 {
 	assert(rd);
 	
 	rd->spdid	 = spdid;
-	rd->evtid	 = evtid;
+	rd->c_evtid	 = c_evtid;
+	rd->s_evtid	 = s_evtid;
+	rd->p_evtid	 = parent;
+	rd->grp	         = grp;
+
 	rd->state	 = state;
 	rd->fcnt	 = fcounter;
 
 	return;
 }
 
-static int
-cap_to_dest(int cap)
-{
-	int dest = 0;
-	assert(cap > MAX_NUM_SPDS);
-	if ((dest = cos_cap_cntl(COS_CAP_GET_SER_SPD, 0, 0, cap)) <= 0) assert(0);
-	return dest;
-}
+/* static int */
+/* cap_to_dest(int cap) */
+/* { */
+/* 	int dest = 0; */
+/* 	assert(cap > MAX_NUM_SPDS); */
+/* 	if ((dest = cos_cap_cntl(COS_CAP_GET_SER_SPD, 0, 0, cap)) <= 0) assert(0); */
+/* 	return dest; */
+/* } */
 
-/* extern int ns_update(spdid_t spdid, int old_id, int curr_id, long par); */
-/* extern long ns_reflection(spdid_t spdid, int id, int type); */
+static void
+rd_recover_state(struct rec_data_evt *rd)
+{
+	struct rec_data_evt *prd = NULL, *tmp = NULL;
+	
+	assert(rd && rd->c_evtid >= 1);
+	
+	/* printc("calling recover!!!!!!\n"); */
+	/* printc("thd %d restoring mbox for torrent id %d (parent id %d evt id %ld) \n", */
+	/*        cos_get_thd_id(), rd->c_tid, rd->p_tid, rd->evtid); */
+	
+	/* If this is the server side final trelease, it is ok to just
+	 * restore the "final" tid since only it is needed by the
+	 * client to tsplit successfully */
+	if (rd->p_evtid) {
+		assert((prd = rdevt_lookup(rd->p_evtid)));
+		prd->fcnt = fcounter;
+		rd_recover_state(prd);
+	}
+	
+	long tmp_evtid = c3_evt_split(cos_spd_id(), rd->p_evtid, 
+				      rd->grp, rd->c_evtid);
+	assert(tmp_evtid >= 1);
+	rd->s_evtid = tmp_evtid;
+	/* printc("got the new client side %d and its new server id %d\n",  */
+	/*        tmp_tid, tmp->s_tid); */
+	return;
+}
 
 static struct rec_data_evt *
 rd_update(int evtid, int state)
 {
         struct rec_data_evt *rd = NULL;
 
-	TAKE(cos_spd_id());
+	/* TAKE(cos_spd_id()); */
 
         rd = rdevt_lookup(evtid);
 	if (unlikely(!rd)) goto done;
 	if (likely(rd->fcnt == fcounter)) goto done;
-
+	
 	rd->fcnt = fcounter;
 
 	/* Jiguo: if evt is created in a different component, do we
@@ -161,11 +203,13 @@ rd_update(int evtid, int state)
 	
 	/* STATE MACHINE */
 	switch (state) {
-	case EVT_CREATED:
+	case EVT_STATE_CREATE:
                 /* for create, if failed, just redo, should not be here */
 		assert(0);  
 		break;
-	case EVT_FREED:
+	case EVT_STATE_SPLIT:
+                /* for split, if failed, need restore any parent */
+	case EVT_STATE_FREE:
                 /* here is one issue: if fault happens in evt_free
 		 * (after delid in mapping_free in evt manager), the
 		 * original id will be removed in the name server,
@@ -177,13 +221,7 @@ rd_update(int evtid, int state)
 		 * create a new event and replay evt_free. This is
 		 * basically a reflection on name_server
 		 */
-		break;
-	case EVT_WAITING:
-		printc("in rd_update (state %d) is creating a new evt by thd %d\n", 
-		       state, cos_get_thd_id());
-		RELEASE(cos_spd_id());
-		assert(evt_re_create(cos_spd_id(), evtid) > 0);
-		TAKE(cos_spd_id());
+	case EVT_STATE_WAITING:
 		/* preempted by other thread here? This only becomes
 		 * issue if the preemption occurs when the same object
 		 * is being accessed. However, there are 2 situation:
@@ -193,9 +231,9 @@ rd_update(int evtid, int state)
 		 * name server look up will only see the last added
 		 * entry, so it does not matter. Do we still need lock
 		 * here???? Maybe not....*/
-		/* assert(!ns_update(cos_spd_id(), evtid, new_evtid, ser_fcounter)); */
+		rd_recover_state(rd);
 		break;
-	case EVT_TRIGGERED:
+	case EVT_STATE_TRIGGER:
 		/* Generally there are two rules to follow when
 		   recover an object state:
 		   A) follow the protocol of service
@@ -238,6 +276,11 @@ rd_update(int evtid, int state)
 		   counter to differentiate the event with the same
 		   id. Or we can update name server after sched_wakeup
 		*/
+		
+		/* No state here. We will look up the actual_evtid on the
+		 * server side. Should not be here */
+		/* rd_recover_state(rd); */
+		assert(0);
 		break;
 	default:
 		assert(0);
@@ -245,7 +288,7 @@ rd_update(int evtid, int state)
 	}
 
 done:	
-	RELEASE(cos_spd_id());   // have to release the lock before block somewhere above
+	/* RELEASE(cos_spd_id());   // have to release the lock before block somewhere above */
 	return rd;
 }
 
@@ -263,76 +306,102 @@ CSTUB_FN(long, evt_create) (struct usr_inv_cap *uc,
         struct rec_data_evt *rd = NULL;
         unsigned long ser_eid, cli_eid;
 redo:
-        printc("evt cli: evt_create %d\n", cos_get_thd_id());
+        /* printc("evt cli: evt_create %d\n", cos_get_thd_id()); */
+
+#ifdef BENCHMARK_MEAS_CREATE
+	rdtscll(meas_end);
+	printc("end measuring.....\n");
+	if (meas_flag) {
+		meas_flag = 0;
+		printc("recovery an event cost: %llu\n", meas_end - meas_start);
+	}
+#endif		
+
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
+
+#ifdef BENCHMARK_MEAS_CREATE
+		meas_flag = 1;
+		printc("start measuring.....\n");
+		rdtscll(meas_start);
+#endif		
+
 		CSTUB_FAULT_UPDATE();
-		ser_fcounter = fault_update;
-		printc("evt cli: goto redo\n");
 		goto redo;
 	}
 	
 	assert(ret > 0);
-	printc("cli: evt_create create a new rd in spd %ld\n", cos_spd_id());		
+	/* printc("cli: evt_create create a new rd in spd %ld (server id %d)\n",  */
+	/*        cos_spd_id(), ret); */
 	rd = rdevt_alloc(ret);
-	assert(rd);	
-	rd_cons(rd, cos_spd_id(), ret, EVT_CREATED);
-
+	assert(rd);
+	rd_cons(rd, cos_spd_id(), ret, ret, 0, 0, EVT_STATE_CREATE);
+	
 	return ret;
 }
 
-
-/* This function is used to create a new server side id for the
- * old_extern_evt, and do the cache in the server. Here since
- * ev_trigger can come from a different component, so we cache in the
- * server side.
-
- * More generally if we keep the mapping between old id and new id in
- * the server (say, by caching), we need this function and we do not
- * need to track the mapping on the client side. However, if we keep
- * the mappings at client interface, we do not need this function
- * since the client can find the correct server id. 
-
- NO tracking here!!!! If failed, just replay
- */
-CSTUB_FN(long, evt_re_create) (struct usr_inv_cap *uc,
-			  spdid_t spdid, long old_extern_evt)
+// no tracking here for create a new server side evt
+CSTUB_FN(long, c3_evt_split) (struct usr_inv_cap *uc,
+			      spdid_t spdid, long parent_evt, int grp, int old_evtid)
 {
 	long fault = 0;
 	long ret;
 redo:
-	printc("evt cli: evt_re_create %d (evt id %ld)\n", cos_get_thd_id(), old_extern_evt);
-
-	CSTUB_INVOKE(ret, fault, uc, 2, spdid, old_extern_evt);
-        if (unlikely (fault)){
+	CSTUB_INVOKE(ret, fault, uc, 4, spdid, parent_evt, grp, old_evtid);
+	if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
-		ser_fcounter = fault_update;
 		goto redo;
-        }
-
+	}
 	return ret;
 }
+
+
+static int first = 0;
 
 CSTUB_FN(long, evt_split) (struct usr_inv_cap *uc,
 			   spdid_t spdid, long parent_evt, int grp)
 {
 	long fault = 0;
 	long ret;
-	
-        struct rec_data_evt *rd = NULL;
-redo:
 
+        struct rec_data_evt *rd = NULL;
+        unsigned long ser_eid, cli_eid;
+
+        if (first == 0) {
+		cvect_init_static(&rec_evt_map);
+		first = 1;
+	}
+redo:
+        /* printc("evt cli: evt_split %d\n", cos_get_thd_id()); */
+
+#ifdef BENCHMARK_MEAS_SPLIT
+	rdtscll(meas_end);
+	printc("end measuring.....\n");
+	if (meas_flag) {
+		meas_flag = 0;
+		printc("recovery an event cost: %llu\n", meas_end - meas_start);
+	}
+#endif		
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, parent_evt, grp);
-	
 	if (unlikely (fault)){
-		if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-			printc("set cap_fault_cnt failed\n");
-			BUG();
-		}
-		fcounter++;
+
+#ifdef BENCHMARK_MEAS_SPLIT
+		meas_flag = 1;
+		printc("start measuring.....\n");
+		rdtscll(meas_start);
+#endif		
+
+		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
-	
+
+	assert(ret > 0);
+	/* printc("cli: evt_create create a new rd in spd %ld (server id %d)\n",  */
+	/*        cos_spd_id(), ret); */
+	rd = rdevt_alloc(ret);
+	assert(rd);
+	rd_cons(rd, cos_spd_id(), ret, ret, parent_evt, grp, EVT_STATE_CREATE);
+
 	return ret;
 }
 
@@ -345,37 +414,68 @@ CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
 
         struct rec_data_evt *rd = NULL;
 redo:
-	printc("evt cli: evt_wait %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
+	/* printc("evt cli: evt_wait %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
         // must be in the same component
-        rd = rd_update(extern_evt, EVT_WAITING);
+        rd = rd_update(extern_evt, EVT_STATE_WAITING);
 	assert(rd);   
 
-	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
+#ifdef BENCHMARK_MEAS_WAIT
+	rdtscll(meas_end);
+	printc("end measuring.....\n");
+	if (meas_flag) {
+		meas_flag = 0;
+		printc("recovery an event cost: %llu\n", meas_end - meas_start);
+	}
+#endif		
+
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid);
         if (unlikely (fault)){
+
+#ifdef BENCHMARK_MEAS_WAIT
+		meas_flag = 1;
+		printc("start measuring.....\n");
+		rdtscll(meas_start);
+#endif		
 		CSTUB_FAULT_UPDATE();
-		ser_fcounter = fault_update;
 		goto redo;
         }
 
 	return ret;
 }
 
+
+/* Note: this can be called from a different component, we need update
+ * the tracking info here */
 CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
 			    spdid_t spdid, long extern_evt)
 {
 	long fault = 0;
-	int ret;
+	int ret, ser_evtid;
         struct rec_data_evt *rd = NULL;
-redo:
-	printc("evt cli: evt_trigger %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
-	rd = rd_update(extern_evt, EVT_TRIGGERED);
+
+
+	/* printc("evt cli: evt_trigger %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
+#ifdef BENCHMARK_MEAS_TRIGGER
+	rdtscll(meas_end);
+	printc("end measuring.....\n");
+	if (meas_flag) {
+		meas_flag = 0;
+		printc("recovery an event cost: %llu\n", meas_end - meas_start);
+	}
+#endif		
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
 	if (unlikely (fault)){
+
+#ifdef BENCHMARK_MEAS_TRIGGER
+		meas_flag = 1;
+		printc("start measuring.....\n");
+		rdtscll(meas_start);
+#endif		
+
 		CSTUB_FAULT_UPDATE();
-		ser_fcounter = fault_update;
                 /*
-		  1) fault occurs in evt_trigger (before
+o		  1) fault occurs in evt_trigger (before
 		  sched_wakeup).In this case, reflection will wake up
 		  threads in blocking wait and replay. Then new event
 		  will be created for evt_id. Replayed evt_trigger on
@@ -398,15 +498,8 @@ redo:
 		  entry is removed in evt by other thread already,
 		  when return back from scheduler, we reflect evt to
 		  see if need redo
-
 		*/
-		printc("decide if going to redo for evt_trigger here\n");
-		if (evt_reflection(cos_spd_id(), extern_evt)) goto redo; // 1) and 3)
-		else rd = rd_update(extern_evt, EVT_TRIGGERED);          // 2) and 3)
-		/* If we get here, set ret to 0 to ensure that return
-		 * value won't trigger BUG() at client (as if
-		 * evt_trigger has succeeded) */
-		ret = 0;
+		/* goto redo; */
 	}
 
 	return ret;
@@ -419,13 +512,31 @@ CSTUB_FN(int, evt_free) (struct usr_inv_cap *uc,
 	int ret;
 
         struct rec_data_evt *rd = NULL;
-	printc("evt cli: evt_free %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
-        rd = rd_update(extern_evt, EVT_FREED);
+redo:
+	/* printc("evt cli: evt_free %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
+        rd = rd_update(extern_evt, EVT_STATE_FREE);
 	assert(rd);
-	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
+	assert(rd->c_evtid == extern_evt);
+
+#ifdef BENCHMARK_MEAS_FREE
+	rdtscll(meas_end);
+	printc("end measuring.....\n");
+	if (meas_flag) {
+		meas_flag = 0;
+		printc("recovery an event cost: %llu\n", meas_end - meas_start);
+	}
+#endif		
+
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid);
 	if (unlikely (fault)) {
+
+#ifdef BENCHMARK_MEAS_FREE
+		meas_flag = 1;
+		printc("start measuring.....\n");
+		rdtscll(meas_start);
+#endif		
 		CSTUB_FAULT_UPDATE();
-		ser_fcounter = fault_update;
+		goto redo;
 	}
 
 	rdevt_dealloc(rd);

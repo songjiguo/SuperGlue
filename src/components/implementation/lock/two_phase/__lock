@@ -257,8 +257,8 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 
 	RELEASE(spdid);
 
-	printc("thd %d going to blocked in scheduler via lock component %ld\n", 
-	       cos_get_thd_id(), cos_spd_id());
+	/* printc("thd %d going to blocked in scheduler via lock component %ld\n",  */
+	/*        cos_get_thd_id(), cos_spd_id()); */
 	if (-1 == sched_block(spdid, thd_id)) {
 		printc("Deadlock including thdids %d -> %d in spd %d, lock id %d.\n", 
 		       cos_get_thd_id(), thd_id, spd, (int)lock_id);

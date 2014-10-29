@@ -109,6 +109,9 @@ enum {
 	STATE_TRELEASE
 };
 
+static unsigned long long meas_start, meas_end;
+static int meas_flag = 0;
+
 static unsigned long fcounter = 0;
 
 // tracking data structure
@@ -351,8 +354,8 @@ rd_recover_state(struct rec_data_tor *rd)
 		for (tmp_i = 1; tmp_i < tmp_tot; tmp_i++) {
 			tmp_cbid = uniq_map_reflection(cos_spd_id(), 
 						       idmapping->uniq_id, tmp_i);
-			/* printc("cbid %d sz %d\n",  */
-			/*        (tmp_cbid >> 16) & 0xFFFF, tmp_cbid & 0xFFFF); */
+			printc("cbid %d sz %d\n",
+			       (tmp_cbid >> 16) & 0xFFFF, tmp_cbid & 0xFFFF);
 
 			twritep(cos_spd_id(), rd->c_tid,
 				(tmp_cbid >> 16) & 0xFFFF, tmp_cbid & 0xFFFF);
@@ -509,10 +512,25 @@ redo:
         d->len[1]     = len;
 	memcpy(&d->data[0], param, len + 1);
 
+#ifdef BENCHMARK_MEAS_TSPLIT
+	rdtscll(meas_end);
+	printc("end measuring.....(thd %d)\n", cos_get_thd_id());
+	if (meas_flag) {
+		meas_flag = 0;
+		printc("recovery an event cost: %llu (by thd %d)\n", 
+		       meas_end - meas_start, cos_get_thd_id());
+	}
+#endif		
+
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, cb, sz);
 
         if (unlikely(fault)) {
-		/* printc("tsplit found a fault (thd %d)\n", cos_get_thd_id()); */
+
+#ifdef BENCHMARK_MEAS_TSPLIT
+		meas_flag = 1;
+		printc("start measuring.....(thd %d)\n", cos_get_thd_id());
+		rdtscll(meas_start);
+#endif		
 		CSTUB_FAULT_UPDATE();
 		memset(&d->data[0], 0, len);  // why?
 		cbuf_free(cb);
@@ -522,7 +540,7 @@ redo:
 
 	// ret is server side id
 	ser_tid = ret;
-	printc("cli: tsplit create a new rd %d in spd %ld\n", ser_tid, cos_spd_id());
+	/* printc("cli: tsplit create a new rd %d in spd %ld\n", ser_tid, cos_spd_id()); */
 	assert (ser_tid >= 1);
 	
 	struct uniqmap_data *dm = NULL;
@@ -615,9 +633,23 @@ redo:
 		/* printc("<<<unqi_id %d cbid %d sz %d>>>\n", idmapping->uniq_id, cbid, sz); */
 		if (uniq_map_add(cos_spd_id(), idmapping->uniq_id, cbid, sz)) assert(0);
 	}
-	
+
+#ifdef BENCHMARK_MEAS_TWRITEP
+	rdtscll(meas_end);
+	printc("end measuring.....\n");
+	if (meas_flag) {
+		meas_flag = 0;
+		printc("recovery an event cost: %llu\n", meas_end - meas_start);
+	}
+#endif		
 	CSTUB_INVOKE(ret, fault, uc, 4, spdid, rd->s_tid, cbid, sz);
 	if (unlikely (fault)){
+
+#ifdef BENCHMARK_MEAS_TWRITEP
+		meas_flag = 1;
+		printc("start measuring.....\n");
+		rdtscll(meas_start);
+#endif		
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
@@ -640,8 +672,24 @@ redo:
 	assert(rd);
         /* printc("<<< In: call treadp  (thread %d)... after rd_update >>>\n", cos_get_thd_id()); */
 
+#ifdef BENCHMARK_MEAS_TREADP
+	rdtscll(meas_end);
+	printc("end measuring.....\n");
+	if (meas_flag) {
+		meas_flag = 0;
+		printc("recovery an event cost: %llu\n", meas_end - meas_start);
+	}
+#endif		
+
 	CSTUB_INVOKE_3RETS(ret, fault, *off, *sz, uc, 2, spdid, rd->s_tid);
 	if (unlikely(fault)){
+
+#ifdef BENCHMARK_MEAS_TREADP
+		meas_flag = 1;
+		printc("start measuring.....\n");
+		rdtscll(meas_start);
+#endif		
+
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
@@ -672,8 +720,24 @@ redo:
         rd = rd_update(c_tid, STATE_TRELEASE);
 	assert(rd);
 
+#ifdef BENCHMARK_MEAS_TRELEASE
+	rdtscll(meas_end);
+	printc("end measuring.....\n");
+	if (meas_flag) {
+		meas_flag = 0;
+		printc("recovery an event cost: %llu\n", meas_end - meas_start);
+	}
+#endif		
+
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_tid);
 	if (unlikely(fault)){
+
+#ifdef BENCHMARK_MEAS_TRELEASE
+		meas_flag = 1;
+		printc("start measuring.....\n");
+		rdtscll(meas_start);
+#endif		
+
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}

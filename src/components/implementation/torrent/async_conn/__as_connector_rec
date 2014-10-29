@@ -19,28 +19,6 @@
 #include <ck_ring.h>
 
 #include <objtype.h>
-/* #define TEST_MBOX_TSPLIT_SERVER_BEFORE  // server side create */
-/* #define TEST_MBOX_TSPLIT_SERVER_AFTER  // server side create */
-/* #define TEST_MBOX_TSPLIT_CLIENT_BEFORE  // client side create */
-/* #define TEST_MBOX_TSPLIT_CLIENT_AFTER  // client side create */
-/* #define TEST_MBOX_TSPLIT_READY_BEFORE */
-/* #define TEST_MBOX_TSPLIT_READY_AFTER */
-
-/* #define TEST_MBOX_TREADP */
-/* #define TEST_MBOX_TWRITEP_BEFORE */
-/* #define TEST_MBOX_TWRITEP_AFTER */
-
-/* #define TEST_MBOX_TRELEASE_SERVER_BEFORE  // server side trelease */
-/* #define TEST_MBOX_TRELEASE_SERVER_AFTER  // server side trelease */
-/* #define TEST_MBOX_TRELEASE_CLIENT_BEFORE  // client side trelease */
-/* #define TEST_MBOX_TRELEASE_CLIENT_AFTER  // client side trelease */
-/* #define TEST_MBOX_TRELEASE_READY_BEFORE */
-/* #define TEST_MBOX_TRELEASE_READY_AFTER */
-
-/* still track the client/server side id over the client interface,
- * not using the separate name server */
-/* extern void print_tormap_cvect(); */
-/* extern cvect_t tormap_vect; */
 
 #define MBOX_BUFFER_SIZE 256
 struct cbuf_info {
@@ -315,35 +293,27 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	}
 #endif
 	LOCK();
-	printc("1\n");
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);
-	printc("2\n");
 	nt = tor_alloc(NULL, tflags);
 	if (!nt) ERR_THROW(-ENOMEM, done);
 	nt->evtid = evtid;
 	fsc = fsobj_path2obj(param, len, t->data, &parent, &subpath);
-	printc("3\n");
 	if (!fsc) {
-		printc("4\n");
 		if (!(tflags & TOR_NONPERSIST)) ERR_THROW(-EINVAL, free);
-		printc("4.5\n");
 		fsc = mbox_create_addr(spdid, nt, parent, subpath, tflags, (int*)&ret);
 		if (!fsc) goto free; /* ret set above... */
-		printc("5\n");
 		nt->data = fsc;
 		nt->flags = tflags & TOR_SPLIT;
 	} else {
 		struct as_conn_root *acr = (struct as_conn_root*)fsc->data;
 		assert(acr);
-		printc("6\n");
 	        if ((~fsc->flags) & tflags) ERR_THROW(-EACCES, free);
 		/* Case 2: a client attempt to connect to a server*/
 	        if (len>0)      ret = (td_t)mbox_create_client(nt, acr);
 		/* Case 3: a server create a connection to a client*/
 	        else            ret = (td_t)mbox_create_server(nt, acr); 
 	        if (ret < 0) goto free;
-		printc("7\n");
 	        nt->flags = tflags & TOR_RW;
 	}
 	ret = nt->td;
@@ -595,7 +565,7 @@ treadp(spdid_t spdid, td_t td, int *off, int *sz)
 
 done:	
 	UNLOCK();
-	printc("treadp (thd %d) return, ret %d\n", cos_get_thd_id(), ret);
+	/* printc("treadp (thd %d) return, ret %d\n", cos_get_thd_id(), ret); */
 	return ret;
 }
 
@@ -690,15 +660,15 @@ rd_reflection()
 	int count_obj = 0; // reflected objects
 	int dest_spd = cos_spd_id();
 	
-	/* // remove the mapped page for mailbox spd */
-	/* vaddr_t addr; */
-	/* count_obj = mman_reflect(cos_spd_id(), dest_spd, 1); */
-	/* printc("pte relfects on mmgr: %d objs (thd %d)\n", count_obj, cos_get_thd_id()); */
-	/* while (count_obj--) { */
-	/* 	addr = mman_reflect(cos_spd_id(), dest_spd, 0); */
-	/* 	/\* printc("evt mman_release: %p addr\n", (void *)addr); *\/ */
-	/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
-	/* } */
+	// remove the mapped page for mailbox spd
+	vaddr_t addr;
+	count_obj = mman_reflect(cos_spd_id(), dest_spd, 1);
+	printc("pte relfects on mmgr: %d objs (thd %d)\n", count_obj, cos_get_thd_id());
+	while (count_obj--) {
+		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
+		/* printc("evt mman_release: %p addr\n", (void *)addr); */
+		mman_release_page(cos_spd_id(), addr, dest_spd);
+	}
 
 	printc("pte reflection on evt_trigger_all (thd %d)\n\n", cos_get_thd_id());
 	evt_trigger_all(cos_spd_id());

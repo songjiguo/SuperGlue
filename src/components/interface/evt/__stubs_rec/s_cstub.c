@@ -96,8 +96,8 @@ long __sg_evt_wait(spdid_t spdid, long extern_evt)
 	/* struct csmapping_evt *csmap; */
 	
 	assert(extern_evt);
-	printc("\n\nevt ser: evt_wait %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
-	printc("from spd %d\n", spdid);
+	/* printc("\n\nevt ser: evt_wait %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
+	/* printc("from spd %d\n", spdid); */
 	
 	/* csmap = csmapping_lookup(cid); */
 	/* if (!csmap) { */

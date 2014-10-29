@@ -335,7 +335,7 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 		/* cap_entry->destination->reflection.cnt =  */
 		/* 	cap_entry->destination->fault.cnt; */
 		
-		printk("update all cap fault counter\n");
+		/* printk("update all cap fault counter\n"); */
 		for (i = 1; i < d_spd->ncaps ; i++) {
 			struct invocation_cap *cap = &d_spd->caps[i];
 			/* printk("cap->destination %d cap_entry->destination %d\n", */

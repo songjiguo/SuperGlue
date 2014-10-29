@@ -45,14 +45,6 @@
  * then no different where the fault happens !!!!
  */
 
-/* #define TEST_EVT_CREATE */
-/* #define TEST_EVT_TRIGGER_BEFORE */
-/* #define TEST_EVT_TRIGGER_AFTER */
-/* #define TEST_EVT_WAIT_BEFORE */
-/* #define TEST_EVT_WAIT_AFTER */
-/* #define TEST_EVT_FREE */
-
-/* #define TEST_EVT_SPLIT */  // not support this yet
 static int test_num = 0;
 
 //#define ACT_LOG
@@ -170,10 +162,6 @@ static void mapping_free(long extern_evt)
 
 	cvect_del(&evtmap_vect, e->curr_id);   // remove the current entry
 	cvect_del(&evtmap_vect, extern_evt);   // remove the original entry
-
-        /* for now, just keep allocating new id. Only delete all
-	 * unsued ids when there is no more id to be allocated */
-	/* ns_free(cos_spd_id(), extern_evt); */  
 }
 
 /* 
@@ -278,6 +266,11 @@ free_evt_err:
 	__evt_free(e);
 err:
 	goto done;
+}
+
+long c3_evt_split(spdid_t spdid, long parent, int group, int old_evtid)
+{
+	return 0;
 }
 
 /* See explanation for this API in client interface. Only called on
@@ -518,7 +511,16 @@ int evt_trigger(spdid_t spdid, long extern_evt)
 
 	lock_take(&evt_lock);
 
-	e = mapping_find(extern_evt);
+	/* Jiguo: evt_trigger can be called from a different spd where
+	 * the id mapping is not tracked. We add this additional
+	 * invocation to the name server here to get the actual server
+	 * side id --- TODO: use cache to speed up this process at the
+	 * price of more data bookkeeping here */
+	int actual_evtid = ns_lookup(cos_spd_id(), extern_evt);
+	assert(actual_evtid >= 1);  // the event has been freed by the woken thread ?
+	e = mapping_find(actual_evtid);
+
+	/* e = mapping_find(extern_evt); */  // Jiguo
 	if (NULL == e) {
 		printc("can not find event. Return.");
 		goto err;

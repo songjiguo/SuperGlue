@@ -1153,7 +1153,7 @@ int sched_reflection_component_owner(spdid_t spdid)
 	if (holder) ret = holder->id;
 
 
-	printc("sched_reflection_component_owner -> %d (thd %d)\n", ret, cos_get_thd_id());
+	/* printc("sched_reflection_component_owner -> %d (thd %d)\n", ret, cos_get_thd_id()); */
 	cos_sched_lock_release();
 
 	return ret;

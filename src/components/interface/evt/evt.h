@@ -1,6 +1,21 @@
 #ifndef   	EVT_H
 #define   	EVT_H
 
+/* #define TEST_EVT_SPLIT */
+/* #define TEST_EVT_CREATE */
+/* #define TEST_EVT_TRIGGER_BEFORE */
+/* #define TEST_EVT_TRIGGER_AFTER */
+#define TEST_EVT_WAIT_BEFORE
+/* #define TEST_EVT_WAIT_AFTER */
+/* #define TEST_EVT_FREE */
+
+/* #define BENCHMARK_MEAS_SPLIT */
+/* #define BENCHMARK_MEAS_CREATE */
+/* #define BENCHMARK_MEAS_TRIGGER */   // no need to measure this
+#define BENCHMARK_MEAS_WAIT
+/* #define BENCHMARK_MEAS_FREE */
+
+
 typedef enum {
 	EVT_NIL   = 0,
 	EVT_READ  = 0x1, 
@@ -12,6 +27,9 @@ typedef enum {
 
 // The following APIs have fault tolerance support
 long evt_split(spdid_t spdid, long parent_evt, int grp);
+
+long c3_evt_split(spdid_t spdid, long parent_evt, int grp, int old_evtid);
+
 void evt_free(spdid_t spdid, long extern_evt);
 long evt_wait(spdid_t spdid, long extern_evt);
 long evt_wait_n(spdid_t spdid, long extern_evt, int n);
@@ -20,18 +38,7 @@ int evt_trigger(spdid_t spdid, long extern_evt);
 // The following APIs have no fault tolerance support
 long evt_create(spdid_t spdid);
 
-/* get a new server side id for old id. The reason to have a new api
- * for recovery is that evt_trigger is a special api which can be
- * called from a different component that the event is not
- * created. This is a more general problem for any service requires a
- * global name space. For example, cbuf/cbufp is such service. Torrent
- * is a service that we always expect the operation on the object is
- * done in the same component that the object is created (e.g, tsplit,
- * tread, twrite, trelease are always in the same component)
-*/
-long evt_re_create(spdid_t spdid, long old_evtid);
 long evt_reflection(spdid_t spdid, long evtid);
-
 int evt_trigger_all(spdid_t spdid);  // trigger all blocked wait threads via evt_wait : Jiguo
 
 long evt_grp_wait(spdid_t spdid);

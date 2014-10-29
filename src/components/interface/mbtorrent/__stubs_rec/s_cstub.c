@@ -15,8 +15,8 @@ td_t __sg_tsplit(spdid_t spdid, cbuf_t cbid, int len)
 	d = cbuf2buf(cbid, len);
 	if (unlikely(!d)) return -5;
 
-	printc("__tsplit ser: spdid %d thd %d tid %d evtid %ld (cbid %d)\n", 
-	       spdid, cos_get_thd_id(), d->tid, d->evtid, cbid);
+	/* printc("__tsplit ser: spdid %d thd %d tid %d evtid %ld (cbid %d)\n",  */
+	/*        spdid, cos_get_thd_id(), d->tid, d->evtid, cbid); */
 
 	/* mainly to inform the compiler that optimizations are possible */
 	if (unlikely(d->len[0] != 0)) return -2; 
@@ -24,7 +24,7 @@ td_t __sg_tsplit(spdid_t spdid, cbuf_t cbid, int len)
 	if (unlikely(((int)(d->len[1] + sizeof(struct __sg_tsplit_data))) != len)) return -4;
 	if (unlikely(d->tid == 0)) return -EINVAL;
 
-	printc("server interface: calling tsplit....thd %d\n", cos_get_thd_id());
+	/* printc("server interface: calling tsplit....thd %d\n", cos_get_thd_id()); */
 	
 	return tsplit(spdid, d->tid, &d->data[0], 
 		      d->len[1] - d->len[0], d->tflags, d->evtid);
@@ -33,7 +33,7 @@ td_t __sg_tsplit(spdid_t spdid, cbuf_t cbid, int len)
 int
 __sg_treadp(spdid_t spdid, int tid, int __pad0, int __pad1, int *off_len)
 {
-	printc("server: treadp (thd %d from spd %d)\n", cos_get_thd_id(), spdid);	
+	/* printc("server: treadp (thd %d from spd %d)\n", cos_get_thd_id(), spdid); */
 	assert(tid);
 	return treadp(spdid, tid, &off_len[0], &off_len[1]);
 }

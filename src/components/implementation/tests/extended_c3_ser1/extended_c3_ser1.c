@@ -17,9 +17,9 @@ static int low = 13;
 static int mid = 12;
 static int hig = 11;
 
-#define EXAMINE_LOCK
-//#define EXAMINE_EVT
+//#define EXAMINE_LOCK
 //#define EXAMINE_TE
+#define EXAMINE_EVT
 
 #ifdef EXAMINE_LOCK
 #include <cos_synchronization.h>
@@ -117,9 +117,9 @@ static int test_num2 = 0;
 static void try_hp(void)
 {
 	while(test_num1++ < 10) {
-		printc("\n**** create (%d) ****\n", test_num1);
+		printc("\n**** split (%d) ****\n", test_num1);
 		printc("(ser1) thread h : %d is creating evts\n", cos_get_thd_id());
-		evt1 = evt_create(cos_spd_id());
+		evt1 = evt_split(cos_spd_id(), 0, 0);
 		assert(evt1 > 0);	
 
 		evt_wait(cos_spd_id(), evt1);

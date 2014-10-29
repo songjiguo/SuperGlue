@@ -12,6 +12,33 @@
 #include <cbuf.h>
 #include <evt.h>
 
+/* Note: when we test, we comment out the following in stkmgr.c
+   assert(stk_item->stk->thdid_owner != cos_get_thd_id()); */
+
+/* #define TEST_MBOX_TSPLIT_SERVER_BEFORE  // server side create */
+/* #define TEST_MBOX_TSPLIT_SERVER_AFTER  // server side create */
+/* #define TEST_MBOX_TSPLIT_CLIENT_BEFORE  // client side create */
+/* #define TEST_MBOX_TSPLIT_CLIENT_AFTER  // client side create */
+/* #define TEST_MBOX_TSPLIT_READY_BEFORE */
+/* #define TEST_MBOX_TSPLIT_READY_AFTER */
+
+/* #define TEST_MBOX_TREADP */
+/* #define TEST_MBOX_TWRITEP_BEFORE */
+/* #define TEST_MBOX_TWRITEP_AFTER */
+
+/* #define TEST_MBOX_TRELEASE_SERVER_BEFORE  // server side trelease */
+/* #define TEST_MBOX_TRELEASE_SERVER_AFTER  // server side trelease */
+/* #define TEST_MBOX_TRELEASE_CLIENT_BEFORE  // client side trelease */
+/* #define TEST_MBOX_TRELEASE_CLIENT_AFTER  // client side trelease */
+/* #define TEST_MBOX_TRELEASE_READY_BEFORE */
+/* #define TEST_MBOX_TRELEASE_READY_AFTER */
+
+
+/* #define BENCHMARK_MEAS_TSPLIT */
+/* #define BENCHMARK_MEAS_TREADP */
+/* #define BENCHMARK_MEAS_TWRITEP */
+/* #define BENCHMARK_MEAS_TRELEASE */
+
 /* torrent descriptor */
 typedef int td_t;
 static const td_t td_null = 0, td_root = 1;

@@ -27,13 +27,6 @@
 
 static int test_control = 1;
 
-/* #define TEST_LOCK_ALLOC */
-/* #define TEST_LOCK_PRETAKE */
-/* #define TEST_LOCK_TAKE_BEFORE */
-/* #define TEST_LOCK_TAKE_AFTER */
-/* #define TEST_LOCK_RELEASE_BEFORE */
-/* #define TEST_LOCK_RELEASE_AFTER */
-
 //#define ACT_LOG
 #ifdef ACT_LOG
 #define ACT_LOG_LEN 32

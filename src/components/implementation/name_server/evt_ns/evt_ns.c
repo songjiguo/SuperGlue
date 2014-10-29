@@ -24,24 +24,16 @@ static cos_lock_t uniq_map_lock;
 
 typedef int uid;
 
-COS_MAP_CREATE_STATIC(ns_evtids);
-
-/* A list that tracks all ids occupied by the same event */
 struct evt_node {
-	long id;
-	spdid_t spdid;
-        /* indicate that the client has received this id since the
-	 * evt_create might fail in evt_manager before it returns back
-	 * to the client, but after create the new id in name
-	 * server */
-	unsigned int received;  
-
-	/* see the explanation in client interface, this will keep how
-	 * many times a spd has failed before an object is rebuilt */
-	long ser_fcounter;
-
-	struct evt_node *next, *prev;
+	long id;      // client side id
+	long next_id; // current actual id
 };
+
+#define CSLAB_ALLOC(sz)   alloc_page()
+#define CSLAB_FREE(x, sz) free_page(x)
+#include <cslab.h>
+CSLAB_CREATE(evt, sizeof(struct evt_node));
+COS_MAP_CREATE_STATIC(ns_evtids);
 
 static long mapping_create(struct evt_node *e)
 {
@@ -52,7 +44,7 @@ static inline struct evt_node *mapping_find(long id)
 {
 	struct evt_node *e = cos_map_lookup(&ns_evtids, id);
 	if (NULL == e) return e;
-	printc("e->id %ld id %ld\n", e->id, id);
+	/* printc("e->id %ld id %ld\n", e->id, id); */
 	assert(e->id == id);
 	return e;
 }
@@ -64,26 +56,23 @@ static void mapping_free(long id)
 
 
 long
-ns_alloc(spdid_t spdid) 
+ns_alloc(spdid_t spdid)
 {
 	int ret = -1;
 	struct evt_node *en;
 
 	LOCK();
 
-	en = (struct evt_node *)malloc(sizeof(struct evt_node));
-	if (!en) goto done;
-	
-	INIT_LIST(en, next, prev);
-
+	en = cslab_alloc_evt();
+	assert(en);	
 	ret = mapping_create(en);
+	assert(ret >= 1);
 	en->id       = ret;
-	en->spdid    = spdid;
-	en->received = 0;     // client not see this id yet
-	en->ser_fcounter = 0;
-	printc("evt name server getting id %d\n", ret);
-done:
+	en->next_id  = ret;
+	/* printc("evt name server getting id %d\n", ret); */
+
 	UNLOCK();
+
 	return ret;
 }
 
@@ -95,23 +84,23 @@ int
 ns_free(spdid_t spdid, int id) 
 {
 	int ret = -1;
-	struct evt_node *head, *m;
+	struct evt_node *head, *m, *tmp;
 
-	printc("evt name server delete id %d\n", id);
+	/* printc("(1) evt name server delete id %d\n", id); */
 
 	LOCK();
-	
+
+	// the fault could happen after the entry has been removed!!!
 	m = mapping_find(id);
 	if (!m) goto done;
-	
-	while(!EMPTY_LIST(m, next, prev)) {
-		struct evt_node *en = FIRST_LIST(m, next, prev);
-		REM_LIST(en, next, prev);
-		mapping_free(en->id);
-		free(en);
+	if ((tmp = mapping_find(m->next_id)) && tmp != m) {
+		/* printc("(2) evt name server delete id %d\n", tmp->id); */
+		mapping_free(tmp->id);
+		cslab_free_evt(tmp);
 	}
-	mapping_free(m->id);	
-	free(m);
+	/* printc("(3) evt name server delete id %d\n", m->id); */
+	mapping_free(m->id);
+	cslab_free_evt(m);
 	ret = 0;
 done:
 	UNLOCK();
@@ -119,54 +108,32 @@ done:
 }
 
 /* this function links the new id with the client id, (after create
- * new id normally or due to a fault). For now, par is ser_fcounter
- * passed here by client interface 
-
- Note: the order in which entry is added does not matter, since we
-       always refer to the last added entry as long as the lock is
-       taken here (in the case of preemption in the client) */
+ * new id normally or due to a fault). */
 int
 ns_update(spdid_t spdid, int cli_id, int cur_id, long par) 
 {
-	int ret = -1;
-	struct evt_node *en_cli, *en_cur;
+	struct evt_node *en_cli, *en_cur, *tmp;
 
-	printc("evt_ns: ns_update\n");
+	/* printc("evt_ns: ns_update\n"); */
 
 	LOCK();
 
 	en_cli = mapping_find(cli_id);
-	if (unlikely(!en_cli)) goto done;
-
-	/* normal path on create */
-	if (cli_id == cur_id) {  
-		printc("set received for id %d\n", cli_id);
-		en_cli->received = 1; // now we know that client has seen this id
-		en_cli->ser_fcounter = par;
-		ret = 0;
-		goto done;
-	}
-	
-        /* fault path on create */
+	assert(en_cli);
 	en_cur = mapping_find(cur_id);
-	if (!en_cur) goto done;
-	en_cur->received     = 1; // now we know that client has seen this id after fault
-	printc("set event id %d 's ser_fcounter to be %ld\n", cur_id, par);
-	en_cur->ser_fcounter = par;
-
-	ADD_LIST(en_cli, en_cur, next, prev);
+	assert(en_cur && en_cur->next_id == en_cur->id);
 	
-	ret = 0;
-	/* struct evt_node *tmp = en_cli; */
-	/* printc("[[[]]]\n"); */
-	/* while(tmp) { */
-	/* 	printc("found id %ld on list\n", tmp->id); */
-	/* 	tmp = tmp->next; */
-	/* 	if (tmp == en_cli) break; */
-	/* } */
-done:
-	printc("evt_ns: ns_setid done\n");
+	if ((tmp = mapping_find(en_cli->next_id)) && tmp != en_cli) {
+		mapping_free(tmp->id);
+		cslab_free_evt(tmp);
+	}
+	// doubly-cyclic like point to each other
+	en_cli->next_id = en_cur->id;
+	en_cur->next_id = en_cli->id;
+	/* printc("evt_ns: ns_setid done\n"); */
+
 	UNLOCK();
+
 	return 0;
 }
 
@@ -177,17 +144,15 @@ ns_lookup(spdid_t spdid, int id)
 	int ret = 0;
 	struct evt_node *curr, *tmp;
 
-	printc("evt_ns: ns_lookup\n");
+	/* printc("evt_ns: ns_lookup (id %d)\n", id); */
 
 	LOCK();
 
 	curr = mapping_find(id);
-	if (!curr) goto done;
-	tmp = FIRST_LIST(curr, next, prev);
-	assert(tmp);
-	ret = tmp->id;
-	printc("evt_ns: ns_lookup done. Fonud id %d\n", ret);
-done:
+	assert(curr);
+	ret = curr->next_id;
+	/* printc("evt_ns: ns_lookup done. Fonud id %d\n", ret); */
+
 	UNLOCK();
 	return ret;
 }
@@ -196,24 +161,25 @@ done:
 int
 ns_invalidate() 
 {
-	int ret = -1;
-	int i;
-	struct evt_node *m;
+	/* int ret = -1; */
+	/* int i; */
+	/* struct evt_node *m; */
 	
-	printc("evt name server delete not recevied\n");
+	/* printc("evt name server delete not recevied\n"); */
 	
-	LOCK();
+	/* LOCK(); */
 	
-	for (i = 0 ; i < (int)COS_MAP_BASE ; i++) {
-		m = mapping_find(i);
-		if (m && !m->received) {
-			printc("delete a not received %d\n", i);
-			cos_map_del(&ns_evtids, i);
-		}
-	}
+	/* for (i = 0 ; i < (int)COS_MAP_BASE ; i++) { */
+	/* 	m = mapping_find(i); */
+	/* 	if (m && !m->received) { */
+	/* 		printc("delete a not received %d\n", i); */
+	/* 		cos_map_del(&ns_evtids, i); */
+	/* 	} */
+	/* } */
 
-	UNLOCK();
-	return ret;
+	/* UNLOCK(); */
+	/* return ret; */
+	return 0;
 }
 
 /* for now, this reflection function is used to check if an entry is
@@ -225,33 +191,34 @@ ns_invalidate()
 long
 ns_reflection(spdid_t spdid, int id, int type) 
 {
-	printc("evt name server reflection id %d\n", id);
+/* 	printc("evt name server reflection id %d\n", id); */
 
-	LOCK();	
+/* 	LOCK();	 */
 
-	struct evt_node *en, *cur;
-	long ret = -1;
+/* 	struct evt_node *en, *cur; */
+/* 	long ret = -1; */
 
-	switch (type) {
-	case 0:
-		if (!mapping_find(id)) goto done;
-		break;
-	case 1:
-		en = mapping_find(id);
-		assert(en);
-		cur = FIRST_LIST(en, next, prev);
-		assert(cur);
-		ret = cur->ser_fcounter;
-		printc("get ser_fcounter %ld (for old event id %d)\n", ret, id);
-		goto done;
-	default:
-		break;
-	}
+/* 	switch (type) { */
+/* 	case 0: */
+/* 		if (!mapping_find(id)) goto done; */
+/* 		break; */
+/* 	case 1: */
+/* 		en = mapping_find(id); */
+/* 		assert(en); */
+/* 		cur = FIRST_LIST(en, next, prev); */
+/* 		assert(cur); */
+/* 		ret = cur->ser_fcounter; */
+/* 		printc("get ser_fcounter %ld (for old event id %d)\n", ret, id); */
+/* 		goto done; */
+/* 	default: */
+/* 		break; */
+/* 	} */
 
-	ret = 0;
-done:
-	UNLOCK();
-	return ret;
+/* 	ret = 0; */
+/* done: */
+/* 	UNLOCK(); */
+/* 	return ret; */
+	return 0;
 }
 
 void 
@@ -259,7 +226,7 @@ cos_init(void *d)
 {
 	lock_static_init(&uniq_map_lock);
 	cos_map_init_static(&ns_evtids);
-	if (mapping_create(NULL) != 0) BUG();
+	if (mapping_create((void*)1) != 0) BUG();
 	return;
 }
  

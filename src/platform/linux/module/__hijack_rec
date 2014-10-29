@@ -1006,6 +1006,7 @@ static int
 cos_handle_page_fault(struct thread *thd, vaddr_t fault_addr, 
 		      int ecode, struct pt_regs *regs)
 {
+	printk("activate Composite page fault handler\n");
 	cos_record_fault_regs(thd, fault_addr, ecode, regs);
 	fault_ipc_invoke(thd, fault_addr, 0, regs, COS_FLT_PGFLT);
 	return 0;
@@ -1080,7 +1081,7 @@ int main_page_fault_interposition(struct pt_regs *rs, unsigned int error_code)
 	int ret = 1;
 
 	fault_addr = read_cr2();
-	
+
 	/* Jiguo:...comment out when: Fault injection will cause segment
 	 * fault if it faults at kernel address */
 	if (fault_addr > KERN_BASE_ADDR) goto linux_handler;

@@ -327,9 +327,9 @@ pop(struct pt_regs **regs_restore)
 #endif
 	if (unlikely(fault_ret = pop_fault_detect(inv_frame, curr_frame))){
 		/* KEVIN fill *regs_restore */
-		printk("thd %d: -> spd %d\n", 
-		       thd_get_id(curr), spd_get_index(curr_frame->spd));
-		printk("pop: detected fault\n");
+		/* printk("thd %d: -> spd %d\n",  */
+		/*        thd_get_id(curr), spd_get_index(curr_frame->spd)); */
+		/* printk("pop: detected fault\n"); */
 
 		pop_fault_update(inv_frame, curr_frame);
 
@@ -411,7 +411,8 @@ __fault_ipc_invoke(struct thread *thd, vaddr_t fault_addr, int flags, struct pt_
 	unsigned int fault_cap;
 	struct pt_regs *nregs;
 
-	if (dest_spd) printk("deskt spd %d \n", spd_get_index(dest_spd));
+	/* printk("in __fault_ipc_invoke\n"); */
+	/* if (dest_spd) printk("deskt spd %d \n", spd_get_index(dest_spd)); */
 
 	if (unlikely(dest_spd)) s = dest_spd;
 	else {
@@ -425,7 +426,7 @@ __fault_ipc_invoke(struct thread *thd, vaddr_t fault_addr, int flags, struct pt_
 	}
 	assert(fault_num < COS_FLT_MAX);
 
-	printk("cos: [[[ s ]]] %d \n", spd_get_index(s));
+	/* printk("cos: [[[ s ]]] %d \n", spd_get_index(s)); */
 
 	fault_cap = s->fault_handler[fault_num];
 	/* If no component catches this fault, upcall into the
@@ -452,11 +453,11 @@ __fault_ipc_invoke(struct thread *thd, vaddr_t fault_addr, int flags, struct pt_
 	/* print_regs(regs); */
 	a = ipc_walk_static_cap(fault_cap<<20, regs->sp, regs->ip, &r);
 
-	printk("found dest spd %d \n", spd_get_index(s));
-	printk("fault_num %d \n", fault_num);
-	printk("fault_cap %d \n", fault_cap);
-	printk("s %d r.spd_id %d a %p r.thd_id %d\n", 
-	       spd_get_index(s), r.spd_id, a, r.thd_id);
+	/* printk("found dest spd %d \n", spd_get_index(s)); */
+	/* printk("fault_num %d \n", fault_num); */
+	/* printk("fault_cap %d \n", fault_cap); */
+	/* printk("s %d r.spd_id %d a %p r.thd_id %d\n",  */
+	/*        spd_get_index(s), r.spd_id, a, r.thd_id); */
 
 	/* setup the registers for the fault handler invocation */
 	regs->ax = r.thd_id;  // Jiguo: why do we need pass the thread id?
@@ -501,7 +502,7 @@ thd_ipc_fault_notif(struct thread *thd, struct spd *dest_spd)
 static struct pt_regs *
 thd_ret_fault_notif(struct thread *thd, struct spd *dest_spd)
 {
-	printk("[[[[[[ cos: Fault is detected on POP ]]]]]]\n");
+	/* printk("[[[[[[ cos: Fault is detected on POP ]]]]]]\n"); */
 	__fault_ipc_invoke(thd, 0, 0, &thd->regs, COS_FLT_FLT_NOTIF, dest_spd);
 	return &thd->regs;
 }
@@ -758,7 +759,7 @@ cos_syscall_thd_cntl(int spd_id, int op_thdid, long arg1, long arg2)
 	{
 		int frame_offset = arg1;
 
-		printk("I am in frame_rem....thd %d curr %d frame offset %d\n",thd_get_id(thd), thd_get_id(curr), frame_offset);
+		/* printk("I am in frame_rem....thd %d curr %d frame offset %d\n",thd_get_id(thd), thd_get_id(curr), frame_offset); */
 
 		if (thd == curr && frame_offset < 1)       return -1;
 		if (thd_invstk_rem_nth(thd, frame_offset)) return -1;
