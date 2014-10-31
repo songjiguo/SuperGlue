@@ -5,14 +5,14 @@
 /* #define TEST_EVT_CREATE */
 /* #define TEST_EVT_TRIGGER_BEFORE */
 /* #define TEST_EVT_TRIGGER_AFTER */
-#define TEST_EVT_WAIT_BEFORE
+/* #define TEST_EVT_WAIT_BEFORE */
 /* #define TEST_EVT_WAIT_AFTER */
 /* #define TEST_EVT_FREE */
 
 /* #define BENCHMARK_MEAS_SPLIT */
 /* #define BENCHMARK_MEAS_CREATE */
 /* #define BENCHMARK_MEAS_TRIGGER */   // no need to measure this
-#define BENCHMARK_MEAS_WAIT
+/* #define BENCHMARK_MEAS_WAIT */
 /* #define BENCHMARK_MEAS_FREE */
 
 

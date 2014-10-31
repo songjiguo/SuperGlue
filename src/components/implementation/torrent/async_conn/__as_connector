@@ -58,6 +58,7 @@ __mbox_remove_cbufp(struct as_conn *ac)
 		}
 	}
 	
+	return;
 }
 
 static void 
@@ -257,6 +258,8 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	nt = tor_alloc(NULL, tflags);
 	if (!nt) ERR_THROW(-ENOMEM, done);
 	nt->evtid = evtid;
+
+	assert(!nt->data);
 
 	fsc = fsobj_path2obj(param, len, t->data, &parent, &subpath);
 	if (!fsc) {

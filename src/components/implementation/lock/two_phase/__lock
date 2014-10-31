@@ -253,7 +253,7 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	 * memory allocated on the individual thread's stacks. */
 	INIT_LIST(&blocked_desc, next, prev);
 	ADD_LIST(&ml->b_thds, &blocked_desc, next, prev);
-	//ml->owner = thd_id;
+	/* ml->owner = thd_id;  // Jiguo: why is this commented out in the main repo? */
 
 	RELEASE(spdid);
 
@@ -345,6 +345,9 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 
 		/* Wakeup the way we were put to sleep */
 		assert(tid != cos_get_thd_id());
+
+		/* printc("CPU %ld: %d waking up %d for lock %d\n", cos_cpuid(), cos_get_thd_id(), tid, lock_id); */
+
 		sched_wakeup(spdid, tid);
 
 		if (bt == next) break;

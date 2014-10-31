@@ -13,6 +13,8 @@
 #include <print.h>
 #include <cos_list.h>
 
+volatile unsigned long long overhead_start, overhead_end;
+
 extern int sched_component_take(spdid_t spdid);
 extern int sched_component_release(spdid_t spdid);
 #define C_TAKE(spdid) 	do { if (sched_component_take(spdid))    return 0; } while (0)
@@ -54,6 +56,8 @@ int __sg_lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short 
 	struct track_lock tl;
 	assert(spd && lock_id && thd);
 
+	rdtscll(overhead_start);
+
 	C_TAKE(cos_spd_id());
 	/* printc("thd %d is going to lock_component_take\n", cos_get_thd_id()); */
 
@@ -73,12 +77,22 @@ int __sg_lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short 
 	ADD_LIST(&spdlocks[spd].list_head, &tl, next, prev);
 	C_RELEASE(cos_spd_id());
 
+	rdtscll(overhead_end);
+	unsigned long long  tmp_overhead = overhead_end - overhead_start;
+
 	ret = lock_component_take(spd, lock_id, thd);
 	/* printc("\n<<<thd %d is back from lock_component_take>>>\n", cos_get_thd_id()); */
+
+	rdtscll(overhead_start);
+
 	C_TAKE(cos_spd_id());
 	/* printc("\n<<<thd %d is removing from lock_component_take list>>>\n", cos_get_thd_id()); */
 	REM_LIST(&tl, next, prev);
 	C_RELEASE(cos_spd_id());
+
+	rdtscll(overhead_end);
+	printc("lock_component_take interface overhead %llu\n", 
+	       overhead_end - overhead_start + tmp_overhead);
 
 	return ret;
 }

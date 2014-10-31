@@ -7,7 +7,7 @@
 
 #include <cos_component.h>
 #include <mbtorrent.h>
-#include <mbtorlib.h>
+#include <torlib.h>
 
 #include <cbuf.h>
 #include <print.h>
@@ -353,60 +353,6 @@ free:
 	goto done;
 }
 
-
-/* td_t  */
-/* tresplit(spdid_t spdid, td_t td, char *param,  */
-/* 	 int len, tor_flags_t tflags, long evtid, td_t old_td)  */
-/* { */
-/* 	td_t new_td = 0; */
-/* 	struct torrent *old, *new; */
-
-/* 	new_td = tsplit(spdid, td, param, len, tflags, evtid);  // lock is taken there */
-
-/* 	LOCK(); */
-/* 	printc("in retsplit: new id %d old td %d (thd %d)\n",  */
-/* 	       new_td, old_td, cos_get_thd_id()); */
-/* 	if (new_td <= 1) goto done;  // failed to tsplit a new one (e.g, one side has released) */
-/* 	assert(old_td > 1); */
-
-/* 	new = cvect_lookup(&tormap_vect, new_td); */
-/* 	assert(new); */
-/* 	printc("in tresplit: create a new torrent %d\n", new_td); */
-	
-/* 	/\* old event and caching... *\/ */
-/* 	old = cvect_lookup(&tormap_vect, old_td); */
-/* 	assert(!old); */
-/* 	old = malloc(sizeof(struct torrent)); */
-/* 	if (!old) goto err; */
-/* 	old->td     = old_td; */
-/* 	old->par_td = td; */
-/* 	old->cur_td = new_td; */
-/* 	cvect_add(&tormap_vect, old, old_td); */
-/* 	old = cvect_lookup(&tormap_vect, old_td); */
-/* 	assert(old); */
-
-/* 	printc("old torrent %d -- its new event id %d\n", old->td, old->cur_td); */
-/* done: */
-/* 	UNLOCK(); */
-/* 	return new_td; */
-/* err: */
-/* 	free(old); */
-/* 	new_td = 0; */
-/* 	goto done; */
-
-/* } */
-
-/* Check if a torrent entry of td is presented in mail box */
-int 
-treflection(spdid_t spdid, td_t td)
-{
-	int ret = 0;	
-	LOCK();
-	if (tor_lookup(td)) ret = 1;
-	UNLOCK();	
-	return ret;
-}
-
 int 
 tmerge(spdid_t spdid, td_t td, td_t td_into, char *param, int len)
 {
@@ -672,6 +618,9 @@ rd_reflection()
 
 	printc("pte reflection on evt_trigger_all (thd %d)\n\n", cos_get_thd_id());
 	evt_trigger_all(cos_spd_id());
+
+	/* thread might hold the lock when the server fails. We need
+	 * release these locks */
 	lock_trigger_all(cos_spd_id(), cos_spd_id());
 	return;
 }

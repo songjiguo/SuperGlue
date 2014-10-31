@@ -325,6 +325,12 @@ int lock_component_free(spdid_t spd, unsigned long lock_id)
 	return 0;
 }
 
+int 
+lock_reflection_component_owner(spdid_t spdid, unsigned long lock_id) 
+{
+	return 0;
+}
+
 #ifdef ACT_LOG
 unsigned long *lock_stats(spdid_t spdid, unsigned long *stats)
 {

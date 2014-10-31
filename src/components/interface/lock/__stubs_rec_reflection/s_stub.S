@@ -9,7 +9,8 @@
 .text	
 
 cos_asm_server_stub_spdid(lock_component_pretake)
-cos_asm_server_stub_spdid(lock_component_take)
+//cos_asm_server_stub_spdid(lock_component_take)
+cos_asm_server_fn_stub_spdid(lock_component_take, __sg_lock_component_take)
 cos_asm_server_stub_spdid(lock_component_release)
 
 cos_asm_server_stub_spdid(lock_component_alloc)
@@ -17,4 +18,6 @@ cos_asm_server_stub_spdid(lock_component_free)
 
 cos_asm_server_stub_spdid(lock_stats)
 cos_asm_server_stub_spdid(lock_stats_len)
-cos_asm_server_stub_spdid(lock_trigger_all)
+cos_asm_server_fn_stub_spdid(lock_trigger_all, __sg_lock_trigger_all)
+
+cos_asm_server_stub_spdid(lock_reflection_component_owner)

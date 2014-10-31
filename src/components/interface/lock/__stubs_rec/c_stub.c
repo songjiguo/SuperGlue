@@ -331,9 +331,15 @@ CSTUB_FN(int, lock_component_take) (struct usr_inv_cap *uc,
 
 	struct rec_data_lk *rd = NULL;
 
-        rd = rd_update(lock_id, LOCK_TAKE);
+	volatile unsigned long long lock_overhead_start, lock_overhead_end;
+	
+	rdtscll(lock_overhead_start);
+	rd = rd_update(lock_id, LOCK_TAKE);
 	assert(rd);
-
+	rdtscll(lock_overhead_end);
+	printc("lock_component_take interface overhead %llu\n", 
+	       lock_overhead_end - lock_overhead_start);		
+	
 #ifdef BENCHMARK_MEAS_TAKE
 	rdtscll(meas_end);
 	if (test_flag) {

@@ -22,5 +22,5 @@ cos_asm_server_stub_spdid(evt_stats)
 cos_asm_server_stub_spdid(evt_stats_len)
 
 cos_asm_server_fn_stub_spdid(evt_wait, __sg_evt_wait)
-cos_asm_server_fn_stub_spdid(evt_trigger_all, __sg_evt_trigger_all)	
+cos_asm_server_fn_stub_spdid(evt_trigger_all, __sg_evt_trigger_all)
 

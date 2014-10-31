@@ -1,5 +1,4 @@
-/**
- */
+/* mbox client test */
 
 #include <stdlib.h>
 #include <cos_component.h>
@@ -9,6 +8,9 @@
 #include <evt.h>
 #include <mbtorrent.h>
 #include <periodic_wake.h>
+
+
+volatile unsigned long long overhead_start, overhead_end;
 
 #define  ITER 10
 void parse_args(int *p, int *n)
@@ -53,11 +55,15 @@ void cos_init(void *arg)
 
 	evt = evt_split(cos_spd_id(), 0, 0);
 	assert(evt > 0);
+	printc("mb client: tsplit by thd %d in spd %ld\n", 
+	       cos_get_thd_id(), cos_spd_id());
+
 	serv = tsplit(cos_spd_id(), td_root, params1, strlen(params1), TOR_RW | TOR_WAIT, evt);
 	if (serv < 1) {
 		printc("UNIT TEST FAILED (3): split1 failed %d\n", serv); 
 		assert(0);
 	}
+
 	printc("mb client: thd %d 1\n", cos_get_thd_id());
 	evt_wait(cos_spd_id(), evt);
 	printc("mb client: thd %d 2\n", cos_get_thd_id());
@@ -78,13 +84,18 @@ void cos_init(void *arg)
 		rdtscll(end);
 		((u64_t *)d)[0] = end;
 		printc("cli:passed out data is %lld\n", ((u64_t *)d)[0]);
+
 		ret = twritep(cos_spd_id(), serv, cb1, sz);
+
 		cbufp_deref(cb1); 
 	}
 
 	printc("mb client: finally trelease by thd %d in spd %ld\n", 
 	       cos_get_thd_id(), cos_spd_id());
+	rdtscll(overhead_start);
 	trelease(cos_spd_id(), serv);
+	rdtscll(overhead_end);
+	printc("mbox client trelease overhead %llu\n", overhead_end - overhead_start);
 
 	return;
 

@@ -1,3 +1,5 @@
+/* mbox server test */
+
 #include <stdlib.h>
 #include <cos_component.h>
 #include <print.h>
@@ -6,6 +8,8 @@
 #include <evt.h>
 #include <mbtorrent.h>
 #include <periodic_wake.h>
+
+volatile unsigned long long overhead_start, overhead_end;
 
 #define ITER 10
 void parse_args(int *p, int *n)
@@ -53,6 +57,7 @@ void cos_init(void *arg)
 	assert(evt2 > 0);
 	printc("mb server: 1st tsplit by thd %d in spd %ld\n", 
 	       cos_get_thd_id(), cos_spd_id());
+
 	t1 = tsplit(cos_spd_id(), td_root, params1, strlen(params1), TOR_ALL | TOR_NONPERSIST | TOR_WAIT, evt1);
 	if (t1 < 1) {
 		printc("UNIT TEST FAILED (1): split failed %d\n", t1);
@@ -62,17 +67,21 @@ void cos_init(void *arg)
 	evt_wait(cos_spd_id(), evt1);
 	printc("mb server: params2 length %d\n", strlen(params2));
 	printc("mb server: thd %d (back from evt_wait %ld)\n", cos_get_thd_id(), evt1);
+
 	cli = tsplit(cos_spd_id(), t1, params2, strlen(params2), TOR_RW, evt2);
 	if (cli < 1) {
 		printc("UNIT TEST FAILED (2): split1 failed %d\n", cli);
 		assert(0);
 	}
+
 	j = 1000*ITER;
 	j = 10;
 	rdtscll(start);
 	for (i=0; i<j; i++) {
 		while (1) {
+
 			cb1 = treadp(cos_spd_id(), cli, &off, &sz);
+			/* printc("mbox server treadp rdtscll %llu\n", overhead_end); */
 			if ((int)cb1<0) evt_wait(cos_spd_id(), evt2);
 			else            break;
 		}
@@ -83,11 +92,18 @@ void cos_init(void *arg)
 
 	printc("mb server: 1st trelease by thd %d in spd %ld\n", 
 	       cos_get_thd_id(), cos_spd_id());
+
+	rdtscll(overhead_start);
 	trelease(cos_spd_id(), cli);
+	rdtscll(overhead_end);
+	printc("mbox server 1st trelease overhead %llu\n", overhead_end - overhead_start);
 
 	printc("mb server: 2nd trelease by thd %d in spd %ld\n", 
 	       cos_get_thd_id(), cos_spd_id());
+	rdtscll(overhead_start);
 	trelease(cos_spd_id(), t1);
+	rdtscll(overhead_end);
+	printc("mbox server 2nd trelease overhead %llu\n", overhead_end - overhead_start);
 
 	return;
 	rdtscll(end);

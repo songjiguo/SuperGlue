@@ -81,6 +81,8 @@
 
 #include <objtype.h>
 
+volatile unsigned long long mbox_overhead_start, mbox_overhead_end;
+
 extern int sched_component_take(spdid_t spdid);
 extern int sched_component_release(spdid_t spdid);
 #define C_TAKE(spdid) 	do { if (sched_component_take(spdid))    return; } while (0)
@@ -440,15 +442,6 @@ rd_update(td_t tid, int state)
 		 * parent id is not in mail box server, we know they
 		 * have not been rebuilt yet.
 		 */
-		/* if (treflection(cos_spd_id(), rd->s_tid) == 1) { */
-		/* 	printc("the protocol has been rebuilt!!\n"); */
-		/* 	break; */
-		/* } */
-		/* else { */
-		/* 	printc("the protocol has not been rebuilt!!\n"); */
-		/* 	rd_recover_state(rd); */
-		/* }		 */
-		// for now, just assume that tsplit->tread/twrite->trelease
 		rd_recover_state(rd);
 		break;
 	default:
@@ -538,6 +531,9 @@ redo:
 	}
         cbuf_free(cb);
 
+
+	rdtscll(mbox_overhead_start);
+	
 	// ret is server side id
 	ser_tid = ret;
 	/* printc("cli: tsplit create a new rd %d in spd %ld\n", ser_tid, cos_spd_id()); */
@@ -607,6 +603,12 @@ redo:
 
 	/* we return the entry's id allocated by map_rd_create, not
 	 * server side id */
+
+	rdtscll(mbox_overhead_end);
+	printc("tsplit interface overhead %llu\n", 
+	       mbox_overhead_end - mbox_overhead_start);		
+	
+
 	return cli_tid;
 }
 
@@ -619,6 +621,8 @@ CSTUB_FN(int, twritep)(struct usr_inv_cap *uc,
 	long fault = 0;
 
         struct rec_data_tor *rd = NULL;
+
+	rdtscll(mbox_overhead_start);
 redo:
         /* printc("<<< In: call twritep  (thread %d) >>>\n", cos_get_thd_id()); */
         rd = rd_update(c_tid, STATE_TWRITE);
@@ -633,6 +637,11 @@ redo:
 		/* printc("<<<unqi_id %d cbid %d sz %d>>>\n", idmapping->uniq_id, cbid, sz); */
 		if (uniq_map_add(cos_spd_id(), idmapping->uniq_id, cbid, sz)) assert(0);
 	}
+
+	rdtscll(mbox_overhead_end);
+	printc("twritep interface overhead %llu\n", 
+	       mbox_overhead_end - mbox_overhead_start);		
+		
 
 #ifdef BENCHMARK_MEAS_TWRITEP
 	rdtscll(meas_end);
@@ -696,11 +705,19 @@ redo:
 
 	// ret is the cbufid for mbox
 	if (ret > 0) {
+
+		rdtscll(mbox_overhead_start);
+
 		/* printc("server: treadp lookup uniqid for tid %d\n", rd->s_tid); */
 		struct tid_uniqid_data *idmapping = tiduniq_lookup(rd->s_tid);
 		assert(idmapping);
 		/* printc("unqi_id %d\n", idmapping->uniq_id); */
 		if (uniq_map_del(cos_spd_id(), idmapping->uniq_id, ret)) assert(0);
+
+		rdtscll(mbox_overhead_end);
+		printc("treadp interface overhead %llu\n", 
+		       mbox_overhead_end - mbox_overhead_start);		
+	
 	}
 
 
@@ -742,7 +759,14 @@ redo:
 		goto redo;
 	}
 	
+	rdtscll(mbox_overhead_start);
+
 	map_rd_delete(c_tid);
+	// TODO: delete un uniq_map as well? keep it around for now
+
+	rdtscll(mbox_overhead_end);
+	printc("trelease interface overhead %llu\n", 
+	       mbox_overhead_end - mbox_overhead_start);		
 
 	return;
 }

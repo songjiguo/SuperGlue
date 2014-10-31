@@ -11,8 +11,8 @@
 
 // test evt: 10 and 13, 11 and 12
 
-//#define EXAMINE_LOCK
-#define EXAMINE_EVT
+#define EXAMINE_LOCK
+//#define EXAMINE_EVT
 
 long passed_evtid;
 
@@ -31,29 +31,29 @@ volatile int spin = 1;
 
 static void try_hp(void)
 {
-	printc("thread h (in spd %ld) : %d is doing something\n", 
-	       cos_spd_id(), cos_get_thd_id());
+	/* printc("thread h (in spd %ld) : %d is doing something\n",  */
+	/*        cos_spd_id(), cos_get_thd_id()); */
 
 	spin = 0;
-	printc("thread h (in spd %ld) : %d try to take lock\n", 
-	       cos_spd_id(), cos_get_thd_id());
+	/* printc("thread h (in spd %ld) : %d try to take lock\n",  */
+	/*        cos_spd_id(), cos_get_thd_id()); */
 	LOCK_TAKE();
-	printc("thread h (in spd %ld) : %d has the lock\n", 
-	       cos_spd_id(), cos_get_thd_id());
+	/* printc("thread h (in spd %ld) : %d has the lock\n",  */
+	/*        cos_spd_id(), cos_get_thd_id()); */
 	LOCK_RELEASE();
-	printc("thread h (in spd %ld) : %d released lock\n", 
-	       cos_spd_id(), cos_get_thd_id());
+	/* printc("thread h (in spd %ld) : %d released lock\n",  */
+	/*        cos_spd_id(), cos_get_thd_id()); */
 
 	return;
 }
 
 static void try_mp(void)
 {
-	printc("thread m : %d try to take lock\n", cos_get_thd_id());
+	/* printc("thread m : %d try to take lock\n", cos_get_thd_id()); */
 	LOCK_TAKE();
-	printc("thread m : %d has the lock\n", cos_get_thd_id());
+	/* printc("thread m : %d has the lock\n", cos_get_thd_id()); */
 	LOCK_RELEASE();
-	printc("thread m : %d released lock\n", cos_get_thd_id());
+	/* printc("thread m : %d released lock\n", cos_get_thd_id()); */
 
 	return;
 }
@@ -61,20 +61,20 @@ static void try_mp(void)
 
 static void try_lp(void)
 {
-	printc("<<< thread l (in spd %ld) : %d is doing something \n", 
-	       cos_spd_id(), cos_get_thd_id());
-	printc("thread l (in spd %ld) : %d try to take lock\n", 
-	       cos_spd_id(), cos_get_thd_id());
+	/* printc("<<< thread l (in spd %ld) : %d is doing something \n",  */
+	/*        cos_spd_id(), cos_get_thd_id()); */
+	/* printc("thread l (in spd %ld) : %d try to take lock\n",  */
+	/*        cos_spd_id(), cos_get_thd_id()); */
 	LOCK_TAKE();
-	printc("thread l (in spd %ld) : %d has the lock\n", 
-	       cos_spd_id(), cos_get_thd_id());
-	printc("thread l (in spd %ld) : %d spinning\n", 
-	       cos_spd_id(), cos_get_thd_id());
+	/* printc("thread l (in spd %ld) : %d has the lock\n",  */
+	/*        cos_spd_id(), cos_get_thd_id()); */
+	/* printc("thread l (in spd %ld) : %d spinning\n",  */
+	/*        cos_spd_id(), cos_get_thd_id()); */
 	while (spin);
-	printc("thread l (in spd %ld): %d is doing something\n", 
-	       cos_spd_id(), cos_get_thd_id());
-	printc("thread l (in spd %ld): %d try to release lock\n", 
-	       cos_spd_id(), cos_get_thd_id());
+	/* printc("thread l (in spd %ld): %d is doing something\n",  */
+	/*        cos_spd_id(), cos_get_thd_id()); */
+	/* printc("thread l (in spd %ld): %d try to release lock\n",  */
+	/*        cos_spd_id(), cos_get_thd_id()); */
 	LOCK_RELEASE();
 
 	return;

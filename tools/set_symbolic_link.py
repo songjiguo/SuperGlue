@@ -61,6 +61,7 @@ lock_c = 'lock.c'
 
 #EVT
 evt_component_path = '/src/components/implementation/evt/edge/'
+evtgrp_component_path = '/src/components/implementation/evt/edge_grp/'
 evt_rec_c = '__evt_rec'
 evt_nor_c = '__evt'
 evt_c = 'evt.c'
@@ -233,7 +234,13 @@ def set_interface(name, par):
 
         if (name == 'mbtorrent') or (name == 'periodic_wake'):
             set_reflection_interface('evt', ret)
-            
+
+        if (name == 'lock') or (name == 'evt'):
+            set_reflection_interface('sched', ret)
+
+        if (name == 'mbtorrent') or (name == 'evt'):
+            set_reflection_interface('lock', ret)
+
         return ret
 
 def set_link(name, c_path, dest, nor, rec, par):
@@ -337,6 +344,7 @@ def main():
         if (service_names[i] == 'evt'):
             print service_names[i]
             set_link(service_names[i], evt_component_path, evt_c, evt_nor_c, evt_rec_c, 0)
+            set_link(service_names[i], evtgrp_component_path, evt_c, evt_nor_c, evt_rec_c, 0)
             print
             
         # # component CBUF

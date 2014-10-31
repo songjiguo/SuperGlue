@@ -62,10 +62,10 @@ static unsigned long fcounter;
 /* recovery data structure evt service */
 struct rec_data_evt {
 	spdid_t       spdid;
-	unsigned long c_evtid;
-	unsigned long s_evtid;
+	long          c_evtid;
+	long          s_evtid;
 
-	unsigned long p_evtid;  // parent event id (eg needs this)
+	long          p_evtid;  // parent event id (eg needs this)
 	int grp;   // same as above
 
 	unsigned int  state;
@@ -118,8 +118,8 @@ rdevt_dealloc(struct rec_data_evt *rd)
 }
 
 static void 
-rd_cons(struct rec_data_evt *rd, spdid_t spdid, unsigned long c_evtid, 
-	unsigned long s_evtid, unsigned long parent, int grp, int state)
+rd_cons(struct rec_data_evt *rd, spdid_t spdid, long c_evtid, 
+	long s_evtid, long parent, int grp, int state)
 {
 	assert(rd);
 	
@@ -304,7 +304,7 @@ CSTUB_FN(long, evt_create) (struct usr_inv_cap *uc,
 	long ret;
 
         struct rec_data_evt *rd = NULL;
-        unsigned long ser_eid, cli_eid;
+        long ser_eid, cli_eid;
 redo:
         /* printc("evt cli: evt_create %d\n", cos_get_thd_id()); */
 
@@ -365,7 +365,7 @@ CSTUB_FN(long, evt_split) (struct usr_inv_cap *uc,
 	long ret;
 
         struct rec_data_evt *rd = NULL;
-        unsigned long ser_eid, cli_eid;
+        long ser_eid, cli_eid;
 
         if (first == 0) {
 		cvect_init_static(&rec_evt_map);

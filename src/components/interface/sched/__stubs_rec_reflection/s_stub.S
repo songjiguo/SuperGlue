@@ -9,7 +9,7 @@
 .text	
 
 cos_asm_server_stub_spdid(sched_wakeup)
-cos_asm_server_stub_spdid(sched_block)
+//cos_asm_server_stub_spdid(sched_block)
 cos_asm_server_stub_spdid(sched_timeout)
 cos_asm_server_stub_spdid(sched_timeout_thd)
 cos_asm_server_stub_spdid(sched_create_net_acap)
@@ -26,7 +26,8 @@ cos_asm_server_stub(sched_priority)
 cos_asm_server_stub_spdid(sched_component_take)
 cos_asm_server_stub_spdid(sched_component_release)
 
-/* Jiguo: this is used to reflect the owner of a critical section. We
-	do not need this on the noraml path. Only used by C3 such as
-	pte, lock */
+/* Jiguo: this is used to reflect the owner of a critical section  */
 cos_asm_server_stub(sched_reflection_component_owner)
+
+cos_asm_server_fn_stub_spdid(sched_block, __sg_sched_block)	
+cos_asm_server_fn_stub_spdid(sched_reflect, __sg_sched_reflect)

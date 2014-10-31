@@ -23,6 +23,8 @@
 
 #include <objtype.h>
 
+volatile unsigned long long overhead_start, overhead_end;
+
 extern void *alloc_page(void);
 extern void free_page(void *ptr);
 
@@ -93,7 +95,8 @@ int __sg_sched_block(spdid_t spdid, int dependency_thd)
 	struct blocked_thd blk_thd;
 	struct rec_data_blk *rd = NULL;
 
-#ifdef REFLECTION
+	rdtscll(overhead_start);
+
 	// add to list
 	cos_sched_lock_take();
 
@@ -109,16 +112,23 @@ int __sg_sched_block(spdid_t spdid, int dependency_thd)
 	rdblk_addblk(rd, &blk_thd, dependency_thd);
 	cos_sched_lock_release();
 
+	rdtscll(overhead_end);
+	unsigned long long  tmp_overhead = overhead_end - overhead_start;
+
 	sched_block(spdid, dependency_thd);
+
+	rdtscll(overhead_start);
 
 	// remove from list in both normal path and reflect path
 	cos_sched_lock_take();
 	if (!EMPTY_LIST(&blk_thd, next, prev)) REM_LIST(&blk_thd, next, prev);
 	/* printc("sched_block: removing...blkthd %p (thd %d)\n", &blk_thd, cos_get_thd_id()); */
 	cos_sched_lock_release();
-#else
-	sched_block(spdid, dependency_thd);
-#endif
+
+	rdtscll(overhead_end);
+	printc("sched_block interface overhead %llu\n", 
+	       overhead_end - overhead_start + tmp_overhead);
+
 	return 0;
 }
 

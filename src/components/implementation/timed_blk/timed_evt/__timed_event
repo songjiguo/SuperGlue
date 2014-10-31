@@ -227,7 +227,7 @@ static void __event_expiration(event_time_t time, struct thread_event *events)
 		 * threads. */
 		
 		// Jiguo: wake up the thread through evt
-		printc("timed_evt trying to wake up a thread\n");
+		/* printc("timed_evt trying to wake up a thread\n"); */
 		if (b) evt_trigger(spdid, tmp->evt);
 
 	}

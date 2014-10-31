@@ -14,6 +14,11 @@
 #include <evt.h>
 #include <print.h>
 
+volatile unsigned long long overhead_start, overhead_end;
+
+#include <cos_synchronization.h>
+cos_lock_t evt_interface_lock;
+
 extern int sched_component_take(spdid_t spdid);
 extern int sched_component_release(spdid_t spdid);
 #define C_TAKE(spdid) 	do { if (sched_component_take(spdid))    return 0; } while (0)
@@ -59,13 +64,23 @@ te_dealloc(struct trigger_evt *te)
 	return;
 }
 
+static int first_interface_lock = 0;
+
 long __sg_evt_wait(spdid_t spdid, long extern_evt)
 {
 	long ret = 0;
 	struct trigger_evt te;
 	assert(spdid && extern_evt);
 
-	C_TAKE(cos_spd_id());
+	if (unlikely(!first_interface_lock)) {
+		first_interface_lock = 1;
+		lock_static_init(&evt_interface_lock);
+	}
+
+	rdtscll(overhead_start);
+
+	/* C_TAKE(cos_spd_id()); */
+	lock_take(&evt_interface_lock);
 	/* printc("thd %d is going to evt_wait\n", cos_get_thd_id()); */
 
 	if (unlikely(!evts_head)) {
@@ -80,17 +95,26 @@ long __sg_evt_wait(spdid_t spdid, long extern_evt)
 	/* printc("add to the list\n"); */
 	ADD_LIST(evts_head, &te, next, prev);
 	/* printc("add to the list done %p \n", (void *)evts_head->next->evtid); */
+	lock_release(&evt_interface_lock);
+	/* C_RELEASE(cos_spd_id()); */
 	
-	C_RELEASE(cos_spd_id());
+	rdtscll(overhead_end);
+	unsigned long long  tmp_overhead = overhead_end - overhead_start;
+
 	ret = evt_wait(spdid, extern_evt);
-	C_TAKE(cos_spd_id());
 
+	rdtscll(overhead_start);
+	/* C_TAKE(cos_spd_id()); */
+	lock_take(&evt_interface_lock);
 	/* printc("return from evt_wait....(thd %d)\n", cos_get_thd_id()); */
-
         /* te is still on stack and will be popped off when return */
 	REM_LIST(&te, next, prev);  	
+	lock_release(&evt_interface_lock);
+	/* C_RELEASE(cos_spd_id()); */
+	rdtscll(overhead_end);
+	printc("evt_wait interface overhead %llu\n", 
+	       overhead_end - overhead_start + tmp_overhead);
 
-	C_RELEASE(cos_spd_id());
 	return ret;
 }
 
@@ -100,8 +124,14 @@ int __sg_evt_trigger_all(spdid_t spdid)
 	long ret = 0;
 	
 	/* printc("thread %d is going to trigger all events\n", cos_get_thd_id()); */
+
+	if (unlikely(!first_interface_lock)) {
+		first_interface_lock = 1;
+		lock_static_init(&evt_interface_lock);
+	}
 	
-	C_TAKE(cos_spd_id());
+	/* C_TAKE(cos_spd_id()); */
+	lock_take(&evt_interface_lock);
 
 	/* evt_trigger evt_ids tracked for all thd block waited
 	 * through this interface */
@@ -117,6 +147,7 @@ int __sg_evt_trigger_all(spdid_t spdid)
 	/* printc("trigger all events done (thd %d)\n\n", cos_get_thd_id()); */
 
 done:
-	C_RELEASE(cos_spd_id());
+	/* C_RELEASE(cos_spd_id()); */
+	lock_release(&evt_interface_lock);
 	return ret;
 }
