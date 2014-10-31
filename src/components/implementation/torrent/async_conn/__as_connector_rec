@@ -400,28 +400,34 @@ trelease(spdid_t spdid, td_t td)
 	}
 #endif
 
+	printc("In trelease 1 (thd %d)\n", cos_get_thd_id());
 	t = tor_lookup(td);
 	if (!t) goto done;
 
+	printc("In trelease 2 (thd %d)\n", cos_get_thd_id());
 	/* TODO: add TOR_NONPERSIST: on release, remove from the
 	 * namespace (if no existing references to the resource) */
 
 	if (t->flags & TOR_SPLIT) { 
+		printc("In trelease 3 (thd %d)\n", cos_get_thd_id());
 		struct fsobj *fsc;
 		fsc = (struct fsobj *)t->data;
 		fsobj_rem(fsc, fsc->parent);
 		fsobj_release(fsc);
 	} else {
+		printc("In trelease 4 (thd %d)\n", cos_get_thd_id());
 		struct as_conn *ac = t->data;
 		int other = 1; 	/* does the other torrent exist? */
 
 		/* FIXME: add calls to __mbox_remove_cbufp */
 		ac->status = -EPIPE;
 		if (ac->ts[0] == t) {
+			printc("In trelease 4.5 (thd %d)\n", cos_get_thd_id());
 			ac->ts[0] = NULL;
 			if (!ac->ts[1]) other = 0;
 			else evt_trigger(cos_spd_id(), ac->ts[1]->evtid);
 		} else if (ac->ts[1] == t) {
+			printc("In trelease 4.6 (thd %d)\n", cos_get_thd_id());
 			ac->ts[1] = NULL;
 			if (!ac->ts[0]) other = 0;
 			else evt_trigger(cos_spd_id(), ac->ts[0]->evtid);
@@ -436,11 +442,14 @@ trelease(spdid_t spdid, td_t td)
 			  free(rb->b);
 			  rb = &ac->rbs[1];
 			  free(rb->b);*/
+
+			printc("In trelease 4 (thd %d)\n", cos_get_thd_id());
 			free(ac->cbs[0].ring);
 			free(ac->cbs[1].ring);
 			free(ac);
 		}
 	}
+	printc("In trelease 5 (thd %d)\n", cos_get_thd_id());
 	tor_free(t);
 
 

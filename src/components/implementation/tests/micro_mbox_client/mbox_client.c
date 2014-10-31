@@ -84,7 +84,7 @@ void cos_init(void *arg)
 		rdtscll(end);
 		((u64_t *)d)[0] = end;
 		printc("cli:passed out data is %lld\n", ((u64_t *)d)[0]);
-
+		printc("cli:passed out data in cbuf %d\n", cb1);
 		ret = twritep(cos_spd_id(), serv, cb1, sz);
 
 		cbufp_deref(cb1); 
@@ -92,6 +92,8 @@ void cos_init(void *arg)
 
 	printc("mb client: finally trelease by thd %d in spd %ld\n", 
 	       cos_get_thd_id(), cos_spd_id());
+
+	evt_wait(cos_spd_id(), evt);  // test only
 	rdtscll(overhead_start);
 	trelease(cos_spd_id(), serv);
 	rdtscll(overhead_end);

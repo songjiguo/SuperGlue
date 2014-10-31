@@ -74,14 +74,19 @@ CSTUB_FN(int, tmerge)(struct usr_inv_cap *uc,
 	return ret;
 }
 
+/* #pragma GCC push_options */
+/* #pragma GCC optimize ("O0") */
 CSTUB_FN(int, treadp)(struct usr_inv_cap *uc,
 		spdid_t spdid, td_t td, int *off, int *sz)
 {
 	int ret;
 	long fault = 0;
+	
 	CSTUB_INVOKE_3RETS(ret, fault, *off, *sz, uc, 2, spdid, td);
+
 	return ret;
 }
+/* #pragma GCC pop_options	 */
 
 CSTUB_FN(int, tread)(struct usr_inv_cap *uc,
 		spdid_t spdid, td_t td, int cbid, int sz)

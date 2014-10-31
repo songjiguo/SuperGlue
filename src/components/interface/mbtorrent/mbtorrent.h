@@ -22,7 +22,7 @@
 /* #define TEST_MBOX_TSPLIT_READY_BEFORE */
 /* #define TEST_MBOX_TSPLIT_READY_AFTER */
 
-/* #define TEST_MBOX_TREADP */
+#define TEST_MBOX_TREADP
 /* #define TEST_MBOX_TWRITEP_BEFORE */
 /* #define TEST_MBOX_TWRITEP_AFTER */
 

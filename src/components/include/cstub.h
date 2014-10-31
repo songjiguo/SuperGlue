@@ -49,7 +49,11 @@
  */
 #define CSTUB_ASM_OUT(_ret, _fault) "=a" (_ret), "=c" (_fault)
 #define CSTUB_ASM_OUT_3RETS(_ret0, _fault, _ret1, _ret2) \
-	"=a" (_ret0), "=c" (_fault), "=b" (_ret1), "=d" (_ret2)
+	"=a" (_ret0), "=c" (_fault), "=b" (_ret1), "=D" (_ret2)
+// Jiguo: above 3RETS needs sepcifically not clobber ecx and edi
+/* #define CSTUB_ASM_OUT(_ret, _fault) "=a" (_ret), "=c" (_fault) */
+/* #define CSTUB_ASM_OUT_3RETS(_ret0, _fault, _ret1, _ret2) \ */
+/* 	"=a" (_ret0), "=c" (_fault), "=b" (_ret1), "=d" (_ret2) */
 
 /* input registers */
 #define CSTUB_ASM_IN_0(_uc) "a" (_uc->cap_no)
@@ -91,26 +95,30 @@
 	"movl %%esi, %2\n\t" \
 	"movl %%edi, %3\n\t" \
 
-#define CSTUB_ASM(_narg, _ret, _fault, ...) \
-	__asm__ __volatile__( \
-		CSTUB_ASM_PRE_##_narg() \
-		CSTUB_ASM_BODY() \
-		CSTUB_ASM_POST_##_narg() \
-		: CSTUB_ASM_OUT(_ret, _fault) \
+#define CSTUB_ASM(_narg, _ret, _fault, ...)	    \
+	__asm__ __volatile__(			    \
+		CSTUB_ASM_PRE_##_narg()		    \
+		CSTUB_ASM_BODY()		    \
+		CSTUB_ASM_POST_##_narg()	    \
+		: CSTUB_ASM_OUT(_ret, _fault)	    \
 		: CSTUB_ASM_IN_##_narg(__VA_ARGS__) \
-		: CSTUB_ASM_CLOBBER_##_narg() \
+		: CSTUB_ASM_CLOBBER_##_narg()	    \
 	)
 
-#define CSTUB_ASM_3RETS(_narg, _ret0, _fault, _ret1, _ret2, ...) \
-	__asm__ __volatile__( \
-		CSTUB_ASM_PRE_3RETS_##_narg() \
-		CSTUB_ASM_BODY_3RETS() \
-		CSTUB_ASM_POST_3RETS_##_narg() \
-		: CSTUB_ASM_OUT_3RETS(_ret0, _fault, _ret1, _ret2) \
-		: CSTUB_ASM_IN_##_narg(__VA_ARGS__) \
-		: CSTUB_ASM_CLOBBER_4()		    \
-	)
-/* : CSTUB_ASM_CLOBBER_##_narg() \ */  //Jiguo: this used to be used for 3RETS
+#define CSTUB_ASM_3RETS(_narg, _ret0, _fault, _ret1, _ret2, ...)	\
+	__asm__ __volatile__(						\
+		CSTUB_ASM_PRE_3RETS_##_narg()				\
+		CSTUB_ASM_BODY_3RETS()					\
+		CSTUB_ASM_POST_3RETS_##_narg()				\
+		: CSTUB_ASM_OUT_3RETS(_ret0, _fault, _ret1, _ret2)	\
+		: CSTUB_ASM_IN_##_narg(__VA_ARGS__)			\
+		: CSTUB_ASM_CLOBBER_3()					\
+		)
+/* : CSTUB_ASM_CLOBBER_3()		    \ */
+/* Jiguo: this used to be used for 3RETS, however, the clobber list
+ * should not include edi. So it should be CSTUB_ASM_CLOBBER_3(), not
+ * CSTUB_ASM_CLOBBER_2()  */
+/* : CSTUB_ASM_CLOBBER_##_narg() \ */  
 
 /* Use CSTUB_INVOKE() to make a capability invocation with _uc.
  * 	_ret: output return variable

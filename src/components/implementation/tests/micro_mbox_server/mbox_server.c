@@ -79,12 +79,13 @@ void cos_init(void *arg)
 	rdtscll(start);
 	for (i=0; i<j; i++) {
 		while (1) {
-
+			// not sure why we need off return? not used when read cbufp2buf
 			cb1 = treadp(cos_spd_id(), cli, &off, &sz);
 			/* printc("mbox server treadp rdtscll %llu\n", overhead_end); */
 			if ((int)cb1<0) evt_wait(cos_spd_id(), evt2);
 			else            break;
 		}
+		printc("server treadp: off %d sz %d (return cbuf %d)\n", off, sz, cb1);
 		buf = cbufp2buf(cb1,sz);
 		printc("ser:received in data is %lld (sz %d)\n", ((u64_t *)buf)[0], sz);
 		cbufp_deref(cb1);
@@ -100,11 +101,13 @@ void cos_init(void *arg)
 
 	printc("mb server: 2nd trelease by thd %d in spd %ld\n", 
 	       cos_get_thd_id(), cos_spd_id());
+
+	evt_wait(cos_spd_id(), evt1);  // test only
 	rdtscll(overhead_start);
 	trelease(cos_spd_id(), t1);
 	rdtscll(overhead_end);
 	printc("mbox server 2nd trelease overhead %llu\n", overhead_end - overhead_start);
-
+	
 	return;
 	rdtscll(end);
 	printc("Server rcv %d times %llu\n", j, (end-start)/j);
