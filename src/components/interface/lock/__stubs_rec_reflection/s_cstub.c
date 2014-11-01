@@ -122,7 +122,6 @@ int __sg_lock_trigger_all(spdid_t spdid, int dest)
 	if (unlikely(!list_head->next)) goto done;
 	if (unlikely(EMPTY_LIST(list_head, next, prev))) goto done;
 	
-	int test = 0;
 	for (tl = FIRST_LIST(list_head, next, prev);
 	     tl != list_head;) {
 		/* printc("found lock id %ld to release\n", tl->lockid); */
@@ -131,7 +130,6 @@ int __sg_lock_trigger_all(spdid_t spdid, int dest)
 		lock_component_release(dest, tl->lockid);
 		C_TAKE(cos_spd_id());
 		tl = tmp;
-		if (test++ > 5) assert(0);  // testing only, can be more than 5 of course
 	}
 	/* printc("all locks are released done (thd %d)\n\n", cos_get_thd_id()); */
 	

@@ -11,8 +11,8 @@
 
 // test evt: 10 and 13, 11 and 12
 
-#define EXAMINE_LOCK
-//#define EXAMINE_EVT
+//#define EXAMINE_LOCK
+#define EXAMINE_EVT
 
 long passed_evtid;
 

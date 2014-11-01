@@ -1127,12 +1127,11 @@ int sched_component_release(spdid_t spdid)
 
 	// Jiguo: do not print this msg since we might reflect and release the lock
 	if (sched_release_crit_sect(spdid, curr)) {
-		/* printc("fprr: error releasing spd %d's critical section (contended %d)\n",  */
-		/*        spdid, curr->contended_component); */
+		printc("fprr: error releasing spd %d's critical section (contended %d)\n",
+		       spdid, curr->contended_component);
 	}
 	sched_switch_thread(0, NULL_EVT);
 	assert(!sched_thd_dependent(curr));
-
 	return 0;
 }
 

@@ -15,36 +15,35 @@
 
 #include <failure_notif.h>
 
-/* FIXME: should have a set of saved fault regs per thread. */
-// when test mailbox, why spdid is 14, but reg->bx and cx are 7?
+/* Here is the special case: when a thread faults in its home
+ * component or when a thread returns/switches back to the faulty
+ * component, it can not do the replay by removing the current
+ * invocation frame (and minus ip by 8) since the current invocation
+ * frame is the last one. Current solution is to block that thread
+ * after re-initialize the faulty component and run the regenerated
+ * thread in the rebooted (since the home spd will create a
+ * thread). TODO: kill this thread instead */
+
 int fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 {
 	unsigned long r_ip; 	/* the ip to return to */
-	/* printc("pgfault notifier: spdid %d fault_addr %p flags %d ip %p (thd %d)\n", spdid, fault_addr, flags, ip, cos_get_thd_id()); */
-
+	printc("pgfault notifier: spdid %d fault_addr %p flags %d ip %p (thd %d)\n", spdid, fault_addr, flags, ip, cos_get_thd_id());
+	
 	int tid = cos_get_thd_id();
-
+	
 	/* if (spdid != cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) { */
 	assert(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0));
 	assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));
 	assert(!cos_thd_cntl(COS_THD_INVFRM_SET_IP, tid, 1, r_ip-8));
 	/* } else { */
 
-
-	// if this is timer thread, just block!!!!
-
 	/* if (spdid == cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) { */
 	/* 	printc("set thd %d 's eip (find next)\n", tid); */
-	/* 	/\* a temporary solution for now, when the thread */
-	/* 	 * faults in its home component. Block the current thd */
-	/* 	 * and run the regenerated thread in the same */
-	/* 	 * spd. TODO: kill this thread instead *\/ */
 	/* 	sched_block(cos_spd_id(), 0); */
 	/* } */
 
 	return 0;
 }
-
 
 static int test_num = 0;
 

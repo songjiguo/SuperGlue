@@ -20,9 +20,9 @@ static int low = 13;
 static int mid = 12;
 static int hig = 11;
 
-#define EXAMINE_TE
+//#define EXAMINE_TE
 //#define EXAMINE_LOCK
-//#define EXAMINE_EVT
+#define EXAMINE_EVT
 
 #ifdef EXAMINE_LOCK
 #include <cos_synchronization.h>

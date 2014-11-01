@@ -573,7 +573,7 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 	}
 
 	assert(n > ticks);
-	/* printc("ticks %llu period %d\n", ticks, period); */
+	printc("ticks %llu period %d\n", ticks, period);
 
 	t = next_event_time();
 	assert(t > ticks);
@@ -594,7 +594,6 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 	}
 #endif
 
-	/* printc("leaving the periodic wake create\n"); */
 	/* return 0; */
 	return ret;
 }
@@ -653,7 +652,7 @@ int periodic_wake_wait(spdid_t spdinv)
 	/* printc("in periodic_wake_wait: thd %d spd %d, test_control %d\n", */
 	/*        cos_get_thd_id(), spdinv, test_control); */
 	if (spdinv == 11 && cos_get_thd_id() == 11 && test_control >= 2) {
-		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
+		printc("trigger fault in periodic_wake_wait: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
 	}
@@ -700,7 +699,7 @@ int periodic_wake_wait(spdid_t spdinv)
 	/* printc("in periodic_wake_wait: thd %d spd %d, test_control %d\n", */
 	/*        cos_get_thd_id(), spdinv, test_control); */
 	if (spdinv == 11 && cos_get_thd_id() == 11 && test_control >= 2) {
-		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
+		printc("trigger fault in periodic_wake_wait: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
 	}
@@ -856,15 +855,6 @@ rd_reflection()
 	printc("pte reflection on evt_trigger_all (thd %d)\n\n", cos_get_thd_id());
 	evt_trigger_all(cos_spd_id());  // for now, only pte and mailbox use this
 		
-	/* The rd_reflection should be executed by the current running
-	 * thread who should hold the dest_spd lock if any. So we
-	 * release here. This is possible due to: 1) pte/timed_evt
-	 * uses sched_component_take, not lock component 2)
-	 * pte/timed_evt component has only one lock. */
-	/* printc("pte reflection release the spd lock (thd %d, dest %d)\n\n", */
-	/*        cos_get_thd_id(), dest_spd); */
-	/* sched_component_release(cos_spd_id());	 */
-
 	printc("\n\n reflection done!!!\n\n");
 	return;
 }

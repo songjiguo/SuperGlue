@@ -448,7 +448,19 @@ rd_reflection()
 	}
 
 	/* thread might hold the lock when the server fails. We need
-	 * release these locks */
+	 * release these locks. Like timed_evt or lock, we could check
+	 * the owner of the lock and decide to lock_component_release
+	 * during each object recovery. However, take/release API of
+	 * lock component do require lock_id explicitly and this lock
+	 * id is not known (tracked) on the client interface (evt). So
+	 * for now, we still track who have been blocked due to the
+	 * lock contention in evt on the lock interface. And call
+	 * trigger_all to release that lock during the recovery.
+	 
+	 Note: maybe we should change the lock component API to not
+	 pass lock id, just use the owner thread id to identify the
+	 lock meta data structure?
+	 */
 	lock_trigger_all(cos_spd_id(), cos_spd_id());
 
 	return;
