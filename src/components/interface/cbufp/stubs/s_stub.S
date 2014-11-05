@@ -17,3 +17,5 @@ cos_asm_server_stub_spdid(cbufp_map_collect)
 
 cos_asm_server_stub_spdid(cbufp_claim)
 cos_asm_server_stub_spdid(cbufp_introspect)
+cos_asm_server_stub(cbufp_record)
+cos_asm_server_stub(cbufp_reflect)	

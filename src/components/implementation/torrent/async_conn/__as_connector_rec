@@ -516,7 +516,7 @@ treadp(spdid_t spdid, td_t td, int *off, int *sz)
 	ac = t->data;
 	ret = mbox_get(t, sz, off, ac->owner != spdid);
 	if ((int)ret < 0) goto done;
-	t->offset += ret;
+	t->offset += ret;   // ?? what is this?
 
 done:	
 	UNLOCK();

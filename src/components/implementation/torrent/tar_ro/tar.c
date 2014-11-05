@@ -117,6 +117,12 @@ twrite(spdid_t spdid, td_t td, int cbid, int sz)
 	return -EINVAL;
 }
 
+int
+__twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen) {
+	
+	return 0;
+}
+
 static void
 tar_parse_file(char *file, struct fsobj *root)
 {

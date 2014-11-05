@@ -9,9 +9,6 @@
 #include <rtorrent.h>
 #include <rtorlib.h>
 
-/* #include <torrent.h> */
-/* #include <torlib.h> */
-
 #include <cbuf.h>
 #include <print.h>
 #include <cos_synchronization.h>
@@ -33,68 +30,61 @@ struct fsobj root;
 
 #define MIN_DATA_SZ 256
 
+/* The function used to recover the data. It can also be used to write
+ * other file attribute */
+int __twmeta(spdid_t spdid, td_t td, const char *key, 
+	     unsigned int klen, const char *val, unsigned int vlen);
 
-/* need track fid and the path */
+/***********************************/
+/* tracking uniq_id between faults */
+/***********************************/
+#define CSLAB_ALLOC(sz)   alloc_page()
+#define CSLAB_FREE(x, sz) free_page(x)
+#include <cslab.h>
 
+#define CVECT_ALLOC() alloc_page()
+#define CVECT_FREE(x) free_page(x)
+#include <cvect.h>
 
-static int aaa = 0;
+struct tid_uniqid_data {
+	int tid;
+	int uniq_id;
+};
 
-td_t __tsplit(spdid_t spdid, td_t tid, char *param, int len, 
-	      tor_flags_t tflags, long evtid, void *recovery)
+CVECT_CREATE_STATIC(idmapping_vect);
+CSLAB_CREATE(tiduniq, sizeof(struct tid_uniqid_data));
+
+static struct tid_uniqid_data *
+tiduniq_lookup(int tid)
 {
-	td_t ret = 0;
-	int fid = 0;
-	int sz = 0;
-	cbuf_t cb_p;
-	char *path, *d;
-
-	volatile unsigned long long start, end;
-	rdtscll(start);
-
-	/* printc("spdid %ld, tid %d, param %s, len %d, tflags %d, evtid %d\n", spdid, tid, param, len, tflags, evtid); */
-	ret =  tsplit(spdid, tid, param, len, tflags, evtid);
-
-	LOCK();
-
-	/* printc("ret in tsplit %d\n", ret); */
-	/* want to use foo/bar/who as a whole*/
-	path = find_fullpath(ret);
-	sz = strlen(path);
-	/* printc("unique path (ret tid %d from c_tid %d) ---> %s with size %d\n", ret, tid, path, sz); */
-
-	d = cbuf_alloc(sz, &cb_p);
-	if (!d) {
-		ret = -1;
-		goto done;
-	}
-	memcpy(d, path, sz);
-	
-	fid = uniq_map_lookup(cos_spd_id(), cb_p, sz);
-	/* can not find the file */
-	if (fid == -1) {
-		fid = uniq_map_set(cos_spd_id(), cb_p, sz);
-		assert(fid >= 0);
-	}
-	cbuf_free(d);
-
-	// add fid and path into some data structure to track them when rebuild
-	add_tor_list(fid, ret);
-
-	if (unlikely(recovery)) { /* recovery */   // do not use 'flag'!!! FIXME
-		/* printc("need recovery and fid %d new tid %d\n", fid, ret); */
-                /* FIXME: we should really use cbuf to introspect these parameter with 1 invocation */
-		/* need check if the file(tor) has been rebuilt already. If so, we do not need rebuild again */ 
-		restore_tor(fid, ret); 
-		/* printc("rebuild meta done\n"); */
-	}
-	/* if (all_tor_list && !EMPTY_LIST(all_tor_list, next, prev)) find_update(fid, ret); */
-	rdtscll(end);
-	/* printc("__tsplit cost: %llu\n", end-start); */
-
-done:
-	UNLOCK();
-	return ret;
+	return cvect_lookup(&idmapping_vect, tid);
 }
+
+static struct tid_uniqid_data *
+tiduniq_alloc(int tid)
+{
+	struct tid_uniqid_data *idmapping;
+
+	idmapping = cslab_alloc_tiduniq();
+	assert(idmapping);
+	if (cvect_add(&idmapping_vect, idmapping, tid)) {
+		printc("can not add into cvect\n");
+		BUG();
+	}
+	idmapping->tid = tid;
+	return idmapping;
+}
+
+static void
+tiduniq_dealloc(struct tid_uniqid_data *idmapping)
+{
+	assert(idmapping);
+	if (cvect_del(&idmapping_vect, idmapping->tid)) BUG();
+	cslab_free_tiduniq(idmapping);
+}
+
+
+static int test_control = 0;
 
 td_t 
 tsplit(spdid_t spdid, td_t td, char *param, 
@@ -105,13 +95,8 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	struct fsobj *fso, *fsc, *parent; /* obj, child, and parent */
 	char *subpath;
 
-	/* printc("ramfs tsplit (evtid %ld)\n", evtid); */
-#ifdef TSPLIT_FAULT
-	if (aaa == 1){
-		/* printc("\n\n<< tsplit: Before Assert >> \n"); */
-		assert(0);
-	}
-#endif
+	printc("ramfs tsplit from td %d (evtid %ld), \n", td, evtid);
+
 	LOCK();
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);
@@ -124,6 +109,14 @@ tsplit(spdid_t spdid, td_t td, char *param,
 		fsc = fsobj_alloc(subpath, parent);
 		if (!fsc) ERR_THROW(-EINVAL, done);
 		fsc->flags = tflags;
+		
+		// Jigguo: save the path hierarchically 
+		if (!fsc->unique_path) {
+			char *tmp_path = malloc(len + strlen(fso->unique_path));
+			assert(tmp_path);
+			memcpy(tmp_path, fso->unique_path, strlen(fso->unique_path));
+			fsc->unique_path = strcat(tmp_path, param);
+		}
 	} else {
 		/* File has less permissions than asked for? */
 		if ((~fsc->flags) & tflags) ERR_THROW(-EACCES, done);
@@ -134,9 +127,78 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	if (!nt) ERR_THROW(-ENOMEM, free);
 	ret = nt->td;
 
+#if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TSPLIT_BEFORE)
+	test_control++;
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 3) {
+		printc("trigger fault in ramfs tsplit: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
+	/* get the uniq id from uniq_map */
+	struct uniqmap_data *dm = NULL;
+	cbuf_t cb;
+	int uniq_id;
+	printc("full path to this file is %s\n", fsc->unique_path);
+	int tmp_sz = strlen(fsc->unique_path);   // TODO: change this to be parent+its path
+	assert(tmp_sz > 0);
+	dm = cbuf_alloc(tmp_sz, &cb);
+	assert(dm);
+	memset(dm, 0, 4096);  // this is important, since reused cbuf might have old data
+	dm->server_tid = ret;
+	dm->sz         = tmp_sz;
+	memcpy(dm->data, fsc->unique_path, tmp_sz);
+	/* if does not exist, create it in uniqmap. Use the
+	 * most recent server tid to find uniq_id in uniqmap
+	 * when twrite/tread. So we do not track here. */
+	printc("tsplit: tmp_sz %d \n", tmp_sz);
+	printc("tsplit: size of struct unqmao_data %d \n", sizeof(struct uniqmap_data));
+	uniq_id = uniq_map_lookup(cos_spd_id(), cb,
+				  (tmp_sz + sizeof(struct uniqmap_data)));
+	assert(uniq_id);
+	struct tid_uniqid_data *idmapping;
+	if (!(idmapping = tiduniq_lookup(ret))) {
+		printc("can not find a uniq mapping. Now create a new one\n");
+		idmapping = tiduniq_alloc(ret);
+	}
+	assert(idmapping);
+	idmapping->uniq_id = uniq_id;
+	/* struct tid_uniqid_data *tmp = tiduniq_lookup(ret); */
+	/* assert(tmp); */
+	/* printc("tsplit: tmp->tid %d (ret %d) tmp->uniq_id %d\n",  */
+	/*        tmp->tid, ret, tmp->uniq_id); */
+	cbuf_free(cb);
+
+	if (!fsc->data) {
+		printc("there is no data in the file\n");
+		int num_cbids = cbufp_reflect(uniq_id, 0, 0);
+		if (unlikely(num_cbids > 0)) {
+			printc("however, we see some cbufps tracked for this fid\n");
+			/* A fault has corrupted a file */
+			int tmp = -1;
+			char *val = "recovery";
+			printc("val %s val_len %d (td %d)\n", val, strlen(val), ret);
+			tmp = __twmeta(cos_spd_id(), ret, "data", strlen("data"),
+				       val, strlen(val));
+			assert(!tmp);
+		} 
+	}	
+
+	nt->offset = 0;  // initialize this to be zero
+	
+#if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TSPLIT_AFTER)
+	test_control++;
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 3) {
+		printc("trigger fault in ramfs tsplit: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 	evt_trigger(cos_spd_id(), evtid);
 
-	/* printc("split file succesffuly\n\n"); */
+	printc("ramfs split succesffuly and return tid %d\n\n", ret);
 done:
 	UNLOCK();
 	return ret;
@@ -145,150 +207,14 @@ free:
 	goto done;
 }
 
-
-/* The assumption (analogy to Unix)
- * The fsob can be deleted only if it has no children Otherwise, 
- * return the error code (simplest way!)
-*/
-
 int 
-tmerge(spdid_t spdid, td_t td, td_t td_into, char *param, int len)
+twrite(spdid_t spdid, td_t td, int cb, int sz)
 {
-	struct torrent *t;
-	struct fsobj *fso;
-	int ret = 0;
-
-	if (!tor_is_usrdef(td)) return -1;
-
-	/* printc("(tmerge) td %d param  %s  len %d\n", td, param, len); */
-	LOCK();
-	t = tor_lookup(td);
-	if (!t) ERR_THROW(-EINVAL, done);
-	/* currently only allow deletion */
-	if (td_into != td_null) ERR_THROW(-EINVAL, done);
-	
-	fso = t->data;
-	/* ret = fsobj_update(fso); */  // do we need remove the all 'dead' nodes, if they have no children?
-	assert(fso && fso->parent);
-	
-	if (!fso->child) {
-		fsobj_rem(fso, fso->parent); 
-		fsobj_free(fso);
-		/* if (remove_cbuf_path(td)) BUG(); */
-		/*  At this point, re-tsplit should have a;ready rebuilt the list */
-		int t_fid = fid_lookup(td);
-		if (t_fid) {
-			if (cbuf_rem_record(t_fid)) BUG();
-		}
-	} else {
-		/* fso->zombie = 1; */
-		ERR_THROW(-EINVAL, done);
-	}
-
-	tor_free(t);
-
-	/* we really need remove the record, not only from the client
-	 * side stub, but also server all_tor_list that was built
-	 * during the recovery */
-
-	
-done:   
-	UNLOCK();
-	return ret;
+	return -ENOTSUP;
 }
 
-
-static int ddd = 0;
-
-void
-trelease(spdid_t spdid, td_t td)
-{
-	struct torrent *t;
-
-	if (!tor_is_usrdef(td)) return;
-
-#ifdef TRELEASE_FAULT
-	if (ddd++ == 2){
-		/* printc("<< trelease: Before Assert >> \n"); */
-		assert(0);
-	}
-#endif
-
-	LOCK();
-	t = tor_lookup(td);
-	if (!t) goto done;
-	fsobj_release((struct fsobj *)t->data);
-	tor_free(t);
-done:
-	UNLOCK();
-	return;
-}
-
-static int bbb = 0;
-
 int 
-tread(spdid_t spdid, td_t td, cbufp_t cb, int sz)
-{
-	int ret = -1, left;
-	struct torrent *t;
-	struct fsobj *fso;
-	char *buf;
-
-	printc("ramfs: tread (td %d)\n", td);
-	if (tor_isnull(td)) return -EINVAL;
-
-	/* if (cos_get_thd_id() == 13) { */
-	/* 	if(bbb++ == 2) assert(0); */
-	/* } */
-
-#ifdef TREAD_FAULT
-	if (bbb++ == 2){
-		/* printc("<< tread: Before Assert >> \n"); */
-		assert(0);
-	}
-#endif
-	LOCK();
-
-	/* if (unlikely(all_tor_list && !EMPTY_LIST(all_tor_list, next, prev))) { /\* has crashed before, need check if the file still presents *\/ */
-	/* 	/\* printc("when tread, tid is %d\n", td); *\/ */
-	/* 	find_restore(td); */
-	/* } */
-
-	/* volatile unsigned long long ttt; */
-	/* for (ttt = 0; ttt < 5000000; ttt++) {;} */
-
-	t = tor_lookup(td);
-	if (!t) ERR_THROW(-EINVAL, done);
-	assert(!tor_is_usrdef(td) || t->data);
-	if (!(t->flags & TOR_READ)) ERR_THROW(-EACCES, done);
-
-	fso = t->data;
-	assert(fso->size <= fso->allocated);
-	assert(t->offset <= fso->size);
-	if (!fso->size) ERR_THROW(0, done);
-
-	buf = cbufp2buf(cb, sz);
-	if (!buf) ERR_THROW(-EINVAL, done);
-
-	/* printc("before read: fso->size %d t->offset %d\n", fso->size, t->offset); */
-	left = fso->size - t->offset;
-	ret  = left > sz ? sz : left;
-
-	assert(fso->data);
-	memcpy(buf, fso->data + t->offset, ret);
-	/* printc("read buf -- %s\n", buf); */
-	t->offset += ret;
-
-	/* printc("after read: fso->size %d t->offset %d\n", fso->size, t->offset); */
-done:	
-	UNLOCK();
-	return ret;
-}
-
-static int ccc = 0;
-
-int 
-twrite(spdid_t spdid, td_t td, cbufp_t cb, int sz)
+twritep(spdid_t spdid, td_t td, int cb, int sz)
 {
 	int ret = -1, left;
 	struct torrent *t;
@@ -296,26 +222,32 @@ twrite(spdid_t spdid, td_t td, cbufp_t cb, int sz)
 	char *buf;
 
 	int buf_sz;
-	u32_t id;
-	u32_t offset;
+	u32_t old_offset;
+	int tmem;
+	u32_t cbid;
 
-	/* printc("ramfs: twrite (td %d)\n", td); */
+	printc("ramfs: twrite (td %d cb %d)\n", td, cb);
 	if (tor_isnull(td)) return -EINVAL;
 
-#ifdef TWRITE_FAULT
-	if (ccc++ == 2){
-		/* printc("<< twrite: Before Assert >> \n"); */
-		assert(0);
-	}
-#endif
 	LOCK();
 
 	/* if (unlikely(all_tor_list && !EMPTY_LIST(all_tor_list, next, prev))) { /\* has crashed before, need check if the file still presents *\/ */
 	/* 	/\* printc("when write, tid is %d\n", td); *\/ */
 	/* 	find_restore(td); */
 	/* } */
+	/* int tmem; */
+	/* cbuf_unpack(cb, &id, &tmem); */
+	/* printc("twrite: passed in cbuf id %d\n", id); */
+	/* assert(tmem == 1); */
 
-	cbuf_unpack(cb, &id);
+#if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TWRITEP_BEFORE)
+	test_control++;
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
+		printc("trigger fault in ramfs twritep: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
 
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);
@@ -325,12 +257,15 @@ twrite(spdid_t spdid, td_t td, cbufp_t cb, int sz)
 	fso = t->data;
 	assert(fso->size <= fso->allocated);
 	assert(t->offset <= fso->size);
-	offset = t->offset;
+	old_offset = t->offset;
 
 	/* printc("unique path should already exist...%s\n", fso->unique_path); */
 	/* printc("before write: fso->size %d, t->offset %d\n", fso->size, t->offset); */
 	buf = cbufp2buf(cb, sz);
-	if (!buf) ERR_THROW(-EINVAL, done);
+	assert(buf);
+	
+	/* buf = cbuf2buf(cb, sz); */
+	/* if (!buf) ERR_THROW(-EINVAL, done); */
 
 	/* printc("write after cbuf2buf -- %s (cbuf id %d)\n", buf, id); */
 
@@ -355,56 +290,254 @@ twrite(spdid_t spdid, td_t td, cbufp_t cb, int sz)
 		ret            = left > sz ? sz : left;
 		fso->size      = t->offset + ret;
 	}
-	/* printc("1 %s\n", *buf++); */
+	printc("twrite: fso path %s\n", fso->unique_path);
 	/* printc("fso->allocated %d t->offset %d \n",fso->allocated, t->offset); */
-	memcpy(fso->data + t->offset, buf, ret);
 	/* printc("write buf -- %s\n", buf); */
+	memcpy(fso->data + t->offset, buf, ret);
 	t->offset += ret;
 
-	/* at this point, re-tsplit should have been done if there was a fault in ramfs  */
-	assert(all_tor_list);
-	int t_fid = fid_lookup(td);
-	assert(t_fid >= 0);
-	if (reserve_cbuf_fid(cb, td, offset, ret, t_fid)) BUG();
+	struct tid_uniqid_data *idmapping = tiduniq_lookup(td);
+	assert(idmapping);
+	printc("idmapping->tid %d idmapping->uniq_id %d\n", 
+	       idmapping->tid, idmapping->uniq_id);
+	assert(idmapping->uniq_id);
+
+	/* Pass the FT relevant info to cbuf manager. Keep it around *
+	 and does not relinquish (or collected) One issue: if the
+	 fault occurs after this, the ref cnt might keep increasing
+	 */
+	cbufp_send(cb);
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TWRITEP_AFTER)
+	test_control++;
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
+		printc("trigger fault in ramfs twritep: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+	
+	cbuf_unpack(cb, &cbid, &tmem);
+	assert(tmem == 0);
+	if (cbufp_record(cbid, ret, old_offset, idmapping->uniq_id)) assert(0);
 done:	
 	UNLOCK();
 	return ret;
 }
 
-static int 
-__rec_twmeta(spdid_t spdid, td_t td, int cbid, int sz, int offset, int flag)
+int 
+tread(spdid_t spdid, td_t td, int cbid, int sz)
 {
+	return -ENOTSUP;
+}
+
+int 
+treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
+{
+	int ret = -1, left;
 	struct torrent *t;
 	struct fsobj *fso;
-	char *buf, *test;
+	char *buf;
+	cbufp_t cb;
 
-	int left;
-	int ret = -1;
-
-	/* printc("META: spdid %d tid %d cbid %d sz %d offset %d flag %d\n", spdid, td, cbid, sz, offset, flag); */
-
+	printc("ramfs: tread (td %d len %d)\n", td, len);
 	if (tor_isnull(td)) return -EINVAL;
 
 	LOCK();
+
+	/* if (unlikely(all_tor_list && !EMPTY_LIST(all_tor_list, next, prev))) { /\* has crashed before, need check if the file still presents *\/ */
+	/* 	/\* printc("when tread, tid is %d\n", td); *\/ */
+	/* 	find_restore(td); */
+	/* } */
+
 	t = tor_lookup(td);
+	if (!t) ERR_THROW(-EINVAL, done);
+	assert(!tor_is_usrdef(td) || t->data);
+	if (!(t->flags & TOR_READ)) ERR_THROW(-EACCES, done);
+
+	fso = t->data;
+	assert(fso->size <= fso->allocated);
+	assert(t->offset <= fso->size);
+	printc("ramfs: tread 1\n");
+	if (!fso->size) ERR_THROW(0, done);
+	printc("ramfs: tread 2\n");
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TREADP)
+	test_control++;
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
+		printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
+	/* printc("before read: fso->size %d t->offset %d\n", fso->size, t->offset); */
+	left = fso->size - t->offset;
+	ret  = left > len ? len : left;
+
+	buf = cbufp_alloc(len, &cb);
+	assert(buf);
+	cbufp_send(cb);
+	assert(fso->data);
+	printc("t->offset %d (ret %d)\n", t->offset, ret);
+	printc("t->data %d\n", fso->data);
+	memcpy(buf, fso->data + t->offset, ret);
+	printc("read buf -- %s\n", buf);
+	t->offset += ret;
+
+	*sz = ret;
+	printc("after read: fso->size %d t->offset %d\n", fso->size, t->offset);
+done:	
+	UNLOCK();
+	return cb;
+}
+
+
+/* The assumption (analogy to Unix)
+ * The fsob can be deleted only if it has no children Otherwise, 
+ * return the error code (simplest way!)
+*/
+
+int 
+tmerge(spdid_t spdid, td_t td, td_t td_into, char *param, int len)
+{
+	struct torrent *t;
+	struct fsobj *fso;
+	int ret = 0;
+
+	if (!tor_is_usrdef(td)) return -1;
+
+	/* printc("(tmerge) td %d param  %s  len %d\n", td, param, len); */
+	LOCK();
+	t = tor_lookup(td);
+	if (!t) ERR_THROW(-EINVAL, done);
+	/* currently only allow deletion */
+	if (td_into != td_null) ERR_THROW(-EINVAL, done);
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TMERGE)
+	test_control++;
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 1) {
+		printc("trigger fault in ramfs tmerge: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+	
+	fso = t->data;
+	/* ret = fsobj_update(fso); */  // do we need remove the all 'dead' nodes, if they have no children?
+	assert(fso && fso->parent);
+	
+	if (!fso->child) {
+		fsobj_rem(fso, fso->parent); 
+		fsobj_free(fso);
+		/* if (remove_cbuf_path(td)) BUG(); */
+		/*  At this point, re-tsplit should have a;ready rebuilt the list */
+		int t_fid = fid_lookup(td);
+		/* if (t_fid) { */
+		/* 	if (cbuf_rem_record(t_fid)) BUG(); */
+		/* } */
+	} else {
+		/* fso->zombie = 1; */
+		ERR_THROW(-EINVAL, done);
+	}
+
+	tor_free(t);
+
+	/* we really need remove the record, not only from the client
+	 * side stub, but also server all_tor_list that was built
+	 * during the recovery */
+
+	
+done:   
+	UNLOCK();
+	return ret;
+}
+
+void
+trelease(spdid_t spdid, td_t td)
+{
+	struct torrent *t;
+
+	if (!tor_is_usrdef(td)) return;
+
+	LOCK();
+	t = tor_lookup(td);
+	if (!t) goto done;
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TRELEASE)
+	test_control++;
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 3) {
+		printc("trigger fault in ramfs trelease: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
+	fsobj_release((struct fsobj *)t->data);
+	tor_free(t);
+done:
+	UNLOCK();
+	return;
+}
+
+int
+__twmeta(spdid_t spdid, td_t td, const char *key, 
+	 unsigned int klen, const char *val, unsigned int vlen) 
+{
+        struct torrent *t;
+	struct fsobj *fso;
+	char *buf;
+	int left;
+	printc("passed in td for recover data is %d\n", td);
+	if (tor_isnull(td)) {UNLOCK(); return -EINVAL;}
+	t = tor_lookup(td);
+	if (!t) {UNLOCK(); return -EINVAL;}
 	assert(t->data);
+	if (!(t->flags & TOR_WRITE)) {UNLOCK(); return -EINVAL;}
 	fso = t->data;
 	assert(fso->size <= fso->allocated);
 	assert(t->offset <= fso->size);
 
-	/* printc("before wmeta: fso->size %d, t->offset %d\n", fso->size, t->offset); */
+	struct tid_uniqid_data *idmapping = tiduniq_lookup(td);
+	assert(idmapping);
+	printc("idmapping->tid %d idmapping->uniq_id %d\n",
+	       idmapping->tid, idmapping->uniq_id);
+	assert(idmapping->uniq_id);
+		
+	int i, old_offset, len, cbid;
+	int num_cbids = cbufp_reflect(idmapping->uniq_id, 0, 0);
+	printc("total number cbufs %d\n", num_cbids);
+	for (i = 0; i < num_cbids; i++) {
+		// offset before write
+		old_offset   = cbufp_reflect(idmapping->uniq_id, i, 1);
+		assert(old_offset >= 0);    // can be 0
+		t->offset    = old_offset;
+		printc("old_offset %d\n", old_offset);
+		// actual bytes to write
+		len          = cbufp_reflect(idmapping->uniq_id, i, 2);
+		assert(len >= 0);
+		fso->size    = t->offset + len;
+		printc("actual bytes written before %d\n", len);
+		// cbuf that contains data
+		cbid    = cbufp_reflect(idmapping->uniq_id, i, 3); 
+		assert(cbid);
+		printc("reserved cb %d\n", cbid);
+		cbuf_t cb = cbuf_cons(cbid, len, 0);  // tmem use 0
+		/* printc("convert to cb %d\n", cb); */
+		assert(cb);
+		buf          = cbufp2buf(cb, len);
+		assert(buf);
+		printc("buf %s\n", buf);
 
-	if (flag == 1) { 		/* recovery*/
 		left = fso->allocated - t->offset;
-		if (left >= sz) {
-			ret = sz;
-			if (fso->size < (t->offset + sz)) fso->size = t->offset + sz;
+		if (left >= len) {
+			if (fso->size < (t->offset + len)) fso->size = t->offset + len;
 		} else {
 			char *new;
 			int new_sz;
 			new_sz = fso->allocated == 0 ? MIN_DATA_SZ : fso->allocated * 2;
 			new    = malloc(new_sz);
-			if (!new) ERR_THROW(-ENOMEM, done);
+			assert(new);
 			if (fso->data) {
 				memcpy(new, fso->data, fso->size);
 				free(fso->data);
@@ -412,37 +545,17 @@ __rec_twmeta(spdid_t spdid, td_t td, int cbid, int sz, int offset, int flag)
 			
 			fso->data      = new;
 			fso->allocated = new_sz;
-			left           = new_sz - t->offset;
-			ret            = left > sz ? sz : left;
-			fso->size      = t->offset + ret;
+			fso->size      = t->offset + len;
 		}
-
-		buf = (char *)cbuf_c_introspect(cos_spd_id(), cbid, 0, CBUF_INTRO_PAGE);
-		if (!buf) BUG();
-		/* printc("introspect buf @%p\n", buf); */
-		/* printc("str in buf is %s size %d (offset %d)\n", buf, sz, offset); */
-		memcpy(fso->data + offset, buf, sz);
-		t->offset += sz;
-		/* assert(ret == sz); */
-		/* printc("mem cp done and current offset is %d\n", t->offset); */
+		memcpy(fso->data + t->offset, buf, len);
+                /* We do not need to track the offset since the data
+                   is written directly to its old position */
 	}
-	/* printc("after wmeta: fso->size %d, t->offset %d\n", fso->size, t->offset); */
-
-done:	
-	UNLOCK();
-	return ret;
+	return 0;
 }
 
-static int 
-__twmeta(spdid_t spdid, td_t td, int cbid, int sz, int offset, int flag)
-{
-	int ret = 0;
-	UNLOCK();
-	ret = __rec_twmeta(spdid, td, cbid, sz, offset, flag);
-	LOCK();
 
-	return ret;
-}
+static void rd_reflection();
 
 int cos_init(void)
 {
@@ -459,5 +572,60 @@ int cos_init(void)
 	rdtscll(end);
 	printc("COST (cos_init): %llu\n", end - start);
 
+	// Jiguo: tracking the mapping between server tid and uniqid
+	cvect_init_static(&idmapping_vect);
+
+	// Jiguo: rdreflection
+	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
+		printc("\n\nneed do reflection now!!!!\n");
+		rd_reflection();
+		printc("\nreflection done!!!\n\n");
+	}
+
 	return 0;
+}
+
+/* extern int sched_reflect(spdid_t spdid, int src_spd, int cnt); */
+/* extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id); */
+/* extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt); */
+/* extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags);  */
+/* extern int evt_trigger_all(spdid_t spdid); */
+/* extern int lock_trigger_all(spdid_t spdid, int dest);   */
+extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
+extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
+extern int lock_trigger_all(spdid_t spdid, int dest);  
+
+static void
+rd_reflection()
+{
+	int count_obj = 0; // reflected objects
+	int dest_spd = cos_spd_id();
+	
+	/* // remove the mapped page for mailbox spd */
+	/* vaddr_t addr; */
+	/* count_obj = mman_reflect(cos_spd_id(), dest_spd, 1); */
+	/* printc("pte relfects on mmgr: %d objs (thd %d)\n", count_obj, cos_get_thd_id()); */
+	/* while (count_obj--) { */
+	/* 	addr = mman_reflect(cos_spd_id(), dest_spd, 0); */
+	/* 	/\* printc("evt mman_release: %p addr\n", (void *)addr); *\/ */
+	/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
+	/* } */
+
+	/* thread might hold the lock when the server fails. We need
+	 * release these locks. Like timed_evt or lock, we could check
+	 * the owner of the lock and decide to lock_component_release
+	 * during each object recovery. However, take/release API of
+	 * lock component do require lock_id explicitly and this lock
+	 * id is not known (tracked) on the client interface (mbox). So
+	 * for now, we still track who have been blocked due to the
+	 * lock contention in mbox on the lock interface. And call
+	 * trigger_all to release that lock during the recovery.
+	 
+	 Note: maybe we should change the lock component API to not
+	 pass lock id, just use the owner thread id to identify the
+	 lock meta data structure?
+	 */
+
+	lock_trigger_all(cos_spd_id(), cos_spd_id());
+	return;
 }

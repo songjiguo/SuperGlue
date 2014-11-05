@@ -19,6 +19,58 @@
 #include <cmap.h>
 #include <cos_list.h>
 
+
+/***********************************/
+/* tracking uniq_id between faults */
+/***********************************/
+#define CSLAB_ALLOC(sz)   alloc_page()
+#define CSLAB_FREE(x, sz) free_page(x)
+#include <cslab.h>
+
+#define CVECT_ALLOC() alloc_page()
+#define CVECT_FREE(x) free_page(x)
+#include <cvect.h>
+
+struct cbid_fid_data {
+	int cbid;
+	int fid;
+	int len;
+	int offset;
+	struct cbid_fid_data *next, *prev;
+};
+
+CVECT_CREATE_STATIC(cfidmapping_vect);
+CSLAB_CREATE(cbidfid, sizeof(struct cbid_fid_data));
+
+static struct cbid_fid_data *
+cbidfid_lookup(int fid)
+{
+	return cvect_lookup(&cfidmapping_vect, fid);
+}
+
+static struct cbid_fid_data *
+cbidfid_alloc(int fid)
+{
+	struct cbid_fid_data *head;
+
+	head = cslab_alloc_cbidfid();
+	assert(head);
+	if (cvect_add(&cfidmapping_vect, head, fid)) {
+		printc("can not add into cvect\n");
+		BUG();
+	}
+	INIT_LIST(head, next, prev);
+	return head;
+}
+
+static void
+cbidfid_dealloc(struct cbid_fid_data *idmapping)
+{
+	assert(idmapping);
+	if (cvect_del(&cfidmapping_vect, idmapping->fid)) BUG();
+	cslab_free_cbidfid(idmapping);
+}
+
 /** 
  * The main data-structures tracked in this component.
  * 
@@ -594,6 +646,128 @@ done:
 }
 
 
+/* FIXME: the writing mode is not defined yet. Now if close a file
+ * ,and reopen it, the old contents is overwritten. In the future, for
+ * ramFS, other mode should be supported, like append writing.... */
+/* 
+   cbid  :  the one that carries the data we want to back up
+   len   :  actual written size
+   offset:  offset before writing (offset to offset+len will have the data )
+   fid   :  unique file id (each unique path has its fid)
+ */
+int
+cbufp_record(int cbid, int len, int offset, int fid)
+{
+	struct cbufp_info *cbi;
+	struct cbid_fid_data *head = NULL;
+	struct cbid_fid_data *cfd = NULL;
+
+	vaddr_t dest;
+	void *page;
+	int ret = -EINVAL, off;
+	
+	printc("cbufp_record\n");
+	printc("passed in para: len %d offset %d cbid %d fid %d\n", 
+	       len, offset, cbid, fid);
+
+	CBUFP_TAKE();
+
+	
+	cbi = cmap_lookup(&cbufs, cbid);
+	if (!cbi) goto done;
+	if (unlikely(!(head = cbidfid_lookup(fid)))) {
+		printc("cbufp_record: fid %d\n", fid);	
+		head = cbidfid_alloc(fid);
+	}
+	assert(head);
+	cfd = cslab_alloc_cbidfid();
+	if (!cfd) goto done;
+	
+	cfd->fid    = fid;
+	cfd->cbid   = cbid;
+	cfd->len    = len;
+	cfd->offset = offset;
+	ADD_LIST(head, cfd, next, prev);
+
+	/* Addition to tracking the cbufs for a fid, also make a cbuf
+	 * read only */
+	/* printc("record: cbid %ld d->addr %p (d's spd %d, and addr is %p)\n",  */
+	/*        cbid, d->addr, d->owner.spd, d->owner.addr); */
+	vaddr_t vaddr = cbi->owner.addr;
+	printc("vaddr %p\n", vaddr);
+	if (cos_mmap_cntl(COS_MMAP_SETRW, MAPPING_READ, cbi->owner.spdid, vaddr, 0)) {
+		printc("set page to be read only failed\n");
+		BUG();
+	}
+	
+	ret = 0;
+done:
+	CBUFP_RELEASE();
+
+	return ret;
+}
+
+
+/* return the state of tracked cbufps, such as 
+   total number of cbufps (query 0) 
+   old_offset             (query 1) 
+   actual bytes           (query 2) 
+   cbuf                   (query 3) 
+*/
+int
+cbufp_reflect(int fid, int nth, int type)
+{
+	struct cbid_fid_data *head = NULL;
+	struct cbid_fid_data *cfd = NULL;
+
+	vaddr_t dest;
+	void *page;
+	int ret = -1, off;
+	int total_num = 0;
+	int index = 0;
+	
+	printc("cbufp_reflect fid %d\n", fid);
+	
+	CBUFP_TAKE();
+	
+	head = cbidfid_lookup(fid);
+	if (!head) goto done;
+	if (EMPTY_LIST(head, next, prev)) goto done;
+	
+	switch (type) {
+	case 0:    // return the total number of cbufps
+		printc("try to get the total number of cbufps\n");
+		for(cfd = FIRST_LIST(head, next, prev);
+		    cfd != head;
+		    cfd = FIRST_LIST(cfd, next, prev)){
+			printc("cbid %d\n", cfd->cbid);
+			printc("len %d\n", cfd->len);
+			printc("offset %d\n", cfd->offset);
+			total_num++;
+		}
+		ret = total_num;
+		break;
+	case 1:
+	case 2:
+	case 3:
+		printc("try to get the other cbupf info\n");
+		for(cfd = FIRST_LIST(head, next, prev);
+		    cfd != head;
+		    cfd = FIRST_LIST(cfd, next, prev)){
+			if (index == nth) break;
+			index++;
+		}
+		if (type == 1) ret = cfd->offset;
+		if (type == 2) ret = cfd->len;
+		if (type == 3) ret = cfd->cbid;
+		break;
+	default:
+		break;
+	}
+done:
+	CBUFP_RELEASE();
+	return ret;
+}
 
 int
 cbufp_introspect(spdid_t spdid, int iter)

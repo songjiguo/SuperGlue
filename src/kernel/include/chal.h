@@ -64,6 +64,9 @@ void    chal_pgtbl_zero_range(paddr_t pt, unsigned long lower_addr, unsigned lon
 /* can we switch the current page tables right now? */
 int     chal_pgtbl_can_switch(void);
 
+/* Jiguo: set a page to be RW or RO, for preserving the data  */
+int chal_pgtbl_setrwro(paddr_t pgtbl, vaddr_t vaddr, int flags);
+
 /* operations on the page directory (as opposed to on page-table entries) */
 int chal_pgtbl_add_middledir(paddr_t pt, unsigned long vaddr);
 int chal_pgtbl_rem_middledir(paddr_t pt, unsigned long vaddr);

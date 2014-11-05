@@ -180,6 +180,48 @@ map_rd_delete(td_t tid)
 	return;
 }
 
+#include <uniq_map.h>   // obtain unique id for a string path name
+
+/**********************************************/
+/* tracking path name and cbid for data recovery */
+/**********************************************/
+struct tid_uniqid_data {
+	int tid;
+	int uniq_id;
+};
+
+CVECT_CREATE_STATIC(idmapping_vect);
+CSLAB_CREATE(tiduniq, sizeof(struct tid_uniqid_data));
+
+static struct tid_uniqid_data *
+tiduniq_lookup(int tid)
+{
+	return cvect_lookup(&idmapping_vect, tid);
+}
+
+static struct tid_uniqid_data *
+tiduniq_alloc(int tid)
+{
+	struct tid_uniqid_data *idmapping;
+
+	idmapping = cslab_alloc_tiduniq();
+	assert(idmapping);
+	if (cvect_add(&idmapping_vect, idmapping, tid)) {
+		printc("can not add into cvect\n");
+		BUG();
+	}
+	idmapping->tid = tid;
+	return idmapping;
+}
+
+static void
+tiduniq_dealloc(struct tid_uniqid_data *idmapping)
+{
+	assert(idmapping);
+	if (cvect_del(&idmapping_vect, idmapping->tid)) BUG();
+	cslab_free_tiduniq(idmapping);
+}
+
 static char*
 param_save(char *param, int param_len)
 {
@@ -214,48 +256,6 @@ cap_to_dest(int cap)
 	return dest;
 }
 
-#include <uniq_map.h>   // obtain unique id for a string path name
-
-/**********************************************/
-/* tracking path name and cbid for data recovery */
-/**********************************************/
-struct tid_uniqid_data {
-	int tid;
-	int uniq_id;
-};
-
-CVECT_CREATE_STATIC(idmapping_vect);
-CSLAB_CREATE(tiduniq, sizeof(struct tid_uniqid_data));
-
-static struct tid_uniqid_data *
-tiduniq_lookup(int tid)
-{
-	return cvect_lookup(&idmapping_vect, tid);
-}
-
-static struct tid_uniqid_data *
-tiduniq_alloc(int tid)
-{
-	struct tid_uniqid_data *idmapping;
-
-	idmapping = cslab_alloc_tiduniq();
-	assert(idmapping);
-	if (cvect_add(&idmapping_vect, idmapping, tid)) {
-		printc("can not add into cvect\n");
-		BUG();
-	}
-	return idmapping;
-}
-
-static void
-tiduniq_dealloc(struct tid_uniqid_data *idmapping)
-{
-	assert(idmapping);
-	if (cvect_del(&idmapping_vect, idmapping->tid)) BUG();
-	cslab_free_tiduniq(idmapping);
-}
-
-
 /* return the state of a torrent object, only called after tsplit when
  * creating mail box. This is specific for mail box protocol */
 static int
@@ -264,31 +264,6 @@ rd_get_state(char *param, tor_flags_t tflags)
 	if (tflags & TOR_NONPERSIST) return STATE_TSPLIT_SERVER;  // begin of mail box
 	if (!strlen(param)) return STATE_TSPLIT_READY;  // tsplit for a connection ("")
 	return STATE_TSPLIT_CLIENT;   // else it must be the client tsplit
-}
-
-static void
-rd_cons(struct rec_data_tor *rd, td_t p_tid, td_t c_tid, td_t s_tid, char *param, int len, tor_flags_t tflags, long evtid)
-{
-	/* printc("rd_cons: parent tid %d c_tid %d s_tid %d\n",  p_tid, c_tid, s_tid); */
-	assert(rd);
-
-	C_TAKE(cos_spd_id());
-
-	rd->p_tid	 = p_tid;
-	rd->c_tid 	 = c_tid;
-	rd->s_tid 	 = s_tid;
-	rd->param	 = param;
-	rd->param_len	 = len;
-	rd->tflags	 = tflags;
-	rd->evtid	 = evtid;
-	rd->fcnt	 = fcounter;
-	// set object state to server/client/ready, for trelease
-	rd->state = rd_get_state(param, tflags);
-	
-	rd->evt_wait	 = tflags & TOR_WAIT;  // add for now, wait after tsplit
-
-	C_RELEASE(cos_spd_id());
-	return;
 }
 
 /* Bounded by the depth of torrent (how many time tsplit from). We can
@@ -452,6 +427,32 @@ done:
 	return rd;
 }
 
+static void
+rd_cons(struct rec_data_tor *rd, td_t p_tid, td_t c_tid, td_t s_tid, 
+	char *param, int len, tor_flags_t tflags, long evtid)
+{
+	/* printc("rd_cons: parent tid %d c_tid %d s_tid %d\n",  p_tid, c_tid, s_tid); */
+	assert(rd);
+
+	/* C_TAKE(cos_spd_id()); */
+
+	rd->p_tid	 = p_tid;
+	rd->c_tid 	 = c_tid;
+	rd->s_tid 	 = s_tid;
+	rd->param	 = param;
+	rd->param_len	 = len;
+	rd->tflags	 = tflags;
+	rd->evtid	 = evtid;
+	rd->fcnt	 = fcounter;
+	// set object state to server/client/ready, for trelease
+	rd->state = rd_get_state(param, tflags);
+	
+	rd->evt_wait	 = tflags & TOR_WAIT;  // add for now, wait after tsplit
+
+	/* C_RELEASE(cos_spd_id()); */
+	return;
+}
+
 /************************************/
 /******  client stub functions ******/
 /************************************/
@@ -547,6 +548,7 @@ redo:
 	if (tmp_sz > 0) {
 		dm = cbuf_alloc(tmp_sz, &cb_p);
 		assert(dm);
+		dm->parent_tid = parent_tid;
 		dm->server_tid = ser_tid;
 		dm->sz         = tmp_sz;
 		memcpy(dm->data, &d->data[0], tmp_sz);
@@ -806,9 +808,6 @@ CSTUB_FN(int, tmerge)(struct usr_inv_cap *uc,
 }
 
 
-
-
-
 CSTUB_FN(int, tread)(struct usr_inv_cap *uc,
 		     spdid_t spdid, td_t td, int cbid, int sz)
 {
@@ -824,6 +823,40 @@ CSTUB_FN(int, twrite)(struct usr_inv_cap *uc,
 	int ret;
 	long fault = 0;
 	CSTUB_INVOKE(ret, fault, uc, 4, spdid, td, cbid, sz);
+	return ret;
+}
+
+struct __sg_twmeta_data {
+        td_t td;
+        int klen, vlen;
+        char data[0];
+};
+
+CSTUB_FN(int, twmeta)(struct usr_inv_cap *uc,
+		      spdid_t spdid, td_t td, const char *key,
+		      unsigned int klen, const char *val, unsigned int vlen)
+{
+	int ret;
+	long fault = 0;
+        cbuf_t cb;
+        int sz = sizeof(struct __sg_twmeta_data) + klen + vlen + 1;
+        struct __sg_twmeta_data *d;
+
+        assert(key && val && klen > 0 && vlen > 0);
+        assert(key[klen] == '\0' && val[vlen] == '\0' && sz <= PAGE_SIZE);
+
+        d = cbuf_alloc(sz, &cb);
+        if (!d) assert(0); //return -1;
+
+        d->td = td;
+        d->klen = klen;
+        d->vlen = vlen;
+        memcpy(&d->data[0], key, klen + 1);
+        memcpy(&d->data[klen + 1], val, vlen + 1);
+
+	CSTUB_INVOKE(ret, fault, uc, 3, spdid, cb, sz);
+
+        cbuf_free(cb);
 	return ret;
 }
 
@@ -863,40 +896,6 @@ CSTUB_FN(int, trmeta)(struct usr_inv_cap *uc,
                 }
                 memcpy(retval, &d->data[klen + 1], ret + 1);
         }
-        cbuf_free(cb);
-	return ret;
-}
-
-struct __sg_twmeta_data {
-        td_t td;
-        int klen, vlen;
-        char data[0];
-};
-
-CSTUB_FN(int, twmeta)(struct usr_inv_cap *uc,
-		      spdid_t spdid, td_t td, const char *key,
-		      unsigned int klen, const char *val, unsigned int vlen)
-{
-	int ret;
-	long fault = 0;
-        cbuf_t cb;
-        int sz = sizeof(struct __sg_twmeta_data) + klen + vlen + 1;
-        struct __sg_twmeta_data *d;
-
-        assert(key && val && klen > 0 && vlen > 0);
-        assert(key[klen] == '\0' && val[vlen] == '\0' && sz <= PAGE_SIZE);
-
-        d = cbuf_alloc(sz, &cb);
-        if (!d) assert(0); //return -1;
-
-        d->td = td;
-        d->klen = klen;
-        d->vlen = vlen;
-        memcpy(&d->data[0], key, klen + 1);
-        memcpy(&d->data[klen + 1], val, vlen + 1);
-
-	CSTUB_INVOKE(ret, fault, uc, 3, spdid, cb, sz);
-
         cbuf_free(cb);
 	return ret;
 }

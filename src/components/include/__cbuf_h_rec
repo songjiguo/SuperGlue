@@ -275,6 +275,7 @@ __cbuf2buf(cbuf_t cb, int len, int tmem)
 
 	if (unlikely(!len)) return NULL;
 	cbuf_unpack(cb, &id, &t);
+	/* printc("__cbuf2buf passed in cbuf id %d\n", id); */
 	assert(t == tmem);
 
 	CBUF_TAKE();
@@ -310,6 +311,7 @@ again:
 	/* 		      (unsigned long)   ci.v,  */
 	/* 		      (unsigned long)   ci_new.v))) goto again; */
 	ret = ((void*)(cm->nfo.c.ptr << PAGE_ORDER));
+	/* printc("cli (spd %ld, id %d) buf2bu %p\n", cos_spd_id(), id, ret); */
 done:	
 	CBUF_RELEASE();
 	assert(lock_contested(&cbuf_lock) != cos_get_thd_id());
@@ -531,6 +533,7 @@ again:
 	}
 	ret = (void*)(cm->nfo.c.ptr << PAGE_ORDER);
 done:
+	printc("cbuf_alloc cbid %d\n", cbid);
 	*cb = cbuf_cons(cbid, len, tmem);
 	CBUF_RELEASE();
 	return ret;
@@ -561,7 +564,14 @@ __cbuf_done(int cbid, int tmem)
 	owner = cm->nfo.c.flags & CBUFM_OWNER;
 
 	if (tmem) {
-		assert(owner); /* Shouldn't be calling free... */
+		/* assert(owner); /\* Shouldn't be calling free... *\/ */
+		/* Jiguo: the owner might be changed after
+		 * cbuf_claim. So simply return if we are not the owner */
+		if (!owner) {
+			CBUF_RELEASE();
+			return;
+		}
+		
 		struct cbuf_alloc_desc *d = __cbuf_alloc_lookup(cm->nfo.c.ptr);
 		struct cbuf_alloc_desc *fl;
 
@@ -590,7 +600,7 @@ __cbuf_done(int cbid, int tmem)
 		assert(lock_contested(&cbuf_lock) != cos_get_thd_id());
 		return;
 	}
-	
+	printc("free the cbuf %d\n", cbid);
 	return;
 }
 
@@ -644,22 +654,26 @@ cbuf_is_cbuf(void *buf)
 	return cbuf_id(buf) != 0;
 }
 
-/* static inline int  */
-/* cbuf_claim(cbuf_t cb) */
-/* { */
-/* 	int ret = 0; */
-/* 	int sz; */
-/* 	u32_t id; */
+/* grant the ownership of a cbuf -- Jiguo */
+static inline int
+cbuf_claim(cbuf_t cb)
+{
+	int ret = 0;
+	int sz;
+	u32_t id;
+	int tmem;
 
-/* 	CBUF_TAKE(); */
+	CBUF_TAKE();
 
-/* 	cbuf_unpack(cb, &id); */
-/* 	ret = cbuf_c_claim(cos_spd_id(), id); */
+	cbuf_unpack(cb, &id, &tmem);
+	assert(tmem == 1);
 	
-/* 	CBUF_RELEASE(); */
+	ret = cbuf_c_claim(cos_spd_id(), id);
 	
-/* 	return ret; */
-/* } */
+	CBUF_RELEASE();
+	
+	return ret;
+}
 
 /* static inline int  */
 /* cbuf_add_record(cbuf_t cb, int len, unsigned int offset, int id) */

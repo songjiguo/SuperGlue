@@ -199,6 +199,12 @@ static int channel_init(int channel)
 	return 0;
 }
 
+int
+__twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen) {
+	
+	return 0;
+}
+
 int cos_init(void)
 {
 	int i;

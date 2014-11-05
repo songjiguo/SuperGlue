@@ -40,8 +40,8 @@ struct obj_id obj_id_list;
 /********************/
 #define ARRAY_SIZE(a) sizeof(a)/sizeof(a[0])
  
-// Alphabet size (# of symbols)
-#define ALPHABET_SIZE (26)
+// Alphabet size (# of symbols) and "\"  -- the path can be "foo/bar"
+#define ALPHABET_SIZE (27)
 // Converts key current character into index
 // use only 'a' through 'z' and lower case
 #define CHAR_TO_INDEX(c) ((int)c - (int)'a')
@@ -177,13 +177,14 @@ search(trie_t *pTrie, char key[])
 	/* return (0 != pCrawl && pCrawl->value); */
 }
 
-/* lookup uid from the name string */
+/* lookup uid for a name string */
 uid
 uniq_map_lookup(spdid_t spdid, cbuf_t cb, int sz)
 {
 	uid ret = -1;
 	struct obj_id *item, *list;
 	char *str, *d_str;
+	int parent_tid = -1;
 	int server_tid = -1;
 	
 	struct uniqmap_data *d;
@@ -191,24 +192,26 @@ uniq_map_lookup(spdid_t spdid, cbuf_t cb, int sz)
 	LOCK();
 	
 	d = (struct uniqmap_data *)cbuf2buf(cb, sz);
+	parent_tid = d->parent_tid;
 	server_tid = d->server_tid;
 	str = d->data;	
+	printc("str passed in uniqmap %s\n", str);
 	*(str+sz) = '\0';  	/* previous cbuf might still contain data */
 
-	/* printc("str passed in uniqmap %s\n", str); */
+	printc("str passed in uniqmap %s\n", str);
 	/* printc("ser_tid passed in uniqmap %d\n", server_tid); */
-	/* printc("str passed in uniqmap %s\n", str); */
+	printc("sz passed in uniqmap %d\n", sz);
 
 	/* assert(0); */
 	
 	if (!(ret = search(&trie, str))) {
 		ret = insert(&trie, str);
-		/* printc("insert returns id %d\n", ret); */
+		printc("insert returns id %d\n", ret);
 		assert(ret);
 	}
 	
-	/* printc("uniq_map_lookup  %d\n", ret); */
-	
+	printc("uniq_map_lookup  %d\n", ret);
+
 	UNLOCK();
 
 	return ret;

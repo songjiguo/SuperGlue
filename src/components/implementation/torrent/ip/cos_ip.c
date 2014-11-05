@@ -159,6 +159,12 @@ done:
 	return ret;
 }
 
+int
+__twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen) {
+	
+	return 0;
+}
+
 void cos_init(void)
 {
 	static volatile int first = 1;

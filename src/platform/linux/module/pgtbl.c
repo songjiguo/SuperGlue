@@ -10,7 +10,6 @@
 extern struct per_core_cos_thd cos_thd_per_core[NUM_CPU];
 int chal_pgtbl_can_switch(void) { return current == cos_thd_per_core[get_cpuid()].cos_thd; }
 
-
 static pte_t *
 pgtbl_lookup_address(paddr_t pgtbl, unsigned long addr)
 {
@@ -31,6 +30,23 @@ pgtbl_lookup_address(paddr_t pgtbl, unsigned long addr)
 	if (pmd_large(*pmd))
 		return (pte_t *)pmd;
         return pte_offset_kernel(pmd, addr);
+}
+
+/* Jiguo: change a single page to be RW or RO. For data preserving */
+int
+chal_pgtbl_setrwro(paddr_t pgtbl, vaddr_t vaddr, int flags)
+{
+	pte_t *pte = pgtbl_lookup_address(pgtbl, (unsigned long)vaddr);
+	if (!pte || !(pte_val(*pte) & _PAGE_PRESENT)) {
+		return -1;
+	}
+	if (flags == MAPPING_RW) {
+		pte->pte_low |= _PAGE_RW;
+	} else if (flags == MAPPING_READ) {
+		pte->pte_low &= ~_PAGE_RW;
+	} else return  -1;  // wrong. now only RW or RO
+
+	return 0;
 }
 
 /* 

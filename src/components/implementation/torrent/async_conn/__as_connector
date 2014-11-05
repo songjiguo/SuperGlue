@@ -367,8 +367,8 @@ tread(spdid_t spdid, td_t td, int cbid, int sz)
 	return -ENOTSUP;
 }
 
-int 
-treadp(spdid_t spdid, td_t td, int *off, int *sz)
+int
+treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 {
 	cbufp_t ret;
 	struct torrent *t;
@@ -412,6 +412,12 @@ twritep(spdid_t spdid, td_t td, int cbid, int sz)
 done:	
 	UNLOCK();
 	return ret;
+}
+
+int
+__twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen) {
+	
+	return 0;
 }
 
 int cos_init(void)

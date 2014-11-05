@@ -15,10 +15,11 @@ static cos_lock_t fs_lock;
 #define META_OFFSET     "offset"
 #define META_FLAGS      "flags"
 #define META_EVTID      "evtid"
+#define META_DATA       "data"
 
 /* Default torrent implementations */
 __attribute__((weak)) int
-treadp(spdid_t spdid, int sz, int *off, int *len)
+treadp(spdid_t spdid, int td, int len, int *off, int *sz)
 {
         return -ENOTSUP;
 }
@@ -64,6 +65,8 @@ trmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, char *retval,
         return strlen(retval);
 }
 
+extern int __twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen);
+
 int
 twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen)
 {
@@ -89,6 +92,9 @@ twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *v
         }
         else if(strncmp(key, META_EVTID, klen) == 0) {
                 t->evtid = atol(val); // type need to be confirment
+        }
+        else if(strncmp(key, META_DATA, klen) == 0) {   // Jiguo: recover the data
+		__twmeta(spdid, td, key, klen, val, vlen);
         }
         else { UNLOCK(); return -1;}
 

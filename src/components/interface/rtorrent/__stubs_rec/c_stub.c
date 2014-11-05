@@ -15,6 +15,9 @@
 #include <rtorrent.h>
 #include <cstub.h>
 
+#include <stdio.h>
+#include <stdlib.h>
+
 #define CSLAB_ALLOC(sz)   alloc_page()
 #define CSLAB_FREE(x, sz) free_page(x)
 #include <cslab.h>
@@ -23,7 +26,18 @@
 #define CVECT_FREE(x) free_page(x)
 #include <cvect.h>
 
-#define USE_CMAP
+
+/* the state of an torrent file object */
+enum {
+	STATE_TSPLIT_PARENT,  // parent tsplit
+	STATE_TSPLIT,         // current tsplit
+	STATE_TREAD,
+	STATE_TWRITE,
+	STATE_TRELEASE,
+	STATE_TMERGE,
+	STATE_TRMETA,
+	STATE_TWMETA
+};
 
 #if ! defined MAX_RECUR_LEVEL || MAX_RECUR_LEVEL < 1
 #define MAX_RECUR_LEVEL 20
@@ -41,15 +55,18 @@ static volatile unsigned long fcounter = 0;
 
 /* recovery data and related utility functions */
 struct rec_data_tor {
-	td_t	parent_tid;	// id which split from, root tid is 1
-        td_t	s_tid;		// id that returned from the server (might be same)
-        td_t	c_tid;		// id that viewed by the client (always unique)
+	td_t	p_tid;	// id which split from, root tid is 1
+        td_t	s_tid;	// id that returned from the server (might be same)
+        td_t	c_tid;	// id that viewed by the client (always unique)
 
 	char		*param;
 	int		 param_len;
 	tor_flags_t	 tflags;
 	long		 evtid;
 
+	int              being_recovered;  // if we need track the data again?
+
+	int              state;
 	unsigned long	 fcnt;
 #if (!LAZY_RECOVERY)
 	int has_rebuilt;
@@ -128,133 +145,12 @@ map_rd_delete(td_t tid)
 	assert(tid >= 0);
 	struct rec_data_tor *rd;
 	rd = map_rd_lookup(tid);
-	assert(rd);
+	assert(rd && rd->param);
+	free(rd->param);   // free the memory for the path name saving
 	cslab_free_rd(rd);
 	cos_map_del(&uniq_tids, tid);
 	return;
 }
-
-static void 
-rd_cons(struct rec_data_tor *rd, td_t tid, td_t ser_tid, td_t cli_tid, char *param, int len, tor_flags_t tflags, long evtid)
-{
-	/* printc("rd_cons: ser_tid %d  cli_tid %d\n", ser_tid, cli_tid); */
-	assert(rd);
-
-	rd->parent_tid	 = tid;
-	rd->s_tid	 = ser_tid;
-	rd->c_tid	 = cli_tid;
-	rd->param	 = param;
-	rd->param_len	 = len;
-	rd->tflags	 = tflags;
-	rd->evtid	 = evtid;
-	rd->fcnt	 = fcounter;
-
-#if (!LAZY_RECOVERY)
-	rd->has_rebuilt  = 0;
-#endif
-	return;
-}
-
-static td_t
-rd_replay(struct rec_data_tor *rd, long recur_lvl)
-{
-	assert(rd);
-	return __tsplit(cos_spd_id(), rd->parent_tid, rd->param, recur_lvl, rd->tflags, rd->evtid, (void *)rd);
-}
-
-/* restore the server state */
-static void
-reinstate(td_t tid, long recur_lvl)  	/* relate the flag to the split/r/w fcnt */
-{
-	td_t ret;
-	struct rec_data_tor *rd;
-
-	/* printc("in reinstate...tid %d\n", tid); */
-	// tid could be lost, so use tid_root here FIXME
-	if (tid == td_root) return;
-#ifndef USE_CMAP	
-	if (!(rd = rd_lookup(tid))) {
-#else
-	if (!(rd = map_rd_lookup(tid))) {
-#endif
-		/* printc("found root...tid %d\n", tid); */
-		return; 	/* root_tid */
-	}
-	if (rd->fcnt == fcounter) return; // Has been rebuilt before. FIXME: should recover as a tree
-	if (recur_lvl <= 0) assert(0);  /* too many recursion !!*/
-
-	ret = rd_replay(rd, recur_lvl);
-	if (ret < 1) {
-		printc("re-split failed %d\n", tid);
-		BUG();
-	}
-	rd->fcnt = fcounter;
-
-	/* if (rd->parent_tid == rd_root) return; // has reached the root, do not recover the root for now */
-	/* printc("<<<<<< thread %d trying to reinstate....tid %d\n", cos_get_thd_id(), rd->c_tid); */
-	/* volatile unsigned long long start, end; */
-	/* rdtscll(start); */
-	/* printc("parent tid %d\n", rd->parent_tid); */
-	/* printc("param reinstate %s of length %d\n", rd->param, rd->param_len); */
-	/* ret = __tsplit(cos_spd_id(), rd->parent_tid, rd->param, rd->param_len, rd->tflags, rd->evtid, rd->c_tid); */
-	/* rdtscll(end); */
-	/* printc("reinstate cost: %llu\n", end-start); */
-
-#if (!LAZY_RECOVERY)
-	rd->has_rebuilt  = 1;
-#endif
-	/* printc("just reinstate c_tid %d s_tid %d (rd->fcnt %d) >>>>>>>>>>\n", rd->c_tid, rd->s_tid, rd->fcnt); */
-	return;
-}
-
-extern void sched_active_uc(int thd_id);
-
-static struct rec_data_tor *
-update_rd(td_t tid)
-{
-        struct rec_data_tor *rd;
-	volatile unsigned long long start, end;
-	rdtscll(start);
-#ifndef USE_CMAP
-        rd = rd_lookup(tid);
-#else
-        rd = map_rd_lookup(tid);
-#endif
-	if (!rd) return NULL;
-
-#if (!LAZY_RECOVERY)
-	return rd;
-#endif
-	/* fast path */
-	if (likely(rd->fcnt == fcounter)) return rd;
-
-	/* printc("rd->fcnt %lu fcounter %lu\n",rd->fcnt,fcounter); */
-	reinstate(tid, MAX_RECUR_LEVEL);
-	/* printc("rebuild fs is done\n\n"); */
-	rdtscll(end);
-	printc("recovery_rd cost: %llu\n", end-start);
-
-	return rd;
-}
-
-/* // This is not used anymore, has changed to cos_map */
-/* static int */
-/* get_unique(void) */
-/* { */
-/* 	unsigned int i; */
-/* 	cvect_t *v; */
-
-/* 	v = &rec_vect; */
-
-/* 	/\* 1 is already assigned to the td_root *\/ */
-/* 	for(i = 2 ; i < CVECT_MAX_ID ; i++) { */
-/* 		if (!cvect_lookup(v, i)) return i; */
-/* 	} */
-	
-/* 	if (!cvect_lookup(v, CVECT_MAX_ID)) return CVECT_MAX_ID; */
-
-/* 	return -1; */
-/* } */
 
 static char*
 param_save(char *param, int param_len)
@@ -271,283 +167,299 @@ param_save(char *param, int param_len)
 	}
 	strncpy(l_param, param, param_len);
 
+	l_param[param_len] = '\0';   // zero out any thing left after the end
+
+	printc("in param save: l_param %s param %s param_len %d\n", 
+	       l_param, param, param_len);
 	return l_param;
 }
 
-
-#if (!LAZY_RECOVERY)
-static struct rec_data_tor *
-eager_lookup(td_t td)
+/* restore the server state */
+static void
+rd_recover_state(struct rec_data_tor *rd)
 {
-	struct rec_data_tor *rd = NULL;
+	struct rec_data_tor *prd, *tmp = NULL;
+	char val[10]; // 2^32 use 10 bits
 
-	if (!eager_list_head || EMPTY_LIST(eager_list_head, next, prev)) return NULL;
-	
-	for (rd = FIRST_LIST(eager_list_head, next, prev);
-	     rd != eager_list_head;
-	     rd = FIRST_LIST(rd, next, prev)){
-		if (td == rd->c_tid) return rd;
+	assert(rd && rd->p_tid >= 1 && rd->c_tid > 1);	
+
+	printc("in rd_recover_state: rd->p_tid %d\n", rd->p_tid);
+	if (rd->p_tid > 1) {     // not tsplit from td_root
+		assert((prd = map_rd_lookup(rd->p_tid)));
+		prd->fcnt = fcounter;
+		printc("in rd_recover_state: found a parent to be recovered rd->p_tid %d\n",
+		       rd->p_tid);
+		rd_recover_state(prd);
 	}
+	
+	// has reached td_root, start rebuilding and no tracking...
+	// tsplit returns the client id !!!!
+	printc("\n recovery process calls tsplit again!!!...\n\n");
+	printc("saved param is %s\n", rd->param);
+	td_t tmp_tid = tsplit(cos_spd_id(), rd->p_tid, 
+			      rd->param, rd->param_len, rd->tflags, rd->evtid);
+	if (tmp_tid <= 1) return;
+	printc("\n recovery process tsplit return!!!...(tmp_tid %d)\n\n", tmp_tid);
+	
+	assert((tmp = map_rd_lookup(tmp_tid)));
+	rd->s_tid = tmp->s_tid;
+	/* printc("got the new client side %d and its new server id %d\n",  */
+	/*        tmp_tid, tmp->s_tid); */
+
+        /* do not track the new tid for retsplitting.. (wish to avoid
+	 * this) add this to ramfs as well */
+	map_rd_delete(tmp_tid);  
+
+	/* //Now bring the data back as well */
+	/* printc("\nnow it is time to bring the data back...\n\n"); */
+	
+	/* rd->being_recovered = 1; */
+	/* int ret = -1; */
+	/* sprintf(val, "%d", rd->s_tid); */
+	/* printc("val %s val_len %d (td %d)\n", val, strlen(val), rd->s_tid); */
+	/* ret = twmeta(cos_spd_id(), rd->s_tid, "data", strlen("data"), val, strlen(val)); */
+	/* assert(!ret); */
+	
+	/* printc("\nnow the data is brought back!!!!\n\n"); */
+	return;
+}
+
+static struct rec_data_tor *
+rd_update(td_t tid, int state)
+{
+        struct rec_data_tor *rd = NULL;
+
+	/* In state machine, normally we do not track the td_root,
+	 * Note: for torrent, tsplit/tread/twrite/trelease is always
+	 * in the same component. This is different from evt */
+	
+	// first tsplit 
+	if (tid <= 1 && state == STATE_TSPLIT_PARENT) goto done;
+        rd = map_rd_lookup(tid);
+	if (unlikely(!rd)) goto done;
+	if (likely(rd->fcnt == fcounter)) goto done;
+
+	rd->fcnt = fcounter;
+
+	/* STATE MACHINE */
+	switch (state) {
+	case STATE_TSPLIT_PARENT:
+		/* we get here because the fault occurs during the
+		 * tsplit. Then rd is referring to the parent torrent
+		 * therefore we do not need update the state. We need
+		 * start rebuilding parent's state */
+	case STATE_TRELEASE:
+		/* This is to close a file. Just replay and recover
+		 * the data (which still backed up through cbuf) */
+	case STATE_TREAD:
+		/* The data read from a file will still be backed up
+		 * (cbuf read only)  */
+	case STATE_TWRITE:
+		/* The data to be written to a file will be recorded
+		 * (changed to read only in cbuf) in this
+		 * function. However, we can not do this at the client
+		 * interface like what we did for mbox. The reason is
+		 * that to recover a file, we need the offset of piece
+		 * of data that passed through cbuf and written into
+		 * the file before the fault. twrite returns how many
+		 * bytes actually written, not the offset. Without the
+		 * offset, there is no way to know where the data
+		 * should be put during the recovery (e.g., twmeta).
+
+		 1. we still track the data in the server side (due to
+		 the offset information) 
+
+		 2. during the recovery, we call twmeta to write the
+		 data back to a file and we can do this on the client
+		 side. Bring that data back to a specific offset
+		 position in a file */
+	case STATE_TMERGE:
+		/* This is the end of a file (delete). This is where
+		 * we remove the tracked file info (e.g., in cbuf
+		 * manager) */
+		rd_recover_state(rd);
+		break;
+	case STATE_TWMETA:
+	case STATE_TRMETA:
+		/* Meta operation on the files. For recovery, these
+		 * two functions should not track anymore. Though it
+		 * might change the file access control and data, we
+		 * do not track any data since these are still backed
+		 * up through the cbugs in cbuf manager. */
+		break;
+	default:
+		assert(0);
+	}
+	printc("thd %d restore ramfs done!!!\n", cos_get_thd_id());
+done:
 	return rd;
 }
 
-void
-eager_recovery_all()
+static void 
+rd_cons(struct rec_data_tor *rd, td_t p_tid, td_t c_tid, td_t s_tid,
+	char *param, int len, tor_flags_t tflags, long evtid)
 {
-	td_t ret;
-	struct rec_data_tor *rd = NULL;
+	/* printc("rd_cons: ser_tid %d  cli_tid %d\n", ser_tid, cli_tid); */
+	assert(rd);
 
-	if (!eager_list_head || EMPTY_LIST(eager_list_head, next, prev)) return;
-	/* printc("\n [start eager recovery!]\n\n"); */
+	rd->p_tid	 = p_tid;
+	rd->c_tid	 = c_tid;
+	rd->s_tid	 = s_tid;
+	rd->param	 = param;
+	rd->param_len	 = len;
+	rd->tflags	 = tflags;
+	rd->evtid	 = evtid;
+	rd->fcnt	 = fcounter;
 
-	for (rd = FIRST_LIST(eager_list_head, next, prev);
-	     rd != eager_list_head;
-	     rd = FIRST_LIST(rd, next, prev)){
-		if (!rd->has_rebuilt) {
-			/* printc("found one c %d s %d\n", rd->c_tid, rd->s_tid); */
-			reinstate(rd->c_tid, MAX_RECUR_LEVEL);
-		}
-	}
-	
-	
-	/* un_mark the has_rebuilt flag */
-	for (rd = FIRST_LIST(eager_list_head, next, prev);
-	     rd != eager_list_head;
-	     rd = FIRST_LIST(rd, next, prev)){
-		rd->has_rebuilt = 0;
-	}
+	rd->being_recovered = 0;
+	rd->state           = STATE_TSPLIT;
 
-	/* printc("\n [eager recovery done!]\n\n"); */
+	return;
 }
-#endif
-
 
 /************************************/
 /******  client stub functions ******/
 /************************************/
+static int first = 0;
 
 struct __sg_tsplit_data {
-	td_t tid;	
-	/* int flag; */
+	td_t parent_tid;	
 	tor_flags_t tflags;
 	long evtid;
 	int len[2];
 	char data[0];
 };
 
-/* Split the new torrent and get new ser object */
-/* Client only needs know how to find server side object */
+CSTUB_FN(td_t, tsplit)(struct usr_inv_cap *uc,
+		       spdid_t spdid, td_t parent_tid, char * param,
+		       int len, tor_flags_t tflags, long evtid)
+{
+	long fault = 0;
+	td_t ret;
 
-static int aaa = 0;
-
-CSTUB_FN_ARGS_6(td_t, tsplit, spdid_t, spdid, td_t, tid, char *, param, int, len, tor_flags_t, tflags, long, evtid)
-
-/* printc("\ncli interface... param... %s\n", param); */
-/* printc("<<< In: call recovery tsplit  (thread %d spd %ld) >>>\n", cos_get_thd_id(), cos_spd_id()); */
-        if (cos_get_thd_id() == 13) aaa++;   		/* test only */
-/* printc("thread %d aaa is %d\n", cos_get_thd_id(), aaa); */
-        ret = __tsplit(spdid, tid, param, len, tflags, evtid, NULL);
-
-CSTUB_POST
-
-static int first = 0;
-
-CSTUB_FN_ARGS_7(td_t, __tsplit, spdid_t, spdid, td_t, tid, char *, param, int, len, tor_flags_t, tflags, long, evtid, void *, rec_rd)
         struct __sg_tsplit_data *d = NULL;
-        struct rec_data_tor *rd, *rd_p, *rd_c, *rd_rec;
-        rd = rd_p = rd_c = rd_rec = NULL;
-	char *l_param = NULL;
 	cbuf_t cb = 0;
-        long recur_lvl = 0;
-        long l_evtid = 0;
-
-        int		sz	   = 0;
+	
+        struct rec_data_tor *rd = NULL;
+	int sz  = len + sizeof(struct __sg_tsplit_data);
+        td_t		curr_ptid  = 0;
         td_t		cli_tid	   = 0;
         td_t		ser_tid	   = 0;
-        tor_flags_t	flags	   = tflags;
-        td_t		parent_tid = tid;
+
+	printc("cli: tsplit passed in param %s\n", param);
+	assert(parent_tid >= 1);
+        assert(param && len >= 0);
+        assert(param[len] == '\0'); 
 
         if (first == 0) {
 		cos_map_init_static(&uniq_tids);
 		first = 1;
 	}
 
-        /* printc("len %d param %s\n", len, param); */
-	unsigned long long start, end;
-        assert(param && len >= 0);
-        assert(param[len] == '\0'); 
-
-        sz = len + sizeof(struct __sg_tsplit_data);
-        /* replay on slow path */
-        // option1: pre allocate memory (limit amount mem, stack space!!! -- cflow)
-        // option2: no memory, but N^2 in finding all parents 
-        // For now, use MAX_RECUR_LEVEL to limit the max recursion depth
-        if (unlikely(rec_rd)) {
-		/* on rec path, evtid (already passed by rd) is passed as the recursion depth*/
-		recur_lvl = evtid;
-		rd_rec =  (struct rec_data_tor *) rec_rd;
-		l_evtid = rd_rec->evtid;
-		reinstate(parent_tid, recur_lvl-1);
-	} else {
-		l_evtid = evtid;
-	}
-
-#ifndef USE_CMAP
-        if ((rd_p = rd_lookup(parent_tid))) parent_tid = rd_p->s_tid;
-#else
-        if ((rd_p = map_rd_lookup(parent_tid)) && rd_p->s_tid > 1 ) {
-		parent_tid = rd_p->s_tid;
-		/* printc("update parent_tid %d\n", parent_tid); */
-	}
-#endif
-        if ((parent_tid > 1) && unlikely(!rd_p)) assert(0);  //if parent_tid > 1, there must a record exist already
 redo:
-        d = cbuf_alloc(sz, &cb);
-	if (!d) return -1;
+	printc("<<< In: call tsplit  (thread %d and parent tid %d) >>>\n", 
+	       cos_get_thd_id(), parent_tid);
 
-        d->tid	       = parent_tid;
-        d->tflags      = flags;
-	d->evtid       = l_evtid;
+	rd = rd_update(parent_tid, STATE_TSPLIT_PARENT);
+	if (rd) {
+		curr_ptid  = rd->s_tid;
+	} else {
+		curr_ptid  = parent_tid;
+	}
+	printc("<<< In: call tsplit (thread %d and curr_parent tid %d) >>>\n", 
+	       cos_get_thd_id(), curr_ptid);
+
+        d = cbuf_alloc(sz, &cb);
+	assert(d);
+	if (!d) return -1;
+	d->parent_tid  = curr_ptid;
+        d->tflags      = tflags;
+	d->evtid       = evtid;
 	d->len[0]      = 0;
 	d->len[1]      = len;
-        /* printc("c: subpath name %s len %d\n", param, len); */
-	memcpy(&d->data[0], param, len);
+	memcpy(&d->data[0], param, len + 1);
 
-#ifdef TEST_3
-        if (aaa == 6 && cos_spd_id() == 17) { //for TEST_3 only   
-#else
-        if (aaa == 6) {
-#endif
-		/* d->flag = -10; /\* test purpose only *\/ */
-		aaa = 100;
-		/* rdtscll(start); */
-	}
-
-CSTUB_ASM_4(__tsplit, spdid, cb, sz, rec_rd)
+	CSTUB_INVOKE(ret, fault, uc, 3, spdid, cb, sz);
 
         if (unlikely(fault)) {
-		fcounter++;
-		if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-			printc("set cap_fault_cnt failed\n");
-			BUG();
-		}
+		CSTUB_FAULT_UPDATE();
 		memset(&d->data[0], 0, len);
-		cbuf_free(d);
-		
-#if (!LAZY_RECOVERY)
-		eager_recovery_all();
-#else
-		reinstate(tid, MAX_RECUR_LEVEL);
-#endif
-		
-		/* printc("rebuild is done, , maybe active uc 12\n\n"); */
-
-		/* JIGUO: I think we'd better rebuild the web server status,
-		 * since no coming request will trigger the even since
-		 * the recovery */
-		/* sched_active_uc(12); */
-		/* cos_brand_cntl(COS_BRAND_ACTIVATE_UC, 13, 12, 0); */
-
-		/* rdtscll(end); */
-		/* printc("entire cost %llu\n", end-start); */
+		cbuf_free(cb);
+		printc("tsplit found a fault and ready to go to redo\n");
 		goto redo;
 	}
-
-//memset(&d->data[0], 0, len);  no reason to zero??
-        /* printc("tsplit ready to cbuf free\n"); */
-        cbuf_free(d);
-
-        if (unlikely(rec_rd)) {
-		assert(ret > 0);
-		rd_rec->s_tid = ret;  	/* update server side tid */
-		return ret;
-	}
-
+        cbuf_free(cb);
+	
         ser_tid = ret;
-	l_param = NULL;
-	if (len > 0) { // len can be zero
+	assert(ser_tid >= 1);
+
+	char *l_param = "";
+	if (len > 0) {
 		l_param = param_save(param, len);
 		assert(l_param);
 	}
-#ifndef USE_CMAP
-	// cmap_get() here. Maybe unlikely needs to be removed
-        if (unlikely(rd_lookup(ser_tid))) {
-		cli_tid = get_unique();
-		assert(cli_tid > 0 && cli_tid != ser_tid);
-		/* printc("found existing tid %d >> get new cli_tid %d\n", ser_tid, cli_tid); */
-#if (!LAZY_RECOVERY)
-		struct rec_data_tor *tmp;
-		tmp  = rd_lookup(ser_tid);
-		REM_LIST(tmp, next, prev);
-#endif
-	} else {
-		cli_tid = ser_tid;
-	}
-	
-        /* client side tid should be guaranteed to be unique now */
-        rd = rd_alloc(cli_tid);   // pass unique client side id here
-#else
+
 	cli_tid = map_rd_create();
+	assert(cli_tid >= 2);
+
 	rd = map_rd_lookup(cli_tid);
-#endif
         assert(rd);
-        rd_cons(rd, tid, ser_tid, cli_tid, l_param, len, tflags, l_evtid);
-	/* printc("After create rd: rd->c_tid %d rd->s_tid %d rd->parent_tid %d\n",rd->c_tid, rd->s_tid, rd->parent_tid); */
 
-#if (!LAZY_RECOVERY)
-	/* only initialize the eager head */
-	if (unlikely(!eager_list_head)) {
-		eager_list_head = (struct rec_data_tor*)malloc(sizeof(struct rec_data_tor));
-		INIT_LIST(eager_list_head, next, prev);
-		rd_cons(eager_list_head, 0, 0, 0, NULL, 0, 0, 0);
+        rd_cons(rd, curr_ptid, cli_tid, ser_tid, l_param, len, tflags, evtid);
+
+	printc("tsplit done!!! return new client tid %d\n\n", cli_tid);
+        return cli_tid;
+}
+
+CSTUB_FN(int, twritep)(struct usr_inv_cap *uc,
+		       spdid_t spdid, td_t td, int cb, int sz)
+{
+	long fault = 0;
+	td_t ret;
+
+        struct rec_data_tor *rd;
+redo:
+        printc("<<< In: call twrite  (thread %d) >>>\n", cos_get_thd_id());
+	rd = rd_update(td, STATE_TWRITE);
+	assert(rd);
+
+	CSTUB_INVOKE(ret, fault, uc, 4, spdid, rd->s_tid, cb, sz);
+
+        if (unlikely(fault)) {
+		CSTUB_FAULT_UPDATE();
+		goto redo;
 	}
-	ADD_LIST(eager_list_head, rd, next, prev);
-#endif
-        ret = cli_tid;
-	/* printc("tsplit done!!!\n\n"); */
-CSTUB_POST
 
-/* struct __sg_twmeta_data { */
-/* 	td_t td; */
-/* 	cbuf_t cb; */
-/* 	int sz; */
-/* 	int offset; */
-/* 	int flag; */
-/* }; */
+        /* we can not save the infor here since we need track the offset and
+         * uniq file id any way */
+	return ret;
+}
 
-/* CSTUB_FN_ARGS_6(int, twmeta, spdid_t, spdid, td_t, td, cbuf_t, cb, int, sz, int, offset, int, flag) */
-/*         struct rec_data_tor *rd; */
-/* 	struct __sg_twmeta_data *d; */
-/* 	cbuf_t cb_m; */
-/* 	int sz_m = sizeof(struct __sg_twmeta_data); */
-/* redo: */
-/* 	d = cbuf_alloc(sz_m, &cb_m); */
-/* 	if (!d) return -1; */
+CSTUB_FN(int, treadp)(struct usr_inv_cap *uc,
+		      spdid_t spdid, td_t td, int len, int *off, int *sz)
+{
+	int ret;
+	long fault = 0;
 
-/* 	/\* int buf_sz; *\/ */
-/* 	/\* u32_t id; *\/ */
-/* 	/\* cbuf_unpack(cb, &id, (u32_t*)&buf_sz); *\/ */
-/*         /\* printc("cbid is %d\n", id); *\/ */
 
-/* 	d->td	  = td; */
-/* 	d->cb	  = cb; */
-/*         d->sz	  = sz; */
-/*         d->offset = offset; */
-/*         d->flag   = flag; */
+        /* printc("<<< In: call tread (thread %d, spd %ld) >>>\n", cos_get_thd_id(), cos_spd_id()); */
+        struct rec_data_tor *rd;
+        volatile unsigned long long start, end;
 
-/* CSTUB_ASM_3(twmeta, spdid, cb_m, sz_m) */
-/*         if (unlikely(fault)) { */
-/* 		fcounter++; */
-/* 		if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) { */
-/* 			printc("set cap_fault_cnt failed\n"); */
-/* 			BUG(); */
-/* 		} */
-/* 		cbuf_free(d); */
-/*                 goto redo; */
-/* 	} */
+redo:
+        /* printc("tread\n"); */
+	rd = rd_update(td, STATE_TREAD);
+	assert(rd);
 
-/* 	cbuf_free(d); */
-/* CSTUB_POST */
+	CSTUB_INVOKE_3RETS(ret, fault, *off, *sz, uc, 3, spdid, rd->s_tid, len);
+        if (unlikely(fault)) {
+		printc("treadp found a fault and ready to go to redo\n");
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
+
+	return ret;
+}
 
 struct __sg_tmerge_data {
 	td_t td;
@@ -555,7 +467,13 @@ struct __sg_tmerge_data {
 	int len[2];
 	char data[0];
 };
-CSTUB_FN_ARGS_5(int, tmerge, spdid_t, spdid, td_t, td, td_t, td_into, char *, param, int, len)
+
+CSTUB_FN(int, tmerge)(struct usr_inv_cap *uc, spdid_t spdid, td_t td, 
+		      td_t td_into, char * param, int len)
+{
+	long fault = 0;
+	td_t ret;
+	
 	struct __sg_tmerge_data *d;
         struct rec_data_tor *rd;
 	cbuf_t cb;
@@ -565,14 +483,11 @@ CSTUB_FN_ARGS_5(int, tmerge, spdid_t, spdid, td_t, td, td_t, td_into, char *, pa
 
         assert(param && len > 0);
 	assert(param[len] == '\0');
-
+	
 redo:
-/* printc("tmerge\n"); */
-        rd = update_rd(td);
-	if (!rd) {
-		printc("try to merge a non-existing tor\n");
-		return -1;
-	}
+        printc("<<< In: call tmerge (thread %d) >>>\n", cos_get_thd_id());
+	rd = rd_update(td, STATE_TMERGE);
+	assert(rd);
 
 	d = cbuf_alloc(sz, &cb);
 	if (!d) return -1;
@@ -584,138 +499,145 @@ redo:
         d->len[1] = len;
 	memcpy(&d->data[0], param, len);
 
-CSTUB_ASM_3(tmerge, spdid, cb, sz)
+	CSTUB_INVOKE(ret, fault, uc, 3, spdid, cb, sz);
+
         if (unlikely(fault)) {
-		fcounter++;
-		if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-			printc("set cap_fault_cnt failed\n");
-			BUG();
-		}
-		cbuf_free(d);
+		CSTUB_FAULT_UPDATE();
+		cbuf_free(cb);
                 goto redo;
 	}
 
-	cbuf_free(d);
-#ifndef USE_CMAP
-        if (!ret) map_rd_delete(rd->c_tid); /* this must be a leaf */
-#else
-        if (!ret) rd_dealloc(rd); /* this must be a leaf */
-#endif
+	cbuf_free(cb);
 
-#if (!LAZY_RECOVERY)
-	REM_LIST(rd, next, prev);
-#endif
-
-CSTUB_POST
+        if (!ret) map_rd_delete(rd->c_tid);
+	
+	return ret;
+}
 
 
-CSTUB_FN_ARGS_2(int, trelease, spdid_t, spdid, td_t, tid)
+CSTUB_FN(void, trelease)(struct usr_inv_cap *uc,
+			 spdid_t spdid, td_t tid)
+{
+	int ret;
+	long fault = 0;
 
         /* printc("<<< In: call trelease (thread %d) >>>\n", cos_get_thd_id()); */
         struct rec_data_tor *rd;
 
 redo:
-/* printc("trelease\n"); */
-        rd = update_rd(tid);
-	if (!rd) {
-		printc("try to release a non-existing tor\n");
-		return -1;
-	}
+        printc("<<< In: call trelease (thread %d) >>>\n", cos_get_thd_id());
+	rd = rd_update(tid, STATE_TRELEASE);
+	assert(rd);
 
-CSTUB_ASM_2(trelease, spdid, rd->s_tid)
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_tid);
 
         if (unlikely(fault)) {
-		fcounter++;
-		if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-			printc("set cap_fault_cnt failed\n");
-			BUG();
-		}
-                goto redo;
+		CSTUB_FAULT_UPDATE();
+		goto redo;
 	}
-        assert(rd);
+	
+	map_rd_delete(rd->c_tid);
 
-#if (!LAZY_RECOVERY)
-	REM_LIST(rd, next, prev);
-#endif
-
-CSTUB_POST
-
-CSTUB_FN_ARGS_4(int, tread, spdid_t, spdid, td_t, tid, cbufp_t, cb, int, sz)
-
-        /* printc("<<< In: call tread (thread %d, spd %ld) >>>\n", cos_get_thd_id(), cos_spd_id()); */
-        struct rec_data_tor *rd;
-        volatile unsigned long long start, end;
-
-	int flag_fail = 0;
-redo:
-	/* if (flag_fail == 1){ */
-	/* 	rdtscll(start); */
-	/* } */
-/* printc("tread\n"); */
-        rd = update_rd(tid);
-
-	/* if (flag_fail == 1){ */
-	/* 	rdtscll(end); */
-	/* 	printc("tread recovery -end cost %llu\n", end - start); */
-	/* } */
-
-	flag_fail = 0;
-
-	if (!rd) {
-		printc("try to read a non-existing tor\n");
-		return -1;
-	}
+	return;
+}
 
 
-CSTUB_ASM_4(tread, spdid, rd->s_tid, cb, sz)
+struct __sg_trmeta_data {
+        td_t td;
+        int klen, retval_len;
+        char data[0];
+};
 
-        if (unlikely(fault)) {
-		fcounter++;
-		if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-			printc("set cap_fault_cnt failed\n");
-			BUG();
-		}
-		/* printc("failed!!! in tread\n"); */
-		flag_fail = 1;
-                goto redo;
-	}
-
-        /* flag_fail = 0; */
-        print_rd_info(rd);
-
-CSTUB_POST
-
-
-CSTUB_FN_ARGS_4(int, twrite, spdid_t, spdid, td_t, tid, cbufp_t, cb, int, sz)
-
-        /* printc("<<< In: call twrite  (thread %d) >>>\n", cos_get_thd_id()); */
+CSTUB_FN(int, trmeta)(struct usr_inv_cap *uc,
+		spdid_t spdid, td_t td, const char *key,
+		unsigned int klen, char *retval, unsigned int max_rval_len)
+{
+	int ret;
+	long fault = 0;
+        cbuf_t cb;
+        int sz = sizeof(struct __sg_trmeta_data) + klen + max_rval_len + 1;
+        struct __sg_trmeta_data *d;
         struct rec_data_tor *rd;
 
-redo:
+        assert(key && retval && klen > 0 && max_rval_len > 0);
+        assert(key[klen] == '\0' && sz <= PAGE_SIZE);
 
-/* printc("twrite\n"); */
-        rd = update_rd(tid);
-	if (!rd) {
-		printc("try to write a non-existing tor\n");
-		return -1;
+redo:
+        printc("<<< In: call trmeta (thread %d) >>>\n", cos_get_thd_id());
+	rd = rd_update(td, STATE_TRMETA);
+	assert(rd);
+
+        d = cbuf_alloc(sz, &cb);
+        if (!d) return -1;
+
+        d->td = rd->s_tid;
+        d->klen = klen;
+        d->retval_len = max_rval_len;
+        memcpy(&d->data[0], key, klen + 1);
+
+	CSTUB_INVOKE(ret, fault, uc, 3, spdid, cb, sz);
+        if (unlikely(fault)) {
+		CSTUB_FAULT_UPDATE();
+		goto redo;
 	}
 
-CSTUB_ASM_4(twrite, spdid, rd->s_tid, cb, sz)
+
+        if (ret >= 0) {
+                if ((unsigned int)ret > max_rval_len) { // as ret >= 0, cast it to unsigned int to omit compiler warning
+                        cbuf_free(cb);
+                        return -EIO;
+                }
+                memcpy(retval, &d->data[klen + 1], ret + 1);
+        }
+        cbuf_free(cb);
+	return ret;
+}
+
+struct __sg_twmeta_data {
+        td_t td;
+        int klen, vlen;
+        char data[0];
+};
+
+CSTUB_FN(int, twmeta)(struct usr_inv_cap *uc,
+		spdid_t spdid, td_t td, const char *key,
+		unsigned int klen, const char *val, unsigned int vlen)
+{
+	int ret;
+	long fault = 0;
+        cbuf_t cb;
+        int sz = sizeof(struct __sg_twmeta_data) + klen + vlen + 1;
+        struct __sg_twmeta_data *d;
+        struct rec_data_tor *rd;
+
+        assert(key && val && klen > 0 && vlen > 0);
+        assert(key[klen] == '\0' && val[vlen] == '\0' && sz <= PAGE_SIZE);
+
+redo:
+        printc("<<< In: call twmeta (thread %d) >>>\n", cos_get_thd_id());
+	rd = rd_update(td, STATE_TWMETA);
+	assert(rd);
+
+        d = cbuf_alloc(sz, &cb);
+        if (!d) assert(0); //return -1;
+
+        d->td   = td;   // do not pass rd->s_tid since this is only for recovery
+        d->klen = klen;
+        d->vlen = vlen;
+        memcpy(&d->data[0], key, klen + 1);
+        memcpy(&d->data[klen + 1], val, vlen + 1);
+
+	CSTUB_INVOKE(ret, fault, uc, 3, spdid, cb, sz);
 
         if (unlikely(fault)) {
-		fcounter++;
-		if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-			printc("set cap_fault_cnt failed\n");
-			BUG();
-		}
-                goto redo;
+		CSTUB_FAULT_UPDATE();
+		goto redo;
 	}
 
-        assert(rd);
+        cbuf_free(cb);
+	return ret;
+}
 
-        print_rd_info(rd);
-
-CSTUB_POST
 
 void 
 print_rd_info(struct rec_data_tor *rd)

@@ -24,9 +24,9 @@ td_t __sg_tsplit(spdid_t spdid, cbuf_t cbid, int len)
 }
 
 int
-__sg_treadp(spdid_t spdid, int sz, int __pad0, int __pad1, int *off_len)
+__sg_treadp(spdid_t spdid, int sz, int len, int __pad0, int __pad1, int *off_len)
 {
-        return treadp(spdid, sz, &off_len[0], &off_len[1]);
+        return treadp(spdid, sz, len, &off_len[0], &off_len[1]);
 }
 
 struct __sg_tmerge_data {

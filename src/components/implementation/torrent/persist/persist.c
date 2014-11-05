@@ -199,6 +199,12 @@ done:
 	return ret;
 }
 
+int
+__twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen) {
+	
+	return 0;
+}
+
 int cos_init(void)
 {
 	lock_static_init(&fs_lock);

@@ -1659,6 +1659,11 @@ static int init(void)
 	return 0;
 }
 
+int
+__twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen) {
+	
+	return 0;
+}
 
 void cos_init(void *arg)
 {

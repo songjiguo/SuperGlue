@@ -408,6 +408,7 @@ cbuf_c_create(spdid_t spdid, int size, long cbid)
 	if (mc->nfo.c.refcnt == CBUFP_REFCNT_MAX)	assert(0);
 	mc->nfo.c.refcnt++;
 	d->flags           |= CBUF_DESC_TMEM;
+	/* printc("cbuf_create: set the CBUFM_OWNER for cbid %d\n", cbid); */
 done:
 	RELEASE();
 	return ret;
@@ -522,7 +523,7 @@ cbuf_c_retrieve(spdid_t spdid, int cbid, int len)
 		mc->owner_nfo.c.nsent = mc->owner_nfo.c.nrecvd = 0;
 		mc->nfo.c.flags      |= CBUFM_WRITABLE;
 	}
-	if (mc->nfo.c.refcnt == CBUFP_REFCNT_MAX)	assert(0);
+	if (mc->nfo.c.refcnt == CBUFP_REFCNT_MAX) assert(0);
 	mc->nfo.c.refcnt++;
 	mc->nfo.c.ptr = d_addr >> PAGE_ORDER;
 	mc->sz        = d->sz;
@@ -628,6 +629,8 @@ mgr_update_owner(spdid_t new_spdid, long cbid)
 	if(!new_mc) goto err;
 	new_mc->nfo.c.flags |= CBUFM_OWNER;
 	old_mc->nfo.c.flags &= ~CBUFM_OWNER;	
+
+	printc("cbufmgr: claim_owner %d claim cbid %ld\n", new_spdid, cbid);
 
 	// exchange the spd and addr in cbuf_mapping
 	tmp.spd = old_owner->spd;

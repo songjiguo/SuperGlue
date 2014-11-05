@@ -32,7 +32,7 @@ struct tor_list {
 
 struct tor_list *all_tor_list = NULL;
 
-static int __twmeta(spdid_t spdid, td_t td, int cbid, int sz, int offset, int flag);
+/* static int __twmeta(spdid_t spdid, td_t td, int cbid, int sz, int offset, int flag); */
 
 static td_t
 tid_lookup(int fid)
@@ -167,21 +167,21 @@ restore_tor(int fid, td_t tid)
 	/* printc("restore_tor:::fid is %d tid %d\n", fid, tid); */
 	if (fid_lookup_rebuilt(fid)) goto done;
 
-	total_cbs = cbuf_c_introspect(cos_spd_id(), fid, 0, CBUF_INTRO_TOT);
-	/* printc("total cbs %d\n", total_cbs); */
+	/* total_cbs = cbuf_c_introspect(cos_spd_id(), fid, 0, CBUF_INTRO_TOT); */
+	/* /\* printc("total cbs %d\n", total_cbs); *\/ */
 
-	while(total_cbs--) {
-		nth_cb++;
-		cbid   = cbuf_c_introspect(cos_spd_id(), fid, nth_cb, CBUF_INTRO_CBID);
-		if (!cbid) goto no_found;
-		sz     = cbuf_c_introspect(cos_spd_id(), fid, nth_cb, CBUF_INTRO_SIZE);
-		if (!sz) goto no_found;
-		offset = cbuf_c_introspect(cos_spd_id(), fid, nth_cb, CBUF_INTRO_OFFSET);
+	/* while(total_cbs--) { */
+	/* 	nth_cb++; */
+	/* 	cbid   = cbuf_c_introspect(cos_spd_id(), fid, nth_cb, CBUF_INTRO_CBID); */
+	/* 	if (!cbid) goto no_found; */
+	/* 	sz     = cbuf_c_introspect(cos_spd_id(), fid, nth_cb, CBUF_INTRO_SIZE); */
+	/* 	if (!sz) goto no_found; */
+	/* 	offset = cbuf_c_introspect(cos_spd_id(), fid, nth_cb, CBUF_INTRO_OFFSET); */
 	
-		/* printc("found cbid %d size %d offset %d\n", cbid, sz, offset); */
-		/* printc("meta write:: tor id %d for fid %d\n", tid, fid); */
-		__twmeta(cos_spd_id(), tid, cbid, sz, offset, 1);	/* 1 for recovery now */
-	}
+	/* 	/\* printc("found cbid %d size %d offset %d\n", cbid, sz, offset); *\/ */
+	/* 	/\* printc("meta write:: tor id %d for fid %d\n", tid, fid); *\/ */
+	/* 	__twmeta(cos_spd_id(), tid, cbid, sz, offset, 1);	/\* 1 for recovery now *\/ */
+	/* } */
 
 	/* printc("after meta done: tor->offset %d\n", tor->offset); */
 	tor->offset = 0;
@@ -334,10 +334,10 @@ reserve_cbuf_fid(cbuf_t cb, td_t td, u32_t offset, int len, int fid)
 	/* } */
 
 	/* pass the FT relevant info to cbuf manager  */
-	if (cbuf_add_record(cb, len, offset, fid)) {
-		printc("failed to record cbuf\n");
-		ret = -1;
-	}
+	/* if (cbuf_add_record(cb, len, offset, fid)) { */
+	/* 	printc("failed to record cbuf\n"); */
+	/* 	ret = -1; */
+	/* } */
 	
 	add_tor_list(fid, td); 
 

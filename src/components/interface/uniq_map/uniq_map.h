@@ -9,6 +9,7 @@
 
 /* Data structure used to pass path name and server side tid here */
 struct uniqmap_data {
+	int parent_tid;
 	int server_tid;
 	int sz;
 	char data[0];

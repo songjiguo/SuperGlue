@@ -24,6 +24,11 @@ vaddr_t cbufp_register(spdid_t spdid, long cbid);
 int cbufp_claim(spdid_t spdid, int cbid);     /* spd wants to own the cbuf */
 int cbufp_introspect(spdid_t spdid, int iter); /* get tracked cbids*/
 
+/* when some info need be saved in cbuf MM */
+int cbufp_record(int spdid, int len, int offset, int cbidfid); 
+/* return the state of a cbufp */
+int cbufp_reflect(int td, int nth, int type);
+
 /*
  * Before the first call to cbufp_collect, the client component must
  * call cbufp_map_collect in order to map the shared page used to
