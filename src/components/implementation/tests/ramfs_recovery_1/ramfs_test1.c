@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <sched.h>
 #include <evt.h>
-#include <rtorrent.h>
 #include <periodic_wake.h>
 #include <timed_blk.h>
 
@@ -12,6 +11,8 @@
 #include <pgfault.h>
 
 #include <cbuf.h>
+
+#include <rtorrent.h>
 
 #define ITER 2000
 #define MAX_SZ 4096

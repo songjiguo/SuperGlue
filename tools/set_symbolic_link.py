@@ -25,6 +25,10 @@ mm_rec_h = '__mem_mgr_rec.h'
 mm_nor_h = '__mem_mgr.h'
 mm_header = 'mem_mgr.h'
 
+ramfs_rec_h = '__rtorrent_h_rec'
+ramfs_nor_h = '__rtorrent_h'
+ramfs_header = 'rtorrent.h'
+
 cbufc_rec_h = '__cbuf_c_h_rec'
 cbufc_nor_h = '__cbuf_c_h'
 cbufc_header = 'cbuf_c.h'
@@ -238,7 +242,7 @@ def set_interface(name, par):
         if (name == 'lock') or (name == 'evt'):
             set_reflection_interface('sched', ret)
 
-        if (name == 'mbtorrent') or (name == 'evt'):
+        if (name == 'mbtorrent') or (name == 'evt') or (name == 'rtorrent'):
             set_reflection_interface('lock', ret)
 
         return ret
@@ -318,7 +322,8 @@ def main():
         # component FS
         if (service_names[i] == 'rtorrent'):
             print service_names[i]
-            set_link(service_names[i], ramfs_component_path, ramfs_c, ramfs_nor_c, ramfs_rec_c, 0)
+            ret = set_link(service_names[i], ramfs_component_path, ramfs_c, ramfs_nor_c, ramfs_rec_c, 0)
+            set_link(service_names[i], interface_path+service_names[i], ramfs_header, ramfs_nor_h, ramfs_rec_h, ret)
             print
         # component MBOX
         if (service_names[i] == 'mbtorrent'):
