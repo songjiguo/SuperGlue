@@ -10,6 +10,6 @@ ASM_OBJS=
 COMPONENT=luatests.o
 INTERFACES=
 IF_LIB=$(LUAOBJ)
-DEPENDENCIES=sched printc
+DEPENDENCIES=sched printc mem_mgr
 
 include ../../Makefile.subsubdir

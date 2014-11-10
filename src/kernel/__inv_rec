@@ -509,7 +509,7 @@ thd_ipc_fault_notif(struct thread *thd, struct spd *dest_spd)
 static struct pt_regs *
 thd_ret_fault_notif(struct thread *thd, struct spd *dest_spd)
 {
-	/* printk("[[[[[[ cos: Fault is detected on POP ]]]]]]\n"); */
+	printk("[[[[[[ cos: Fault is detected on POP ]]]]]]\n");
 	__fault_ipc_invoke(thd, 0, 0, &thd->regs, COS_FLT_FLT_NOTIF, dest_spd);
 	return &thd->regs;
 }

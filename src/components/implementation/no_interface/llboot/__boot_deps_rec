@@ -178,7 +178,8 @@ llboot_thd_done(void)
 			printc("ready to upcall and recover\n");
 			assert(pthd);
 			llboot->recover_spd = 0;
-			cos_upcall_args(COS_UPCALL_REBOOT, rspd, llboot->init_thd);
+			cos_upcall_args(COS_UPCALL_REBOOT, rspd, 
+					(llboot->prev_thd << 16) | llboot->init_thd);
 			/* cos_upcall(rspd, arg);  /\* This will escape from the loop *\/ */
 			assert(0);
 		} else {		        /* ...done ureboot... */
@@ -255,7 +256,7 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	 * it to restart the component!  This might even be the
 	 * initial thread.
 	 */
-	if (reboot && cos_get_thd_id() == 4) cos_upcall_args(COS_UPCALL_REBOOT, spdid,0);
+	if (reboot && cos_get_thd_id() == 4) cos_upcall_args(COS_UPCALL_REBOOT, spdid, 0);
 	else cos_upcall(spdid, 0); 	/* FIXME: give back stack... */
 	printc("should not be here\n");
 	BUG();

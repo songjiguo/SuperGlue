@@ -71,17 +71,17 @@ cos_init(void)
 #ifdef EXAMINE_SCHED
 		if (cos_get_thd_id() == high) {
 			printc("<<<high thd %d>>>\n", cos_get_thd_id());
-			ec3_ser1_test();
+			ec3_ser1_test(low, med, high);
 		}
 		
 		if (cos_get_thd_id() == med) {
 			printc("<<<med thd %d>>>\n", cos_get_thd_id());
-			ec3_ser1_test();
+			ec3_ser1_test(low, med, high);
 		}
 
 		/* if (cos_get_thd_id() == low) { */
 		/* 	printc("<<<low thd %d>>>\n", cos_get_thd_id()); */
-		/* 	ec3_ser1_test(); */
+		/* 	ec3_ser1_test(low, med, high); */
 		/* } */
 #endif
 
@@ -89,30 +89,30 @@ cos_init(void)
 		if (cos_get_thd_id() == high) {
 			printc("<<<high thd %d>>>\n", cos_get_thd_id());
 			timed_event_block(cos_spd_id(), 5);
-			ec3_ser1_test();
+			ec3_ser1_test(low, med, high);
 		}
 
 		if (cos_get_thd_id() == med) {
 			printc("<<<med thd %d>>>\n", cos_get_thd_id());
 			timed_event_block(cos_spd_id(), 2);
-			ec3_ser1_test();
+			ec3_ser1_test(low, med, high);
 		}
 
 		if (cos_get_thd_id() == low) {
 			printc("<<<low thd %d>>>\n", cos_get_thd_id());
-			ec3_ser1_test();
+			ec3_ser1_test(low, med, high);
 		}
 #endif
 
 #ifdef EXAMINE_EVT
 		if (cos_get_thd_id() == high) {
 			printc("<<<high thd %d>>>\n", cos_get_thd_id());
-			ec3_ser1_test();
+			ec3_ser1_test(low, med, high);
 		}
 			
 		if (cos_get_thd_id() == med) {
 			printc("<<<med thd %d>>>\n", cos_get_thd_id());
-			ec3_ser1_test();
+			ec3_ser1_test(low, med, high);
 		}
 			
 		/* if (cos_get_thd_id() == warm) { */
@@ -129,12 +129,12 @@ cos_init(void)
 #ifdef EXAMINE_TE
 		if (cos_get_thd_id() == high) {
 			printc("<<<high thd %d>>>\n", cos_get_thd_id());
-			ec3_ser1_test();
+			ec3_ser1_test(low, med, high);
 		}
 			
 		if (cos_get_thd_id() == med) {
 			printc("<<<med thd %d>>>\n", cos_get_thd_id());
-			ec3_ser1_test();
+			ec3_ser1_test(low, med, high);
 		}
 #endif
 

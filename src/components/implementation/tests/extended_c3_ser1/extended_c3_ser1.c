@@ -14,12 +14,6 @@
 
 volatile unsigned long long overhead_start, overhead_end;
 
-// test evt: 10 and 13, 11 and 12
-
-static int low = 13;
-static int mid = 12;
-static int hig = 11;
-
 #define EXAMINE_SCHED
 //#define EXAMINE_TE
 //#define EXAMINE_LOCK
@@ -102,7 +96,7 @@ static void try_lp(void)
 	return;
 }
 
-vaddr_t ec3_ser1_test(void)
+vaddr_t ec3_ser1_test(int low, int mid, int hig)
 {
 	if (cos_get_thd_id() == hig) try_hp();
 	if (cos_get_thd_id() == mid) try_mp();
@@ -179,7 +173,7 @@ static void try_mp(void)
 	return;
 }
 
-vaddr_t ec3_ser1_test(void)
+vaddr_t ec3_ser1_test(vint low, int mid, int hig)
 {
 	if (cos_get_thd_id() == hig) {
 		printc("\n<< Test start in spd %d ... >>>\n\n", cos_get_thd_id());
@@ -236,7 +230,7 @@ static void try_mp(void)
 	return;
 }
 
-vaddr_t ec3_ser1_test(void)
+vaddr_t ec3_ser1_test(int low, int mid, int hig)
 {
 	if (cos_get_thd_id() == hig) {
 		printc("\n<< Test start in spd %d ... >>>\n\n", cos_get_thd_id());
@@ -254,32 +248,35 @@ vaddr_t ec3_ser1_test(void)
 
 #ifdef EXAMINE_SCHED
 
+#define LOCK()   if (sched_component_take(cos_spd_id())) assert(0);
+#define UNLOCK() if (sched_component_release(cos_spd_id())) assert(0);
+
 #define ITER_SCHED 10
 
-vaddr_t ec3_ser1_test(void)
+vaddr_t ec3_ser1_test(int low, int mid, int hig)
 {
 	if (cos_get_thd_id() == hig) {
+		int test_sched_lock = 0;
+		while(test_sched_lock++ < 10) {
+			LOCK();
+			UNLOCK();
+		}
+
 		int i = 0;
 		while(i++ < ITER_SCHED) {
-			printc("\n<< high thd %d is blocking on mid thd %d in spd %d >>>\n", 
-			       cos_get_thd_id(), mid, cos_spd_id());
-			sched_block(cos_spd_id(), low);
+			printc("\n<< high thd %d is blocking on mid thd %d in spd %d (iter %d) >>>\n", cos_get_thd_id(), mid, cos_spd_id(), i);
+			sched_block(cos_spd_id(), mid);
 		}
 	}
 	
 	if (cos_get_thd_id() == mid) {
 		int j = 0;
 		while(j++ < ITER_SCHED) {
-			timed_event_block(cos_spd_id(), 1);
-			printc("\n<< mid thd %d is waking up high thd %d in spd %d >>>\n", 
-			       cos_get_thd_id(), hig, cos_spd_id());
+			printc("\n<< mid thd %d is waking up high thd %d in spd %d (iter %d) >>>\n", cos_get_thd_id(), hig, cos_spd_id(), j);
 			sched_wakeup(cos_spd_id(), hig);
 		}
 	}
 
-	/* if (cos_get_thd_id() == low) sched_block(cos_spd_id(), 0); */
-
-	while(1);  // quick fix the thread termination issue ???
 	return 0;
 }
 

@@ -233,15 +233,16 @@ switch_thd_fault_detect(struct thread *next)
 	struct thd_invocation_frame *tif;
 	
 	tif    = thd_invstk_top(next);
+	assert(tif);
 	n_spd  = tif->spd;
 	
-	/* // hack test: */
-	/* if (thd_get_id(next) == 6) return 0;   // timer thread not detect fault? */
-
 	if (tif->curr_fault.cnt != n_spd->fault.cnt) 
 	{
 		printk("thread %d curr_fault cnt %d\n", thd_get_id(next), tif->curr_fault.cnt);
 		printk("spd %d fault cnt %d\n", spd_get_index(n_spd), n_spd->fault.cnt);
+		/* struct thd_invocation_frame *tmp = thd_invstk_base(next); */
+		/* printk("home spd %d\n", spd_get_index(tmp->spd)); */
+		/* if (tmp == tif) return 0;  // home spd */
 		return 1;
 	}
 	else return 0;

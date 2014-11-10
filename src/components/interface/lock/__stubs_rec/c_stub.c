@@ -82,7 +82,7 @@ static int test_flag = 0;
 volatile unsigned long long meas_start, meas_end; // uBenchmark
 
 /**********************************************/
-/* slab allocalk and cvect for tracking lock */
+/* slab allocalk and cmap for tracking lock */
 /**********************************************/
 
 COS_MAP_CREATE_STATIC(uniq_lkids);
