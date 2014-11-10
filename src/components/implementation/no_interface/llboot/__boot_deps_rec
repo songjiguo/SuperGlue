@@ -32,7 +32,7 @@ printc(char *fmt, ...)
 #endif
 
 #define cos_idle_thd  4	        /* idle thread*/
-#define cos_timer_thd 7  	/* timer thread */
+#define cos_timer_thd 6  	/* timer thread */
 
 #ifdef BOOT_DEPS_H
 #error "boot_deps.h should not be included more than once, or in anything other than boot."
@@ -164,6 +164,7 @@ llboot_thd_done(void)
 		BUG();
 	}
 	
+	// this should be only executed by recovery thread
 	while (1) {
 		int     pthd = llboot->prev_thd;
 		spdid_t rspd = llboot->recover_spd;
@@ -173,15 +174,17 @@ llboot_thd_done(void)
 		volatile unsigned long long start, end;
 
 		assert(tid == llboot->recovery_thd);
-		if (rspd) {             /* need to recover a component */
+		if (rspd) {                     /* the component to be recovered */
+			printc("ready to upcall and recover\n");
 			assert(pthd);
 			llboot->recover_spd = 0;
-			cos_upcall(rspd, arg); /* This will escape from the loop */
+			cos_upcall_args(COS_UPCALL_REBOOT, rspd, llboot->init_thd);
+			/* cos_upcall(rspd, arg);  /\* This will escape from the loop *\/ */
 			assert(0);
-		} else {		/* ...done reinitializing...resume */
+		} else {		        /* ...done ureboot... */
 			assert(pthd && pthd != tid);
 			llboot->prev_thd = 0;   /* FIXME: atomic action required... */
-			/* printc("\nswitch bactk to thread %d\n\n", pthd); */
+			printc("\nswitch back to thread %d\n\n", pthd);
 			cos_switch_thread(pthd, 0);
 		}
 	}
@@ -192,11 +195,12 @@ recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 {
 	printc("LL: llbooter upcall to spd %d, arg %x thd %d op %d\n", dest, (unsigned int)arg, cos_get_thd_id(), op);
 	
-	assert(0);
-
 	struct llbooter_per_core *llboot = PERCPU_GET(llbooter);
 
-	llboot->prev_thd     = cos_get_thd_id();	/* this ensure that prev_thd is always the highest prio thread */
+
+	/* the following ensures that prev_thd is always the highest
+	 * prio thread */
+	llboot->prev_thd     = cos_get_thd_id();
 	llboot->recover_spd  = dest;
 	llboot->operation    = op;
 	llboot->recovery_arg = arg;
@@ -207,18 +211,14 @@ recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 }
 
 
-void 
-failure_notif_fail(spdid_t caller, spdid_t failed);
-
+void failure_notif_fail(spdid_t caller, spdid_t failed);
 int 
 fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 {
 	unsigned long r_ip; 	/* the ip to return to */
 	int tid = cos_get_thd_id();
 	struct llbooter_per_core *llboot = PERCPU_GET(llbooter);
-
-	int reboot;
-	reboot = (spdid == 2) ? 1:0;
+	int reboot = (spdid == LLBOOT_SCHED) ? 1:0;
 
 	printc("\nLL: rec_thd %d, alpha %d, init_thd %d\n", 
 	       llboot->recovery_thd, llboot->alpha, llboot->init_thd);
@@ -233,29 +233,18 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 		printc("has failed %d times\n",first);
 		sched_exit();
 	}
+	printc("has failed %d times\n",first);
 
-
+	// u-reboot the failed component
 	failure_notif_fail(cos_spd_id(), spdid);
 
-
-	printc("has failed %d times\n",first);
-	sched_exit();
-	
-	/* no reason to save register contents... */
 	if(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0)) {
-		/* Manipulate the return address of the component that called
-		 * the faulting component... */
 		assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));
-		/* ...and set it to its value -8, which is the fault handler
-		 * of the stub. */
 		assert(!cos_thd_cntl(COS_THD_INVFRM_SET_IP, tid, 1, r_ip-8));
 		assert(!cos_fault_cntl(COS_SPD_FAULT_TRIGGER, spdid, 0));
-		/* printc("Try to recover the spd %d (reboot %d)\n", spdid, reboot); */
-		if (reboot) recovery_upcall(cos_spd_id(), COS_UPCALL_REBOOT, spdid, 0);
-		else recovery_upcall(cos_spd_id(), COS_UPCALL_THD_CREATE, spdid, 0);
-		/* after the recovery thread is done, it should switch back to us. */
-		/* rdtscll(end); */
-		/* printc("COST (rest of fault_handler) : %llu\n", end - start); */
+		
+		recovery_upcall(cos_spd_id(), COS_UPCALL_REBOOT, spdid, reboot);
+
 		return 0;
 	}
 	
@@ -274,30 +263,41 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	return 0;
 }
 
-static int second = 0;
+/* One issue here: we do not care spdid and this is meaning less since
+ * the invocation frame is removed anyway. The current thread will be
+ * rolled back any way.  For the fault handler, the spdid does matter
+ * since we need u-reboot it. The difference comes from 
+
+  -- when the fault occurs, the spd needs to be u-rebooted 
+
+  -- when the fault occurs, we need "redirect" the execution to the fault handler
+  
+  -- when the fault is detected later (that is where we are now), we
+     do not need reboot the spd. And we only need "roll" back the
+     current execution
+
+  -- Also, the timer/IPI/init/idle threads are already updated their
+     fault counter. So switch back to a failed&rebooted scheduler
+     should not cause any fault detection (when the scheduler fails)
+ */
+
 int
 fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 {
 	/* printc("parameters: spdid %d fault_addr %p flags %d ip %p\n", spdid, fault_addr, flags, ip); */
 	unsigned long r_ip;
 	struct llbooter_per_core *llboot = PERCPU_GET(llbooter);
-
+	
 	int tid = cos_get_thd_id();
-	/* printc("<< LL fault notification handler >> :: thd %d saw that spd %d has failed before\n", cos_get_thd_id(), spdid); */
-
+	printc("<< LL fault notification handler >>\n");
 	if(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0)) {
+		printc("llbooter: remove the invfrm_ip\n");
 		assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));
 		assert(!cos_thd_cntl(COS_THD_INVFRM_SET_IP, tid, 1, r_ip-8));
-		/* printc("pop the frame and return\n"); */
-		/* if (second++ >= 1) sched_exit(); */
 		return 0;
 	}
-	/* printc("<< LL fault notification 2 (tid %d)>>\n", tid); */
-
-	// Jiguo: still need these, but comment for merging purpose
-	/* if (tid == cos_timer_thd) cos_upcall_args(COS_UPCALL_BRAND_EXEC, spdid, 0); */
-	/* if (tid == cos_idle_thd)  cos_upcall_args(COS_UPCALL_IDLE, spdid, 0); */
-	if (tid == llboot->init_thd)      llboot_thd_done();
+	
+	printc("<< LL fault notification @@@@@(tid %d)>>\n", tid);
 	cos_upcall(flags, 0);	/* upcall to ths dest spd (home spd), for other threads */
 
 	assert(0);
@@ -428,7 +428,7 @@ cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 #include <sched_hier.h>
 
 void cos_init(void);
-int  sched_init(void)   
+int  sched_init()   
 { 
 	if (cos_cpuid() == INIT_CORE) {
 		/* The init core will call this function twice: first do

@@ -83,6 +83,7 @@ static inline void fp_add_thd(struct sched_thd *t, unsigned short int prio)
 
 	sched_get_metric(t)->priority = prio;
 	sched_set_thd_urgency(t, prio);
+	/* printc("<< thread %d (prio %d) is added back to Q>>\n", t->id, prio); */
 	fp_move_end_runnable(t);
 
 	return;
@@ -105,6 +106,8 @@ static struct sched_thd *fp_get_highest_prio(void)
 	struct sched_thd *t, *head;
 	u16_t p = mask_high();
 
+	/* printc(" get p %d\n", p); */
+
 	head = &(PERCPU_GET(fprr_state)->priorities[p].runnable);
 	t = FIRST_LIST(head, prio_next, prio_prev);
 	assert(t != head);
@@ -123,6 +126,7 @@ static struct sched_thd *fp_get_second_highest_prio(struct sched_thd *highest)
 	t = fp_get_highest_prio();
 	fp_add_start_runnable(highest);
 
+	/* printc("second highest thd %d\n", t->id); */
 	return t;
 }
 
@@ -131,10 +135,12 @@ struct sched_thd *schedule(struct sched_thd *t)
 	struct sched_thd *n;
 
 	assert(!t || !sched_thd_member(t));
+	/* printc("get the highest_prio ---> "); */
 	n = fp_get_highest_prio();
 	assert(n);
 	if (n != t) return n;
 	assert(t);
+	/* printc("get the 2nd highest_prio ---> "); */
 	return fp_get_second_highest_prio(n);
 }
 
@@ -347,13 +353,17 @@ int
 thread_param_set(struct sched_thd *t, struct sched_param_s *ps)
 {
 	unsigned int prio = PRIO_LOWEST;
-	struct sched_thd *c = sched_get_current();
-	
+        // if this is recovery thd, do not do accounting  -- Jiguo
+	struct sched_thd *c = sched_get_current();  
+
+	struct sched_param_s *t_ps = ps;
+	printc("ps->type %d\n", ps->type);
 	assert(t);
 	while (ps->type != SCHEDP_NOOP) {
 		switch (ps->type) {
 		case SCHEDP_RPRIO:
 		case SCHEDP_RLPRIO:
+			printc("CCCCCC ps->value %d\n", ps->value);
 			/* The relative priority has been converted to absolute priority in relative_prio_convert(). */
 			prio = ps->value;
 			/* FIXME: When the IPI handling thread is
@@ -363,10 +373,12 @@ thread_param_set(struct sched_thd *t, struct sched_param_s *ps)
 			 * different core), we zero the accounting
 			 * info instead of touching remote
 			 * data-structures. */
-			if (sched_curr_is_IPI_handler())
+			if (sched_curr_is_IPI_handler()) {
 				sched_clear_accounting(t);
-			else
-				memcpy(sched_get_accounting(t), sched_get_accounting(c), sizeof(struct sched_accounting));
+			}
+			else {
+				if (c) memcpy(sched_get_accounting(t), sched_get_accounting(c), sizeof(struct sched_accounting));
+			}
 #ifdef DEFERRABLE
 			if (sched_get_accounting(t)->T) ADD_LIST(&PERCPU_GET(fprr_state)->servers, t, sched_next, sched_prev);
 #endif
@@ -418,11 +430,13 @@ thread_param_set(struct sched_thd *t, struct sched_param_s *ps)
 		}
 		ps++;
 	}
-	printc("fprr: cpu %d has new thd %d @ prio %d\n", cos_cpuid(), t->id, prio);
+	printc("ps->type %d\n", ps->type);
+	printc("fprr: cpu %d has new thd %d @ prio %d (type %d)\n", 
+	       cos_cpuid(), t->id, prio, t_ps->type);
 	if (sched_thd_ready(t)) fp_rem_thd(t);
-
-	fp_add_thd(t, prio);
 	
+	fp_add_thd(t, prio);
+
 	return 0;
 }
 

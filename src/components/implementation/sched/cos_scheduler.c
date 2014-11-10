@@ -239,6 +239,7 @@ struct sched_thd *sched_alloc_thd(unsigned short int thd_id)
 	if (!(thd->flags & THD_FREE)) BUG();//return NULL;
 
 	thd->flags = 0;
+	printc("the thread %d is flagged as THD_READY\n", thd_id);
 	sched_init_thd(thd, thd_id, THD_READY);
 	return thd;
 }

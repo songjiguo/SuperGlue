@@ -22,43 +22,79 @@
 /* type indicates it is HRT(0) or BEST(1) */
 
 /*---------Threads that created by scheduler--------*/
-static struct thread*
-sched_thread_lookup(struct spd *spd, int thd_id, int thd_nums, int type)
+static int
+sched_thread_lookup(struct spd *spd, int thd_id, int operation, int hrt)
 {
 	struct thread *thd;
-	int i, cnt;;
-
-	if (!type) {
-		if (!(thd = spd->scheduler_hrt_threads)) return NULL;
-		cnt = spd->scheduler_hrt_threads->thd_cnts;
-	} else {
-		if (!(thd = spd->scheduler_bes_threads)) return NULL;
-		cnt = spd->scheduler_bes_threads->thd_cnts;
-	}
-
-	/* printk("cos: lookup thread %d in spd %d list (cnt %d)\n", thd_id, spd_get_index(spd), cnt); */
-	i = cnt - thd_nums;
+	struct thd_sched_info *tsi;
+	struct spd *cur_spd = spd;
+	int ret = 0;
 	
-	if (thd_id > 0) {
-		while(cnt) {
-			/* if (thd->thread_id == thd_id) return find_thd(spd, thd); */
-			if (thd->thread_id == thd_id) return thd;
-			/* printk("thd id on thread list %d\n", thd->thread_id); */
-			thd = thd->sched_prev;
-			cnt--;
-		}
-		/* printk("Can not find an existing thread id %d!!\n", thd_id); */
-		return NULL;
-	} else {
-		while(i--) thd = thd->sched_prev;
-		/* thd = find_thd(spd, thd); */
-		/* printk("<<< thd %d >>>\n", thd->thread_id); */
-		return thd;
+	thd = thd_get_by_id(thd_id);
+	if (!thd) {
+		printk("cos: thd id %d invalid (when record dest)\n", (unsigned int)thd_id);
+		return -1;
 	}
+		
+	if  (!cur_spd->sched_depth) cur_spd = spd_get_by_index(2);   // change scheduler
+	
+	tsi = thd_get_sched_info(thd, cur_spd->sched_depth);
+	if (tsi->scheduler != cur_spd) {
+		printk("cos: spd %d not the scheduler of %d\n",
+		       spd_get_index(cur_spd), (unsigned int)thd_id);
+		return -1;
+	}
+
+	if (spd_is_scheduler(spd) && !spd_is_root_sched(spd)){
+		printk("cos: look up thread %d info\n", thd_id);
+		switch (operation) {
+		case COS_SCHED_INTRO_THD_DEST:
+			return thd->sched_info[cur_spd->sched_depth].thread_dest;
+		case COS_SCHED_INTRO_THD_METRIC:
+			return thd->sched_info[cur_spd->sched_depth].thread_metric;
+		case COS_SCHED_INTRO_THD_FN:
+			return thd->sched_info[cur_spd->sched_depth].thread_fn;
+		case COS_SCHED_INTRO_THD_D:
+			return thd->sched_info[cur_spd->sched_depth].thread_d;
+		case COS_SCHED_INTRO_THD_PARAM:
+			return thd->sched_info[cur_spd->sched_depth].thread_param;
+			break;
+		default:
+			assert(0);
+		}
+	}
+	return 0;
 }
 
 static int
-sched_thread_add(struct spd *spd, int thd_id, int type)
+sched_thread_info(struct spd *spd, int thd_id, int operation, int hrt)
+{
+	struct thread *thd;
+	struct thd_sched_info *tsi;
+	int ret = 0;
+	int i;
+		
+	if (hrt) {
+		for (i = thd_id  ; i < MAX_NUM_THREADS ; i++) {
+			thd = &threads[i];
+			if (thd->sched_info[spd->sched_depth].thread_dest > 0) {
+				if (operation == COS_SCHED_INTRO_THD_FIRST) {
+					return thd->thread_id;  // first tracked thd id
+				}
+				ret++;
+			}
+		}
+	}
+	else {
+		/* if (!spd->scheduler_bes_threads) goto done; */
+		/* ret = spd->scheduler_bes_threads->thd_cnts; */
+	}
+done:
+	return ret;
+}
+
+static int
+sched_thread_add(struct spd *spd, int thd_id, int option, int operation, int hrt)
 {
 	struct thread *thd;
 	struct thd_sched_info *tsi;
@@ -77,56 +113,63 @@ sched_thread_add(struct spd *spd, int thd_id, int type)
 	}
 
 	if (spd_is_scheduler(spd) && !spd_is_root_sched(spd)){
-		/* printk("cos: add thread %d onto spd %d list (type %d)\n", thd_id, spd_get_index(spd), type); */
-		if (type == 0) { /* hard real time tasks */
-			if (!spd->scheduler_hrt_threads) {
-				/* initialize the list head */
-				spd->scheduler_hrt_threads = thd;
-				spd->scheduler_hrt_threads->sched_next = thd;
-				spd->scheduler_hrt_threads->sched_prev = thd;
-			} else {
-				thd->sched_next = spd->scheduler_hrt_threads->sched_next;
-				thd->sched_prev = spd->scheduler_hrt_threads;
-				spd->scheduler_hrt_threads->sched_next = thd;
-				thd->sched_next->sched_prev = thd;
-			}
-			spd->scheduler_hrt_threads->thd_cnts++;
-			/* printk("HRT thread number %d\n", spd->scheduler_hrt_threads->thd_cnts); */
-		} else {	/* best effort tasks */
-			if (!spd->scheduler_bes_threads) {
-				/* initialize the list head */
-				spd->scheduler_bes_threads = thd;
-				spd->scheduler_bes_threads->sched_next = thd;
-				spd->scheduler_bes_threads->sched_prev = thd;
-			} else {
-				thd->sched_next = spd->scheduler_bes_threads->sched_next;
-				thd->sched_prev = spd->scheduler_bes_threads;
-				spd->scheduler_bes_threads->sched_next = thd;
-				thd->sched_next->sched_prev = thd;
-			}
-			spd->scheduler_bes_threads->thd_cnts++;
-			/* printk("BEST thread number %d\n", spd->scheduler_bes_threads->thd_cnts); */
+		printk("cos: add thread %d onto spd %d list (operation %d, val %d)\n", 
+		       thd_id, spd_get_index(spd), operation, option);
+		switch (operation) {
+		case COS_SCHED_THD_DEST:
+			thd->sched_info[spd->sched_depth].thread_dest = option;
+			break;
+		case COS_SCHED_THD_METRIC:
+			thd->sched_info[spd->sched_depth].thread_metric = option;
+			break;
+		case COS_SCHED_THD_FN:
+			thd->sched_info[spd->sched_depth].thread_fn = option;
+			break;
+		case COS_SCHED_THD_D:
+			thd->sched_info[spd->sched_depth].thread_d = option;
+			break;
+		case COS_SCHED_THD_PARAM:
+			thd->sched_info[spd->sched_depth].thread_param = option;
+			break;
+		default:
+			assert(0);
 		}
+		thd->sched_info[spd->sched_depth].thread_hrt = hrt;
 	}
 	
 	return 0;
 }
 
 static int
-sched_thread_cnts(struct spd *spd, int type)
+sched_thread_remove(struct spd *spd, int thd_id)
 {
-	int ret = 0;
-	if (type == 0) {
-		if (!spd->scheduler_hrt_threads) goto done;
-		ret = spd->scheduler_hrt_threads->thd_cnts;
+	struct thread *thd;
+	struct thd_sched_info *tsi;
+	
+	thd = thd_get_by_id(thd_id);
+	if (!thd) {
+		printk("cos: thd id %d invalid (when record dest)\n", (unsigned int)thd_id);
+		return -1;
 	}
-	else {
-		if (!spd->scheduler_bes_threads) goto done;
-		ret = spd->scheduler_bes_threads->thd_cnts;
+	
+	tsi = thd_get_sched_info(thd, spd->sched_depth);
+	if (tsi->scheduler != spd) {
+		printk("cos: spd %d not the scheduler of %d\n",
+		       spd_get_index(spd), (unsigned int)thd_id);
+		return -1;
 	}
-done:
-	/* printk("return the recorded thread number ret %d\n", ret); */
-	return ret;
+
+	if (spd_is_scheduler(spd) && !spd_is_root_sched(spd)){
+		printk("cos: remove all tracking info for thread %d\n", thd_id);
+		thd->sched_info[spd->sched_depth].thread_dest	= 0;
+		thd->sched_info[spd->sched_depth].thread_metric = 0;
+		thd->sched_info[spd->sched_depth].thread_fn	= 0;
+		thd->sched_info[spd->sched_depth].thread_d	= 0;
+		thd->sched_info[spd->sched_depth].thread_param	= 0;
+		thd->sched_info[spd->sched_depth].thread_hrt	= 0;
+	}
+	
+	return 0;
 }
 
 #if (RECOVERY_ENABLE == 1)
@@ -169,7 +212,8 @@ static inline int
 ipc_fault_detect(struct invocation_cap *cap_entry, struct spd *dest_spd)
 {
 	if (cap_entry->fault.cnt != dest_spd->fault.cnt) {
-		/* printk("dest spd %d fault cnt %lu\n", spd_get_index(dest_spd), dest_spd->fault.cnt); */
+		printk("cap_entry fault cnt %lu\n", cap_entry->fault.cnt);
+		printk("dest spd %d fault cnt %lu\n", spd_get_index(dest_spd), dest_spd->fault.cnt);
 		return 1;
 	}
 	else return 0;
@@ -187,9 +231,12 @@ switch_thd_fault_detect(struct thread *next)
 {
 	struct spd *n_spd;
 	struct thd_invocation_frame *tif;
-
+	
 	tif    = thd_invstk_top(next);
 	n_spd  = tif->spd;
+	
+	/* // hack test: */
+	/* if (thd_get_id(next) == 6) return 0;   // timer thread not detect fault? */
 
 	if (tif->curr_fault.cnt != n_spd->fault.cnt) 
 	{
@@ -255,7 +302,7 @@ switch_thd_fault_update(struct thread *thd)
 	n_spd  = tif->spd;
 	
 	tif->curr_fault.cnt = n_spd->fault.cnt;
-	/* printk("switch_flt_update: thd %d n_spd %d\n", thd_get_id(thd), spd_get_index(n_spd)); */
+	printk("switch_flt_update: thd %d n_spd %d\n", thd_get_id(thd), spd_get_index(n_spd));
 	return 0;
 }
 
@@ -291,8 +338,8 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 	this_spd  = spd_get_by_index(spdid);
 	d_spd     = spd_get_by_index(d_spdid);
 
-	/* printk("passed this_spd is %d\n", spdid); */
-	/* printk("passed d_spd is %d\n", d_spdid); */
+	printk("passed this_spd is %d\n", spdid);
+	printk("passed d_spd is %d\n", d_spdid);
 
 	if (!this_spd || !d_spd) {
 		printk("cos: invalid fault cnt  call for spd %d or spd %d\n",
@@ -309,11 +356,12 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 	}
 
 	cap_entry = &d_spd->caps[cap_no];
-	/* printk("cos: cap_no is %d\n", cap_no); */
-	/* printk("cos: cap_entry %p\n", (void *)cap_entry); */
-	/* printk("cap_entry fcn %d and its destination fcn %d\n", cap_entry->fault.cnt, */
-	/*        cap_entry->destination->fault.cnt); */
-	/* printk("dest_spd is %d\n", spd_get_index(cap_entry->destination)); */
+
+	printk("cos: cap_no is %d\n", cap_no);
+	printk("cos: cap_entry %p\n", (void *)cap_entry);
+	printk("cap_entry fcn %d and its destination fcn %d\n", cap_entry->fault.cnt,
+	       cap_entry->destination->fault.cnt);
+	printk("dest_spd is %d\n", spd_get_index(cap_entry->destination));
 
 	/* for (i = 1; i < d_spd->ncaps ; i++) { */
 	/* 	printk("cap_entry->destination %d\n", spd_get_index(d_spd->caps[i].destination)); */

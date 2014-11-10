@@ -15,9 +15,11 @@ int warm;
 
 #define ITER 5
 
+#define EXAMINE_SCHED
+
 //#define EXAMINE_TE
 //#define EXAMINE_LOCK
-#define EXAMINE_EVT
+//#define EXAMINE_EVT
 
 #define US_PER_TICK 10000
 
@@ -41,6 +43,7 @@ cos_init(void)
 		printc("c3 cli thd %d is creating a warm thd %d\n",
 		       cos_get_thd_id(), warm);
 
+		printc("going to create a thd _PRIO 11....\n");
 		sp.c.type = SCHEDP_PRIO;
 		sp.c.value = 11;
 		high = sched_create_thd(cos_spd_id(), sp.v, 0, 0);
@@ -48,6 +51,7 @@ cos_init(void)
 		printc("c3 cli thd %d is creating a high thd %d\n",
 		       cos_get_thd_id(), high);
 
+		printc("going to create a thd _PRIO 15....\n");
 		sp.c.type = SCHEDP_PRIO;
 		sp.c.value = 15;
 		med = sched_create_thd(cos_spd_id(), sp.v, 0, 0);
@@ -55,6 +59,7 @@ cos_init(void)
 		printc("c3 cli thd %d is creating a med thd %d\n",
 		       cos_get_thd_id(), med);
 
+		printc("going to create a thd _PRIO 20....\n");
 		sp.c.type = SCHEDP_PRIO;
 		sp.c.value = 20;
 		low = sched_create_thd(cos_spd_id(), sp.v, 0, 0);
@@ -63,6 +68,23 @@ cos_init(void)
 		       cos_get_thd_id(), low);
 
 	} else {
+#ifdef EXAMINE_SCHED
+		if (cos_get_thd_id() == high) {
+			printc("<<<high thd %d>>>\n", cos_get_thd_id());
+			ec3_ser1_test();
+		}
+		
+		if (cos_get_thd_id() == med) {
+			printc("<<<med thd %d>>>\n", cos_get_thd_id());
+			ec3_ser1_test();
+		}
+
+		/* if (cos_get_thd_id() == low) { */
+		/* 	printc("<<<low thd %d>>>\n", cos_get_thd_id()); */
+		/* 	ec3_ser1_test(); */
+		/* } */
+#endif
+
 #ifdef EXAMINE_LOCK
 		if (cos_get_thd_id() == high) {
 			printc("<<<high thd %d>>>\n", cos_get_thd_id());

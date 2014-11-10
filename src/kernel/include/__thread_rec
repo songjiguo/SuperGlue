@@ -52,12 +52,14 @@ struct thd_sched_info {
 	struct cos_sched_events *thread_notifications;
 	int notification_offset;
 	
-	/* add the parameters for all threads that not created through
-	 * the interface, Jiguo */
-	int thread_user_prio;
+	/* track thread creation information -- Jiguo */
+	int thread_dest;
+	int thread_metric;
 	int thread_value;
-	void *thread_fn;
-	void *thread_dest;
+	int thread_fn;
+	int thread_d;
+	int thread_param;
+	int thread_hrt;
 };
 
 #define THD_STATE_PREEMPTED     0x1   /* Complete register info is saved in regs */

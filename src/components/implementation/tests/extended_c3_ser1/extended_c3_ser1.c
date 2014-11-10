@@ -20,9 +20,10 @@ static int low = 13;
 static int mid = 12;
 static int hig = 11;
 
+#define EXAMINE_SCHED
 //#define EXAMINE_TE
 //#define EXAMINE_LOCK
-#define EXAMINE_EVT
+//#define EXAMINE_EVT
 
 #ifdef EXAMINE_LOCK
 #include <cos_synchronization.h>
@@ -244,6 +245,39 @@ vaddr_t ec3_ser1_test(void)
 	}
 
 	if (cos_get_thd_id() == mid) try_mp();
+
+	while(1);  // quick fix the thread termination issue ???
+	return 0;
+}
+
+#endif
+
+#ifdef EXAMINE_SCHED
+
+#define ITER_SCHED 10
+
+vaddr_t ec3_ser1_test(void)
+{
+	if (cos_get_thd_id() == hig) {
+		int i = 0;
+		while(i++ < ITER_SCHED) {
+			printc("\n<< high thd %d is blocking on mid thd %d in spd %d >>>\n", 
+			       cos_get_thd_id(), mid, cos_spd_id());
+			sched_block(cos_spd_id(), low);
+		}
+	}
+	
+	if (cos_get_thd_id() == mid) {
+		int j = 0;
+		while(j++ < ITER_SCHED) {
+			timed_event_block(cos_spd_id(), 1);
+			printc("\n<< mid thd %d is waking up high thd %d in spd %d >>>\n", 
+			       cos_get_thd_id(), hig, cos_spd_id());
+			sched_wakeup(cos_spd_id(), hig);
+		}
+	}
+
+	/* if (cos_get_thd_id() == low) sched_block(cos_spd_id(), 0); */
 
 	while(1);  // quick fix the thread termination issue ???
 	return 0;

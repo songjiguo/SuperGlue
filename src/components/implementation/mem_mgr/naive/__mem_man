@@ -515,7 +515,7 @@ vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt) {return 0;}
 #include <sched_hier.h>
 
 extern void parent_sched_init(void);
-int  sched_init(void)   { parent_sched_init(); return 0;}
+int sched_init()   { parent_sched_init(); return 0;}
 
 extern void parent_sched_exit(void);
 

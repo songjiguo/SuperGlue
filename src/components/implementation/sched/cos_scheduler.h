@@ -313,6 +313,7 @@ static inline struct sched_thd *sched_get_current(void)
 	struct sched_thd *thd;
 
 	thd_id = cos_get_thd_id();
+	/* printc("sched_get_current %d\n", thd_id); */
 	thd = sched_get_mapping(thd_id);
 	
 	return thd;

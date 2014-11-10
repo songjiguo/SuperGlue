@@ -1,7 +1,7 @@
 #ifndef   	SCHED_HIER_H
 #define   	SCHED_HIER_H
 
-int sched_init(void);
+int sched_init();
 int sched_isroot(void);
 void sched_exit(void);
 

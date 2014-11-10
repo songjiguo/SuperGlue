@@ -127,6 +127,10 @@
  * 	_narg: the number of args in ...
  * 		* NOTE: _narg must be a literal constant integer
  */
+// Jiguo: zero parameter version
+#define CSTUB_INVOKE_NULL(_ret, _fault, _uc)	\
+	CSTUB_ASM(0, _ret, _fault, _uc)
+
 #define CSTUB_INVOKE(_ret, _fault, _uc, _narg, ...) \
 	CSTUB_ASM(_narg, _ret, _fault, _uc, __VA_ARGS__)
 

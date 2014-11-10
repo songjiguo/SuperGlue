@@ -59,20 +59,20 @@ static int meas_flag = 0;
 /* global fault counter, only increase, never decrease */
 static unsigned long fcounter;
 
-/* recovery data structure evt service */
+/* recovery data structure for evt */
 struct rec_data_evt {
 	spdid_t       spdid;
 	long          c_evtid;
 	long          s_evtid;
 
 	long          p_evtid;  // parent event id (eg needs this)
-	int grp;   // same as above
+	int           grp;      // same as above
 
 	unsigned int  state;
 	unsigned long fcnt;
 };
 
-/* the state of an event obect (each operation expects to change) */
+/* the state of an event object (each operation expects to change) */
 enum {
 	EVT_STATE_CREATE,
 	EVT_STATE_SPLIT,   // same as create, except it is for event group
@@ -465,7 +465,7 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
 #endif		
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
-	if (unlikely (fault)){
+	if (unlikely(fault)){
 
 #ifdef BENCHMARK_MEAS_TRIGGER
 		meas_flag = 1;

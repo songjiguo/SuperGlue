@@ -647,7 +647,9 @@ static void start_timer_thread(void)
 				   * (no dependency if we are in the
 				   * same protection domain as the
 				   * scheduler) */
+		printc("timer thread is starting now and get ticks now....\n");
 		ticks = sched_timestamp();
+		printc("timer thread sched_component_take now....\n");
 		if (sched_component_take(spdid)) {
 			prints("fprr: scheduler lock failed!!!");
 			BUG();
@@ -657,11 +659,12 @@ static void start_timer_thread(void)
 
 		/* Are there no pending events??? */
 		if (TIMER_NO_EVENTS == next_wakeup) {
+			printc("timer thread sched_component_release now....\n");
 			if (sched_component_release(spdid)) {
 				prints("fprr: scheduler lock release failed!!!");
 				BUG();
 			}
-
+			printc("timer thread is starting now and blocking now....\n");
 			sched_block(spdid, 0);
 		} else {
 			unsigned int wakeup;
