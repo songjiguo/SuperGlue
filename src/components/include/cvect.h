@@ -242,6 +242,8 @@ __cvect_expand_rec(struct cvect_intern *vi, const long id, const int depth)
 	if (depth > 1) {
 		long n = id >> (CVECT_SHIFT * (depth-1));
 		if (vi[n & CVECT_MASK].c.next == NULL) {
+			printc("cvect is expanded (spd %ld by thd %d)\n",
+			       cos_spd_id(), cos_get_thd_id());
 			struct cvect_intern *new = CVECT_ALLOC();
 			if (!new) return -1;
 			vi[n & CVECT_MASK].c.next = new;

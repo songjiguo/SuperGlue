@@ -55,6 +55,7 @@ int     chal_pgtbl_add(paddr_t pgtbl, vaddr_t vaddr, paddr_t paddr, int flags);
 vaddr_t chal_pgtbl_vaddr2kaddr(paddr_t pgtbl, unsigned long addr);
 /* Remove mapping for a vaddr from pgtbl. != 0 if mapping doesn't exist */
 paddr_t chal_pgtbl_rem(paddr_t pgtbl, vaddr_t va);
+paddr_t chal_pgtbl_get_paddr(paddr_t pgtbl, vaddr_t va);  // return the phy_addr C^3
 int     chal_pgtbl_entry_absent(paddr_t pt, unsigned long addr);
 void    chal_pgtbl_copy_range(paddr_t pt_to, paddr_t pt_from,
 			      unsigned long lower_addr, unsigned long size);

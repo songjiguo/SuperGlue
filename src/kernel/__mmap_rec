@@ -28,6 +28,16 @@ void cos_init_memory(void)
 	return;
 }
 
+void cos_print_memory(void) 
+{
+	int i;
+	for (i = 0 ; i < COS_MAX_MEMORY ; i++) {
+		if (cos_pages[i].rt_spdid == 3) 
+			printk("cos_pages[%d].rt_vaddr %p\n", 
+			       i, cos_pages[i].rt_vaddr);
+	}
+}
+
 void cos_shutdown_memory(void)
 {
 	int i;
@@ -74,19 +84,21 @@ paddr_t cos_access_page(unsigned long cap_no)
    info should be able to be looked up during recovery
  */
 
-void
+int
 cos_add_root_info(int spdid, vaddr_t vaddr, unsigned long frame_id)
 {	
 	/* if (spdid != 5) printk("cos: root info added spd %d addr %p at frame %lu\n", spdid, vaddr, frame_id); */
 	cos_pages[frame_id].rt_spdid = spdid;
 	cos_pages[frame_id].rt_vaddr = vaddr;
+	return 0;
 }
-void 
+int
 cos_remove_root_info(unsigned long frame_id)
 {	
 	/* printk("cos: root info removed at frame %lu\n", frame_id); */
 	cos_pages[frame_id].rt_spdid = 0;
 	cos_pages[frame_id].rt_vaddr = 0;
+	return 0;
 }
 
 vaddr_t 

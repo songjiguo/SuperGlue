@@ -6,7 +6,7 @@
 /* #define TEST_SCHED_CREATE_THD */
 /* #define TEST_SCHED_CREATE_THD_DEFAULT */
 /* #define TEST_SCHED_WAKEUP */
-#define TEST_SCHED_BLOCK
+/* #define TEST_SCHED_BLOCK */
 /* #define TEST_SCHED_COMPONENT_TAKE */
 /* #define TEST_SCHED_COMPONENT_RELEASE */
 /* #define TEST_SCHED_TIMEOUT_THD */

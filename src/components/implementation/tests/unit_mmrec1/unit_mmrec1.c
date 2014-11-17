@@ -10,16 +10,11 @@
 #include <unit_mmrec2.h>
 
 
-#define BEST_TEST
-
 #define TOTAL_AMNT 128
-
 #define PAGE_NUM 10
 
 vaddr_t s_addr[PAGE_NUM];
 vaddr_t d_addr[PAGE_NUM];
-
-#define THREAD1 10
 
 volatile unsigned long long start, end;
 
@@ -71,9 +66,9 @@ alias_test()
 		
 	}
 
-#ifdef BEST_TEST
-	mm_test2_34();
-#endif
+/* #ifdef BEST_TEST */
+/* 	mm_test2_34(); */
+/* #endif */
 	
 	printc("<<< ALIAS TEST END! >>>\n\n");
 	return;
@@ -134,55 +129,59 @@ cos_init(void)
 
 	if(first == 0){
 		first = 1;
-
+		sp.c.type = SCHEDP_PRIO;
+		sp.c.value = 10;
+		sched_create_thd(cos_spd_id(), sp.v, 0, 0);
+	} else {
 		for (i=0; i<PAGE_NUM; i++) s_addr[i] = 0;
 		for (i=0; i<PAGE_NUM; i++) d_addr[i] = 0;
-
-		sp.c.type = SCHEDP_PRIO;
-		sp.c.value = THREAD1;
-		sched_create_thd(cos_spd_id(), sp.v, 0, 0);
-
-	} else {
-		timed_event_block(cos_spd_id(), 50);
-		periodic_wake_create(cos_spd_id(), 1);
+		
+		/* timed_event_block(cos_spd_id(), 50); */
+		/* periodic_wake_create(cos_spd_id(), 1 ); */
 		i = 0;
 		while(i++ < 80) { /* 80 x 10 x 4k  < 4M */
 			printc("<<< MM RECOVERY TEST START (thd %d) >>>\n", cos_get_thd_id());
-			get_test();
-#ifdef BEST_TEST
-			alias_test();
-			revoke_test();
-#endif
+			/* get_test(); */
+			/* alias_test(); */
+			/* revoke_test(); */
 
 			/* all_in_one(); */
 
 			printc("<<< MM RECOVERY TEST DONE!! >>> {%d}\n\n\n", i);
-			periodic_wake_wait(cos_spd_id());
+			/* periodic_wake_wait(cos_spd_id()); */
 		}
 	}
 	
 	return;
 }
 
-#ifdef CLI_UPCALL_ENABLE
-void alias_replay(vaddr_t s_addr);
-void eager_replay();
+/* #ifndef MM_RECOVERY */
+/* void alias_replay(vaddr_t s_addr , int flag) { return; } */
+/* #endif */
+
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
 	switch (t) {
+	case COS_UPCALL_THD_CREATE:
+	{
+		cos_init();
+		/* if (arg1 == 0) { */
+		/* 	cos_init(); */
+		/* } */
+		/* printc("thread %d passing arg1 %p here (t %d)\n",  */
+		/*        cos_get_thd_id(), arg1, t); */
+		/* return; */
+		break;
+	}
 	case COS_UPCALL_RECOVERY:
-#if (!LAZY_RECOVERY)
-		/* printc("EAGER!!! UNIT_MMREC 1 upcall: thread %d\n", cos_get_thd_id()); */
-		eager_replay();
-#else
-		printc("UNIT_MMREC 1 upcall: thread %d\n", cos_get_thd_id());
-		alias_replay((vaddr_t)arg3);
-#endif
+		/* printc("UNIT_MMREC 1 upcall: thread %d\n", cos_get_thd_id()); */
+		/* alias_replay((vaddr_t)arg3, 0); */
 		break;
 	default:
-		cos_init();
+		/* fault! */
+		*(int*)NULL = 0;
+		return;
 	}
 
 	return;
 }
-#endif

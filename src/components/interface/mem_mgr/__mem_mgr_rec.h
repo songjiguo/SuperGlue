@@ -10,10 +10,9 @@
 #ifndef   	MEM_MGR_H
 #define   	MEM_MGR_H
 
-//#define MEA_GET
-//#define MEA_ALIAS
-//#define MEA_REVOKE
-//#define MEA_ADD_ROOT
+/* #define TEST_MM_GET_PAGE */
+/* #define TEST_MM_ALIAS_PAGE */
+/* #define TEST_MM_REVOKE_PAGE */
 
 #define TEN2TEN           	/* 1 to 2 */
 //#define ONE2TEN
@@ -37,7 +36,5 @@ int __mman_revoke_page(spdid_t spd, vaddr_t addr, int flags);
 vaddr_t mman_alias_page(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr);
 vaddr_t __mman_alias_page_rec(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr);
 void mman_print_stats(void);
-
-#define CLI_UPCALL_ENABLE   	/* enable recovery thread to upcall into these spds to rebuild the mappings */
 
 #endif 	    /* !MEM_MGR_H */

@@ -242,7 +242,9 @@ ipc_walk_static_cap(unsigned int capability, vaddr_t sp,
 	/* if (dest_spd->fault.cnt) { */
 	/* 	printk("----cap %d cap flt %d dest_flt %d---\n",capability, cap_entry->fault.cnt, dest_spd->fault.cnt); */
 	/* } */
+	inv_frame_fault_cnt_update(curr_frame, curr_spd);
 	if (unlikely(fault_ret = ipc_fault_detect(cap_entry, dest_spd))){
+		inv_frame_fault_cnt_update(thd_invstk_top(thd), dest_spd);
 		printk("thd %d invocation....from %d to %d\n", thd_get_id(thd), spd_get_index(curr_spd), spd_get_index(dest_spd));
 		/* s = virtual_namespace_query(cap_entry->dest_entry_instruction); */
 		/* printk("cos: s spd %d\n", spd_get_index(s)); */
@@ -265,7 +267,7 @@ ipc_walk_static_cap(unsigned int capability, vaddr_t sp,
 		/* print_regs((struct pt_regs *)&thd->regs); */
 		return addr;
 	}
-	inv_frame_fault_cnt_update(thd, curr_spd);
+	inv_frame_fault_cnt_update(thd_invstk_top(thd), dest_spd);
 	addr = cap_entry->dest_entry_instruction;
 	return addr;
 }
@@ -329,13 +331,13 @@ pop(struct pt_regs **regs_restore)
 	unsigned long long start, end;
 	rdtscll(start);
 #endif
-	if (unlikely(fault_ret = pop_fault_detect(inv_frame, curr_frame))){
+	/* pop_fault_update(curr_frame);  // this is not used at all */
+	if (unlikely(fault_ret = pop_fault_detect(inv_frame))){
+		pop_fault_update(inv_frame);
 		/* KEVIN fill *regs_restore */
 		/* printk("thd %d: -> spd %d\n",  */
 		/*        thd_get_id(curr), spd_get_index(curr_frame->spd)); */
 		/* printk("pop: detected fault\n"); */
-
-		pop_fault_update(inv_frame, curr_frame);
 
 		*regs_restore = thd_ret_fault_notif(curr, curr_frame->spd);
 #ifdef MEAS_RET_FAULT_DETECT
@@ -344,7 +346,7 @@ pop(struct pt_regs **regs_restore)
 #endif
 		return NULL;
 	}
-
+	pop_fault_update(inv_frame);
 	return inv_frame;	
 }
 
@@ -1315,6 +1317,7 @@ cos_syscall_switch_thread_cont(int spd_id, unsigned short int rthd_id,
 	rdtscll(start);
 #endif
         /* ANDY detect fault when switch thread */
+	switch_thd_fault_update(curr);
 	if(unlikely(fault_ret = switch_thd_fault_detect(thd))){
 		switch_thd_fault_update(thd);
 		printk("cos switch fault: current thread %d\n", thd_get_id(curr));
@@ -1325,14 +1328,7 @@ cos_syscall_switch_thread_cont(int spd_id, unsigned short int rthd_id,
 		printk("cos : switch notification cost 1: %llu\n", (end-start));
 #endif
 	}
-	/* Say a thread t1 triggers a fault in component A, we
-	 * update cap fault counter and replay. t1 will take
-	 * the lock in A when replay. However, if timer
-	 * interrupt happens and later switch back to t1, we
-	 * do not want notify the fault again. So update the
-	 * fault counter on thread invocation frame here  */
-	switch_thd_fault_update(curr);
-	/* printk("cos switch : update fault counter %d\n", thd_get_id(curr)); */
+	switch_thd_fault_update(thd);
 
 	return &thd->regs;
 ret_err:
@@ -3550,10 +3546,14 @@ cos_syscall_mmap_cntl(int spdid, long op_flags_dspd, vaddr_t daddr, unsigned lon
 			       dspd_id, (unsigned int)daddr);
 			ret = -1;
 			break;
-		}
+		} /* else { */
+		/* 	if (dspd_id == 3) { */
+		/* 		printk("cos: mmap grant into %d @ %x added to the page table\n", dspd_id, (unsigned int)daddr); */
+		/* 	} */
+		/* } */
 
-		/*  Jiguo: Faulter tolerance for mm */
-		if (flags == COS_MMAP_SET_ROOT) cos_add_root_info(dspd_id, daddr, mem_id);
+		/* /\*  Jiguo: Faulter tolerance for mm *\/ */
+		/* if (flags & COS_MMAP_SET_ROOT) cos_add_root_info(dspd_id, daddr, mem_id); */
 
 		/* /\* test starts*\/ */
 		/* paddr_t phy_addr; */
@@ -3583,9 +3583,19 @@ cos_syscall_mmap_cntl(int spdid, long op_flags_dspd, vaddr_t daddr, unsigned lon
 	case COS_MMAP_SETRW:   // Jiguo: set the page read only
 	{
 		ret = chal_pgtbl_setrwro(spd->spd_info.pg_tbl, daddr, flags);  
-		/* printk("cos: mmap cntl set RO for spd %d for spd %d @ vaddr %p\n", */
-		/*        spdid, dspd_id, daddr); */
-		/* if (ret == -1) printk("cos: page wr is not set\n"); */
+		break;
+	}
+	case COS_MMAP_SETROOT:   // Jiguo: set the page as root page for track in C3 MM
+	{
+		mem_id += this_spd->pfn_base;
+		if (mem_id < this_spd->pfn_base || /* <- check for overflow? */
+		    mem_id >= (this_spd->pfn_base + this_spd->pfn_extent)) {
+			return -EINVAL;
+		}
+		assert(spdid == 3);  // test only, make sure it is from MM
+		if (dspd_id == 3) printk("daddr %p is added as root page (mem_id %d)\n", 
+					 daddr, mem_id);
+		ret = cos_add_root_info(dspd_id, daddr, mem_id);
 		break;
 	}
 	case COS_MMAP_TLBFLUSH:
@@ -3618,24 +3628,59 @@ cos_syscall_mmap_introspect(int spdid, long op_flags_dspd, vaddr_t daddr, unsign
 
 	/* if (dspd_id) printk("cos: mmap introspect call for spd %d for spd %d @ vaddr %x\n", */
 	/*        spdid, dspd_id, (unsigned int)daddr); */
-
+	
+	mem_id += this_spd->pfn_base;
+	if (mem_id < this_spd->pfn_base || /* <- check for overflow? */
+	    mem_id >= (this_spd->pfn_base + this_spd->pfn_extent)) {
+		printk("Accessing physical frame outside of allowed range (%d outside of [%d, %d).\n",
+		       (int)mem_id, this_spd->pfn_base,
+		       this_spd->pfn_base + this_spd->pfn_extent);
+		return -EINVAL;
+	}
+	
 	switch(op) {
 	case COS_MMAP_INTROSPECT_FRAME:
 	{
-		paddr_t phy_addr;
+		paddr_t pa;
 		int frame_num;
-
 		if (!spd) return -EINVAL;
 
-		//if(!(phy_addr = __pgtbl_lookup_address(spd->spd_info.pg_tbl, daddr))) {
-		///* printk("cos: try find phy frame -- no page table entry found.\n"); */
-		//return -EINVAL;
-		//}
-		frame_num = cos_paddr_to_cap(phy_addr) - this_spd->pfn_base;
-		/* printk("to intro: pfn base %d\n", this_spd->pfn_base); */
-		/* printk("to intro: frame_num %d daddr %x phyaddr %x\n", frame_num, daddr, phy_addr); */
-		/* printk("cos: found a frame %d\n", frame_num); */
-		ret = frame_num;
+		printk("cos:intro frame daddr %p\n", daddr);
+		pa  = chal_pgtbl_get_paddr(spd->spd_info.pg_tbl, daddr);
+		if (!pa) return -EINVAL;
+		
+		ret = cos_paddr_to_cap(pa) - this_spd->pfn_base;		
+		break;
+	}
+	case COS_MMAP_INTROSPECT_INDEX:  // find reserved frame id and remove ids for mm
+	{
+		int root_spd, i;
+		paddr_t page;
+		/* printk("look up index (spdid %d)\n", spdid); */
+		/* cos_print_memory(); */
+		for (i = mem_id ; i < COS_MAX_MEMORY-1 ; i++) {
+			root_spd = cos_lookup_root_spd(i);
+			if (!root_spd) continue;
+			if (root_spd == spdid) {   // MM component
+				vaddr_t tmp = cos_lookup_root_page(i);
+				printk("cos: mem_id %d tmp %p (spdid %d)\n", i, tmp, spdid);
+				cos_remove_root_info(i);
+				page = cos_access_page(i);
+				if (0 == page) return -EINVAL;
+				if (!chal_pgtbl_rem(this_spd->spd_info.pg_tbl, tmp))
+					return -EINVAL;
+				/* ret = i - this_spd->pfn_base; */
+				/* break; */
+			}
+			else {
+				ret = i - this_spd->pfn_base;
+				/* printk("cos: intro index 3 (i %d spd %d)\n", i, root_spd); */
+				/* printk("cos: intro index 3 (this_spd->pfn_base %d)\n", */
+				/*        this_spd->pfn_base); */
+				/* printk("cos: intro index 3 (ret %d)\n", ret); */
+				return ret;
+			}
+		}
 		break;
 	}
 	case COS_MMAP_INTROSPECT_ADDR:
@@ -3649,16 +3694,23 @@ cos_syscall_mmap_introspect(int spdid, long op_flags_dspd, vaddr_t daddr, unsign
 		ret = root_page;
 		break;
 	}		
-	case COS_MMAP_INTROSPECT_SPD:
+	case COS_MMAP_INTROSPECT_SPD:  // return what spds have been set tracked? C^3 MM
 	{
-		int root_spd;
+		int root_spd, i;
 
-		mem_id += this_spd->pfn_base;
-		root_spd = cos_lookup_root_spd(mem_id);
-		if (0 == root_spd) return 0;
-		/* printk("cos: try find root spd -- could not get rooted spd.\n"); */
-		ret = root_spd;
+		for (i = mem_id ; i < COS_MAX_MEMORY-1 ; i++) {
+			root_spd = cos_lookup_root_spd(i);
+			if (root_spd && root_spd == dspd_id) return 1;
+		}
+		ret = 0;
 		break;
+
+		/* mem_id += this_spd->pfn_base; */
+		/* root_spd = cos_lookup_root_spd(mem_id); */
+		/* if (0 == root_spd) return 0; */
+		/* /\* printk("cos: try find root spd -- could not get rooted spd.\n"); *\/ */
+		/* ret = root_spd; */
+		/* break; */
 	}		
 	default:
 		ret = -1;

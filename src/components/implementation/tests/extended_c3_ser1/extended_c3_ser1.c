@@ -14,7 +14,8 @@
 
 volatile unsigned long long overhead_start, overhead_end;
 
-#define EXAMINE_SCHED
+#define EXAMINE_MM
+//#define EXAMINE_SCHED
 //#define EXAMINE_TE
 //#define EXAMINE_LOCK
 //#define EXAMINE_EVT
@@ -279,6 +280,74 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 
 	return 0;
 }
+
+#endif
+
+#ifdef EXAMINE_MM
+
+#define PAGE_NUM 10
+vaddr_t s_addr[PAGE_NUM];
+vaddr_t d_addr[PAGE_NUM];
+
+static void
+test_mmpage()
+{
+	int i;
+	for (i = 0; i<PAGE_NUM; i++) {
+		s_addr[i] = (vaddr_t)cos_get_vas_page();
+		d_addr[i] = ec3_ser2_test();
+		printc("s_addr[%d] -> %p\n", i, s_addr[i]);
+		printc("d_addr[%d] -> %p\n", i, d_addr[i]);
+	}
+
+	for (i = 0; i<PAGE_NUM; i++) {
+		mman_get_page(cos_spd_id(), s_addr[i], 0);
+		if (!mman_alias_page(cos_spd_id(), s_addr[i], 
+				     cos_spd_id()+1, d_addr[i], MAPPING_RW)) assert(0);
+		mman_revoke_page(cos_spd_id(), s_addr[i], 0);
+	}
+	return;
+}
+
+
+vaddr_t ec3_ser1_test(int low, int mid, int hig)
+{
+	if (cos_get_thd_id() == hig) {
+		printc("\n<< high thd %d is in MM testing... >>>\n", 
+		       cos_get_thd_id());
+
+		int i = 0;
+		while(i++ < 2) { /* 80 x 10 x 4k  < 4M */
+			printc("<<< MM RECOVERY TEST START (thd %d) >>>\n", cos_get_thd_id());
+			test_mmpage();
+			printc("<<< MM RECOVERY TEST DONE!! >>> (%d)\n\n\n", i);
+		}
+		
+	}
+	
+	return 0;
+}
+
+void alias_replay(vaddr_t s_addr);
+
+void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
+{
+	switch (t) {
+	case COS_UPCALL_REBOOT:
+	{
+		printc("thread %d passing arg1 %p here (t %d)\n", 
+		       cos_get_thd_id(), arg1, t);
+		
+		alias_replay((vaddr_t)arg1);
+			
+		return;
+	}
+	default:
+		return;
+	}
+	return;
+}
+
 
 #endif
 

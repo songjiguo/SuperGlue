@@ -15,8 +15,8 @@ int warm;
 
 #define ITER 5
 
-#define EXAMINE_SCHED
-
+#define EXAMINE_MM
+//#define EXAMINE_SCHED
 //#define EXAMINE_TE
 //#define EXAMINE_LOCK
 //#define EXAMINE_EVT
@@ -68,6 +68,12 @@ cos_init(void)
 		       cos_get_thd_id(), low);
 
 	} else {
+#ifdef EXAMINE_MM
+		if (cos_get_thd_id() == high) {
+			printc("<<<high thd %d>>>\n", cos_get_thd_id());
+			ec3_ser1_test(low, med, high);
+		}
+#endif
 #ifdef EXAMINE_SCHED
 		if (cos_get_thd_id() == high) {
 			printc("<<<high thd %d>>>\n", cos_get_thd_id());
@@ -84,7 +90,6 @@ cos_init(void)
 		/* 	ec3_ser1_test(low, med, high); */
 		/* } */
 #endif
-
 #ifdef EXAMINE_LOCK
 		if (cos_get_thd_id() == high) {
 			printc("<<<high thd %d>>>\n", cos_get_thd_id());

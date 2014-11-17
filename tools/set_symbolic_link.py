@@ -21,9 +21,9 @@ log_stubs = '__stubs_log'
 normal_stubs = '__stubs'
 using_stubs = 'stubs'
 
-mm_rec_h = '__mem_mgr_rec.h'
-mm_nor_h = '__mem_mgr.h'
-mm_header = 'mem_mgr.h'
+#mm_rec_h = '__mem_mgr_rec.h'
+#mm_nor_h = '__mem_mgr.h'
+#mm_header = 'mem_mgr.h'
 
 ramfs_rec_h = '__rtorrent_h_rec'
 ramfs_nor_h = '__rtorrent_h'
@@ -51,11 +51,6 @@ sched_component_path = '/src/components/implementation/sched/'
 sched_rec_c = '__cos_sched_base_rec'
 sched_nor_c = '__cos_sched_base'
 sched_c = 'cos_sched_base.c'
-
-fprr_path = '/src/components/implementation/sched/fprr'
-fprr_rec_c = '__fp_rr_rec'
-fprr_nor_c = '__fp_rr'
-fprr_c = 'fp_rr.c'
 
 #LOCK
 lock_component_path = '/src/components/implementation/lock/two_phase/'
@@ -311,13 +306,12 @@ def main():
         if (service_names[i] == 'mem_mgr'):
             print service_names[i]
             ret = set_link(service_names[i], mem_man_component_path, mem_man_c, mm_nor_c, mm_rec_c, 0)
-            set_link(service_names[i], interface_path+service_names[i], mm_header, mm_nor_h, mm_rec_h, ret)
+            #set_link(service_names[i], interface_path+service_names[i], mm_header, mm_nor_h, mm_rec_h, ret)
             print
         # # component SCHED
         if (service_names[i] == 'sched'):
             print service_names[i]
             ret = set_link(service_names[i], sched_component_path, sched_c, sched_nor_c, sched_rec_c, 0)
-            set_link(service_names[i], fprr_path, fprr_c, fprr_nor_c, fprr_rec_c, ret)
             print            
         # component FS
         if (service_names[i] == 'rtorrent'):

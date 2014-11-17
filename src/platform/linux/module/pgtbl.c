@@ -62,10 +62,28 @@ chal_pgtbl_add(paddr_t pgtbl, vaddr_t vaddr, paddr_t paddr, int flags)
 	unsigned long kflags = _PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED;
 
 	if (flags == MAPPING_RW) kflags |= _PAGE_RW;
+	if (!pte) printk("entry is not even there\n");
+	if (pte_val(*pte) & _PAGE_PRESENT) printk("entry already exist\n");
 	if (!pte || pte_val(*pte) & _PAGE_PRESENT) return -1;
 	pte->pte_low = ((unsigned long)paddr) | kflags;
 
 	return 0;
+}
+
+/* Jiguo: C^3 MM -- fin the phy_addr from a vaddr in a component
+ * pagtbl */
+paddr_t
+chal_pgtbl_get_paddr(paddr_t pgtbl, vaddr_t vaddr)
+{
+	pte_t *pte = pgtbl_lookup_address(pgtbl, vaddr);
+	paddr_t val;
+
+	if (!pte || !(pte_val(*pte) & _PAGE_PRESENT)) {
+		return 0;
+	}
+	val = (paddr_t)(pte_val(*pte) & PAGE_MASK);
+
+	return val;
 }
 
 /* 
@@ -109,9 +127,14 @@ chal_pgtbl_rem(paddr_t pgtbl, vaddr_t va)
 	if (!pte || !(pte_val(*pte) & _PAGE_PRESENT)) {
 		return 0;
 	}
+	
+	/* pte->pte_low &= ~_PAGE_PRESENT; */
 	val = (paddr_t)(pte_val(*pte) & PAGE_MASK);
 	pte->pte_low = 0;
 
+	/* if (pte_val(*pte) & _PAGE_PRESENT) printk("still in pgtbl?????\n"); */
+	printk("va %p is removed from pgtbl\n", va);
+	
 	return val;
 }
 

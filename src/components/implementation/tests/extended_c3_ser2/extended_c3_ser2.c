@@ -11,8 +11,9 @@
 
 // test evt: 10 and 13, 11 and 12
 
+#define EXAMINE_MM
 //#define EXAMINE_LOCK
-#define EXAMINE_EVT
+//#define EXAMINE_EVT
 
 long passed_evtid;
 
@@ -150,6 +151,44 @@ int ec3_ser2_pass(long id)
 	printc("\n**** wait ****\n");
 	printc("(ser 2) thd %d waiting for event %ld\n\n", cos_get_thd_id(), id);
 	evt_wait(cos_spd_id(), id);
+	return 0;
+}
+
+#endif
+
+
+#ifdef EXAMINE_MM
+
+#define PAGE_NUM 10
+vaddr_t addr[PAGE_NUM];
+
+static int first = 1;
+static int index = 0;
+
+vaddr_t ec3_ser2_test(void)
+{
+	vaddr_t ret;
+	int idx = 0;
+
+	printc("\n<<< ... Ser2 MM test in spd %d >>>>\n\n",
+	       cos_spd_id(), cos_get_thd_id());
+	
+	if (first) {
+		first = 0;
+		for (idx = 0; idx < PAGE_NUM; idx++) {
+			addr[idx]  = (vaddr_t)cos_get_vas_page();
+		}
+	}
+	ret = addr[index%PAGE_NUM];
+	index++;
+	printc("kevin: addr %p\n", ret);
+	return ret;
+}
+
+
+// not using this anymore, since evt_create has to be in the same spd as evt_wait
+int ec3_ser2_pass(long id)
+{
 	return 0;
 }
 

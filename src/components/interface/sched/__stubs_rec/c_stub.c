@@ -1,8 +1,18 @@
-/* Scheduler recovery: client stub interface */
+/**************************/
+/*   C3 --- Scheduelr     */
+/**************************/
+/* C3 -- scheduler interface Scheduler recovery: client stub interface
+   recovery data structure, mainly for block/wakeup. Issue: The
+   threads created in scheduler (timer/IPI/idle/init) are already
+   taken cared during the reboot and reinitialize in the scheduler
+   (sched_reboot(), and kernel introspection)
 
-/* SCHED: the object is the thread itself.... */
-/* MM: object is the memory */
-/* TOR: object is the torrent */
+   -- some threads are created within scheduler (sched_init)
+   -- Over this interface, only threads created from remote spds are tracked
+   -- created thread is tracked here but the "deletion" is not executed
+      here. The thread is killed by upcall to its base scheduler
+     (destroy). So basically over the interface we track per thread
+      status. Also a thread can be reused (from graveyard) */
 
 #include <cos_component.h>
 #include <cos_debug.h>
@@ -23,464 +33,434 @@ extern void free_page(void *ptr);
 #define CVECT_FREE(x) free_page(x)
 #include <cvect.h>
 
-//#define MEASU_SCHED_INTERFACE_CREATE
-//#define MEASU_SCHED_INTERFACE_DEFAULT
-//#define MEASU_SCHED_INTERFACE_WAKEUP
-//#define MEASU_SCHED_INTERFACE_BLOCK
-//#define MEASU_SCHED_INTERFACE_COM_TAKE
-//#define MEASU_SCHED_INTERFACE_COM_RELEASE
+static unsigned long long meas_start, meas_end;
+static int meas_flag = 0;
 
 /* global fault counter, only increase, never decrease */
 static unsigned long fcounter;
-int crt_sec_taken = 0;   	/* flag that indicates the critical section for the spd has been taken */
-int crt_sec_owner = 0;         /* which thread has actually taken the critical section  */
 
-unsigned int timer_thd = 0;
-unsigned long wakeup_time = 0;
-unsigned long long ticks = 0;   /* track the current ticks, need? */
+/* recovery data structure for threads */
+struct rec_data_thd {
+	unsigned int thd;
+	unsigned int dep_thd;
 
-/************************************/
-/******interface tracking data ******/
-/************************************/
-/* 
-   recovery data structure, mainly for block/wakeup for created
-   threads, they should be already taken cared from the booter
-   interface and kernel introspection (not used. since thread
-   block/wakeup is taken care already by the priority)
- */
-
-struct blked_thd {
-	unsigned int thd_id;
-	unsigned int dep_id;;
-	struct blked_thd *prev, *next;
+	unsigned int lock_state;    // if this thread is holding a scheduler lock
+	
+	unsigned int  state;
+	unsigned long fcnt;
 };
 
-struct blked_thd *blked_thd_list = NULL;
+/* the state of a thread object */
+enum {
+	THD_STATE_CREATE,           // other remote components call this
+	THD_STATE_CREATE_DEFAULT,   // now, only booter thread does this
+	THD_STATE_WAKEUP,
+	THD_STATE_BLOCK,
+	THD_STATE_RUNNING,
+	THD_STATE_LOCK_TAKE,      // a thread might be associated with sched lock
+	THD_STATE_LOCK_RELEASE
+};
 
-static struct blked_thd *
-blked_thd_init()
+/*******************************************/
+/* tracking thread state for data recovery */
+/*******************************************/
+CVECT_CREATE_STATIC(thd_vect);
+CSLAB_CREATE(thdrdt, sizeof(struct rec_data_thd));
+
+static struct rec_data_thd *
+thdrdt_lookup(int thd)
 {
-	return NULL;
+	return cvect_lookup(&thd_vect, thd);
 }
 
-static struct blked_thd *
-blked_thd_add()
+static struct rec_data_thd *
+thdrdt_alloc(int thd)
 {
-	return NULL;
-}
+	struct rec_data_thd *thd_track;
 
-static struct blked_thd *
-blked_thd_rem()
-{
-	return NULL;
-}
-
-static struct blked_thd *
-blked_thd_lookup()
-{
-	return NULL;
-}
-
-static void rebuild_net_brand() {
-	unsigned short int net_bid = 0;
-	unsigned short int net_tid = 0;
-
-	net_tid = cos_brand_cntl(COS_BRAND_INTRO_TID, 0, 0, 0);
-	if (likely(net_tid)){
-		printc("net_tid %d\n", net_tid);
-		if (cos_brand_cntl(COS_BRAND_INTRO_STATUS, 0, 0, 0)) {
-			net_bid = cos_brand_cntl(COS_BRAND_INTRO_BID, 0, 0, 0);
-			assert(net_bid && net_tid);
-			printc("net_bid %d\n", net_bid);
-			printc("rebuild the net brand\n");
-			if (sched_add_thd_to_brand(cos_spd_id(), net_bid, net_tid)) BUG();
-			/* cos_switch_thread(net_tid, 0); */
-		}
+	thd_track = cslab_alloc_thdrdt();
+	assert(thd_track);
+	if (cvect_add(&thd_vect, thd_track, thd)) {
+		printc("can not add into cvect\n");
+		BUG();
 	}
+	thd_track->thd = thd;
+	return thd_track;
+}
+
+static void
+thdrdt_dealloc(struct rec_data_thd *thd_track)
+{
+	assert(thd_track);
+	if (cvect_del(&thd_vect, thd_track->thd)) BUG();
+	cslab_free_thdrdt(thd_track);
+}
+
+static void
+rd_cons(struct rec_data_thd *rd, int thd, int dep_thd, int state)
+{
+	assert(rd);
+
+	rd->thd		= thd;
+	rd->dep_thd	= dep_thd;
+	rd->lock_state	= 0;
+	rd->state	= state;
+	rd->fcnt	= fcounter;
 
 	return;
+}
+
+static struct rec_data_thd *
+rd_update(int thd, int target_thd, int state)
+{
+        struct rec_data_thd *rd = NULL;
+
+	/* target_thd is dep_thd for wakeup, is thd_id for block  */
+
+	/* in state machine, we track/update the thread's state and
+	 * the associated locks. We can not track exactly the state of
+	 * a thread since the preemption (thread switching) does not
+	 * occur through the interface. But we need track the
+	 * sched_component_take/release. For example, the fault occurs
+	 * while a thread is holding such lokc, and later on when it
+	 * releases the lock, we need know the lock status (e.g,
+	 * boother thread fail during sched_create_thread_default) */
+
+	if (unlikely(!(rd = thdrdt_lookup(thd)))) {
+		rd = thdrdt_alloc(cos_get_thd_id());
+		rd_cons(rd, thd, target_thd, state);
+		rd->state = state;
+		rd->fcnt = fcounter;
+	}
+	if (likely(rd->fcnt == fcounter)) goto done;
+	rd->fcnt = fcounter;
+
+	printc("State Machine thd %d -- ", cos_get_thd_id());
+	/* STATE MACHINE */
+	switch (state) {
+	case THD_STATE_CREATE:
+		/* The re-creation of these threads should be taken
+		 * cared by the scheduler sched_reboot + kernel
+		 * reflection already. See scheduler recovery code */
+		printc("rd_update: THD_STATE_CREATE\n");
+		break;
+	case THD_STATE_CREATE_DEFAULT:
+		printc("rd_update: THD_STATE_CREATE_DEFAULT\n");
+		if (rd->lock_state) sched_component_take(cos_spd_id());
+		break;
+	case THD_STATE_WAKEUP:
+		printc("rd_update: THD_STATE_WAKEUP (thd %d)\n", rd->dep_thd);
+		cos_sched_cntl(COS_SCHED_BREAK_PREEMPTION_CHAIN, 0, 0);
+		break;
+	case THD_STATE_BLOCK:
+		printc("rd_update: THD_STATE_BLOCK\n");
+		rd->dep_thd = target_thd;
+		break;
+	case THD_STATE_LOCK_TAKE:
+		printc("rd_update: THD_STATE_LOCK_TAKE\n");
+		break;
+	case THD_STATE_LOCK_RELEASE:
+		printc("rd_update: THD_STATE_LOCK_RELEASE\n");
+		if (rd->lock_state) sched_component_take(cos_spd_id());
+		break;
+	case THD_STATE_RUNNING:
+		printc("rd_update: THD_STATE_LOCK_RUNNING\n");
+		assert(0);
+		break;
+	default:
+		assert(0);
+	}
+	printc("thd %d restore scheduler done!!!\n", cos_get_thd_id());
+done:
+	return rd;
 }
 
 /************************************/
 /******  client stub functions ******/
 /************************************/
 
-CSTUB_FN_ARGS_4(int, sched_create_thd, spdid_t, spdid, u32_t, sched_param0, u32_t, sched_param1, unsigned int, desired_thd)
-       unsigned long long start, end;
+CSTUB_FN(int, sched_create_thd) (struct usr_inv_cap *uc,
+				 spdid_t spdid, u32_t sched_param0, 
+				 u32_t sched_param1, u32_t sched_param2)
+{
+	long fault = 0;
+	long ret;
+
+	unsigned long long start, end;	
+        struct rec_data_thd *rd = NULL;
+
 redo:
-       /* printc("thread %d calls << sched_create_thd >>\n", cos_get_thd_id()); */
+	rd = rd_update(cos_get_thd_id(), 0, THD_STATE_CREATE);
+	assert(rd);
+
+	printc("thread %d calls << sched_create_thd >>\n", cos_get_thd_id());
+
 #ifdef MEASU_SCHED_INTERFACE_CREATE
-rdtscll(start);
+	rdtscll(start);
 #endif
+	
+	CSTUB_INVOKE(ret, fault, uc, 4, spdid, sched_param0, sched_param1, sched_param2);
+        if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
 
-CSTUB_ASM_4(sched_create_thd, spdid, sched_param0, sched_param1, desired_thd)
+	assert(ret > 0);
+	printc("sched_create_thd done!!! ... new thread %d is created\n\n", ret);
 
-       if (unlikely (fault)){
-	       /* cos_brand_cntl(COS_BRAND_REMOVE_THD, 0, 0, 0); */
+	assert(rd);
+	rd->state = THD_STATE_RUNNING;
 
-	       if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-		       printc("set cap_fault_cnt failed\n");
-		       BUG();
-	       }
-       	       fcounter++;
-	       sched_param1 = 0; /* test use only, set 99 to trigger and set 0 to reset */
-#ifdef MEASU_SCHED_INTERFACE_CREATE
-	       rdtscll(end);
-	       printc("<<< entire cost (sched_create_thd): %llu >>>>\n", (end-start));
-#endif
-	       if (crt_sec_taken && crt_sec_owner == cos_get_thd_id()) {
-		       printc("take component crt_thd\n");
-		       sched_component_take(cos_spd_id());
-	       }
-
-	       if (unlikely(cos_get_thd_id() == timer_thd)) {
-		       sched_timeout_thd(cos_spd_id());
-		       sched_timeout(cos_spd_id(), wakeup_time);
-		       printc("replay the sched_timeout_thd\n");
-	       }
-
-	       /* rebuild_net_brand(); */
-       	       goto redo;
-       }
-
-CSTUB_POST
+	return ret;
+}
 
 
-CSTUB_FN_ARGS_4(int, sched_create_thread_default, spdid_t, spdid, u32_t, sched_param0, u32_t, sched_param1, unsigned int, desired_thd)
-         unsigned long long start, end;
+CSTUB_FN(int, sched_create_thread_default) (struct usr_inv_cap *uc,
+					    spdid_t spdid, u32_t sched_param0, 
+					    u32_t sched_param1, u32_t sched_param2)
+{
+	long fault = 0;
+	long ret;
+
+	unsigned long long start, end;
+        struct rec_data_thd *rd = NULL;
+
 redo:
-/* printc("\n<< sched_create_thread_default cli thread required by %d (desired tid %d)>>\n", cos_get_thd_id(), desired_thd); */
-#ifdef MEASU_SCHED_INTERFACE_DEFAULT
-               rdtscll(start);
-#endif
+	rd = rd_update(cos_get_thd_id(), 0, THD_STATE_CREATE_DEFAULT);
+	assert(rd);
 
-CSTUB_ASM_4(sched_create_thread_default, spdid, sched_param0, sched_param1, desired_thd)
+	printc("thread %d calls << sched_create_thd_default >>\n", cos_get_thd_id());
 
-       if (unlikely (fault)){
-	       /* cos_brand_cntl(COS_BRAND_REMOVE_THD, 0, 0, 0); */
+	CSTUB_INVOKE(ret, fault, uc, 4, spdid, sched_param0, sched_param1, sched_param2);
+        if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
 
-	       /* printc("Inter:crt_default update cap %d \n", uc->cap_no); */
-	       if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-		       printc("set cap_fault_cnt failed\n");
-		       BUG();
-	       }
-       	       fcounter++;
-#ifdef MEASU_SCHED_INTERFACE_DEFAULT
-	       rdtscll(end);
-	       printc("<<< entire cost (sched_create_thd_default): %llu >>>>\n", (end-start));
-#endif
-	       if (crt_sec_taken && crt_sec_owner == cos_get_thd_id()) {
-		       printc("take component crt_thd_default\n");
-		       sched_component_take(cos_spd_id());
-	       }
+	printc("sched_create_thread_default ret %d\n", ret);
+	assert(ret > 0);
 
-	       desired_thd = 0;
-	       if (unlikely(cos_get_thd_id() == timer_thd)) {
-		       sched_timeout_thd(cos_spd_id());
-		       sched_timeout(cos_spd_id(), wakeup_time);
-		       printc("replay the sched_timeout_thd\n");
-	       }
+	printc("sched_create_thd_default done!!! ... new thread %d is created\n\n", ret);
 
-	       /* rebuild_net_brand(); */
-       	       goto redo;
-       }
+	assert(rd);
+	rd->state = THD_STATE_RUNNING;
 
-CSTUB_POST
+	return ret;
+}
 
+CSTUB_FN(int, sched_wakeup) (struct usr_inv_cap *uc,
+			     spdid_t spdid, unsigned short int dep_thd)
+{
+	long fault = 0;
+	long ret;
 
-CSTUB_FN_ARGS_2(int, sched_wakeup, spdid_t, spdid, unsigned short int, dep_thd)
         unsigned long long start, end;
-
-        int crash_flag = 0;
+        struct rec_data_thd *rd = NULL;
 redo:
-/* printc("thread %d calls << sched_wakeup thd %d>>\n",cos_get_thd_id(),dep_thd); */
+
+	rd = rd_update(cos_get_thd_id(), dep_thd, THD_STATE_WAKEUP);
+	assert(rd);
+	
+	printc("thread %d calls << sched_wakeup thd %d>>\n",cos_get_thd_id(),dep_thd);
 #ifdef MEASU_SCHED_INTERFACE_WAKEUP
-               rdtscll(start);
+	rdtscll(start);
 #endif
-CSTUB_ASM_3(sched_wakeup, spdid, dep_thd, crash_flag)
+	
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, dep_thd);
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
 
-       if (unlikely (fault)){
-	       /* cos_brand_cntl(COS_BRAND_REMOVE_THD, 0, 0, 0); */
-
-	       if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-		       printc("set cap_fault_cnt failed\n");
-		       BUG();
-	       }
-       	       fcounter++;
 #ifdef MEASU_SCHED_INTERFACE_WAKEUP
-	       rdtscll(end);
-	       printc("<<< entire cost (sched_wakeup): %llu >>>>\n", (end-start));
+	rdtscll(end);
+	printc("<<< entire cost (sched_wakeup): %llu >>>>\n", (end-start));
 #endif
-	       if (crt_sec_taken && crt_sec_owner == cos_get_thd_id()) {
-		       printc("take component wakeup\n");
-		       sched_component_take(cos_spd_id());
-	       }
 
-	       /* test time event spd */
-	       /* printc("thd %d wakeup failed and redo!!\n", cos_get_thd_id()); */
-	       crash_flag = 1;
-	       if (unlikely(cos_get_thd_id() == timer_thd)) {
-		       sched_timeout_thd(cos_spd_id());
-		       sched_timeout(cos_spd_id(), wakeup_time);
-		       printc("replay the sched_timeout_thd\n");
-	       }
+	assert(rd);
+	rd->state = THD_STATE_RUNNING;
 
-	       /* rebuild_net_brand(); */
-       	       goto redo;
-       }
+	return ret;
+}
 
-CSTUB_POST
+CSTUB_FN(int, sched_block) (struct usr_inv_cap *uc,
+			    spdid_t spdid, unsigned short int thd_id)
+{
+	long fault = 0;
+	long ret;
 
-
-static unsigned long long ttt = 0;
-
-CSTUB_FN_ARGS_2(int, sched_block, spdid_t, spdid, unsigned short int, thd_id)
         unsigned long long start, end;
-        struct period_thd *item;
-        int crash_flag = 0;
+        struct rec_data_thd *rd = NULL;
+
 redo:
-	/* if (ttt++ % 8000 == 0) printc("thread %d calls << sched_block -- thd_id %d >>\n",cos_get_thd_id(), thd_id); */
+        rd = rd_update(cos_get_thd_id(), thd_id, THD_STATE_BLOCK);
+	assert(rd);
+
+	printc("thread %d calls << sched_block thd %d>>\n",cos_get_thd_id(),thd_id);
+	
+#ifdef MEASU_SCHED_INTERFACE_BLOCK
+	rdtscll(start);
+#endif
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, thd_id);
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
 
 #ifdef MEASU_SCHED_INTERFACE_BLOCK
-              rdtscll(start);
+	rdtscll(end);
+	printc("<<< entire cost (sched_block): %llu >>>>\n", (end-start));
 #endif
-CSTUB_ASM_3(sched_block, spdid, thd_id, crash_flag)
 
-       if (unlikely (fault)){
-	       /* cos_brand_cntl(COS_BRAND_REMOVE_THD, 0, 0, 0); */
-
-	       if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-		       printc("set cap_fault_cnt failed\n");
-		       BUG();
-	       }
-       	       fcounter++;
-#ifdef MEASU_SCHED_INTERFACE_BLOCK
-	       rdtscll(end);
-	       printc("<<< entire cost (sched_block): %llu >>>>\n", (end-start));
-#endif
-	       if (crt_sec_taken && crt_sec_owner == cos_get_thd_id()) {
-		       /* printc("take component block\n"); */
-		       sched_component_take(cos_spd_id());
-	       }
-
-	       /* printc("thd %d block failed and redo!!\n", cos_get_thd_id()); */
-	       crash_flag = 1;
-	       if (unlikely(cos_get_thd_id() == timer_thd)) {
-		       sched_timeout_thd(cos_spd_id());
-		       sched_timeout(cos_spd_id(), wakeup_time);
-		       printc("replay the sched_timeout_thd\n");
-	       }
-
-	       /* rebuild_net_brand(); */
-       	       goto redo;
-       }
-
-CSTUB_POST
+	assert(rd);
+	rd->state = THD_STATE_RUNNING;
+	       
+	return ret;
+}
 
 
-CSTUB_FN_ARGS_1(int, sched_component_take, spdid_t, spdid)
-       unsigned long long start, end;
+CSTUB_FN(int, sched_component_take) (struct usr_inv_cap *uc,
+				     spdid_t spdid)
+{
+	long fault = 0;
+	long ret;
+
+	unsigned long long start, end;
+        struct rec_data_thd *rd = NULL;
+
 redo:
-	/* printc("thread %d calls << sched_component_take >>\n",cos_get_thd_id()); */
+        rd = rd_update(cos_get_thd_id(), 0, THD_STATE_LOCK_TAKE);
+	assert(rd);
+
+	printc("thread %d calls << sched_component_take >>\n",cos_get_thd_id());
+
 #ifdef MEASU_SCHED_INTERFACE_COM_TAKE
-           rdtscll(start);
+	rdtscll(start);
 #endif
 
-CSTUB_ASM_1(sched_component_take, spdid)
+	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
+	if (unlikely (fault)){
+		printc("see a fault during sched_component_take\n");
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
 
-       if (unlikely (fault)){
-	       /* cos_brand_cntl(COS_BRAND_REMOVE_THD, 0, 0, 0); */
-
-	       /* printc("failed!! when component take\n"); */
-	       if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-		       printc("set cap_fault_cnt failed\n");
-		       BUG();
-	       }
-       	       fcounter++;
 #ifdef MEASU_SCHED_INTERFACE_COM_TAKE
-	       rdtscll(end);
-	       printc("<<< entire cost (sched_component_take): %llu >>>>\n", (end-start));
+	rdtscll(end);
+	printc("<<< entire cost (sched_component_take): %llu >>>>\n", (end-start));
 #endif
-	       if (unlikely(crt_sec_taken)) {
-		       /* printc("thread %d testing lock take.... crit is taken by %d\n", cos_get_thd_id(), crt_sec_owner); */
-		       assert(crt_sec_owner != cos_get_thd_id());
-		       sched_block(cos_spd_id(), crt_sec_owner);
-		       /* printc("now thread %d goto redo\n", cos_get_thd_id()); */
-	       }
-	       if (unlikely(cos_get_thd_id() == timer_thd)) {
-		       sched_timeout_thd(cos_spd_id());
-		       sched_timeout(cos_spd_id(), wakeup_time);
-		       printc("replay the sched_timeout_thd\n");
-	       }
 
-	       /* rebuild_net_brand(); */
-       	       goto redo;
-       }
+	assert(rd && rd->thd == cos_get_thd_id());
+	rd->lock_state = 1;
+	rd->state = THD_STATE_RUNNING;
+	
+	return ret;
+}
 
-       crt_sec_taken = 1;
-       crt_sec_owner = cos_get_thd_id();
+CSTUB_FN(int, sched_component_release) (struct usr_inv_cap *uc,
+					spdid_t spdid)
+{
+	long fault = 0;
+	long ret;
 
-CSTUB_POST
+	unsigned long long start, end;
+        struct rec_data_thd *rd = NULL;
 
-
-CSTUB_FN_ARGS_1(int, sched_component_release, spdid_t, spdid)
-      unsigned long long start, end;
 redo:
-	/* printc("thread %d calls << sched_component_release >>\n",cos_get_thd_id()); */
+        rd = rd_update(cos_get_thd_id(), 0, THD_STATE_LOCK_RELEASE);
+	assert(rd);
+
+	printc("thread %d calls << sched_component_release >>\n",cos_get_thd_id());
 #ifdef MEASU_SCHED_INTERFACE_COM_RELEASE
-               rdtscll(start);
+	rdtscll(start);
 #endif
-
-CSTUB_ASM_1(sched_component_release, spdid)
-
-       if (unlikely (fault)){
-	       /* cos_brand_cntl(COS_BRAND_REMOVE_THD, 0, 0, 0); */
-
-	       /* printc("spd_release update cap %d \n", uc->cap_no); */
-	       if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-		       printc("set cap_fault_cnt failed\n");
-		       BUG();
-	       }	       
-       	       fcounter++;
+      
+	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
+	
 #ifdef MEASU_SCHED_INTERFACE_COM_RELEASE
-	       rdtscll(end);
-	       printc("<<< entire cost (sched_component_release): %llu >>>>\n", (end-start));
+	rdtscll(end);
+	printc("<<< entire cost (sched_component_release): %llu >>>>\n", (end-start));
 #endif
-	       /* if (crt_sec_taken && crt_sec_owner == cos_get_thd_id()) sched_component_take(cos_spd_id()); */
-	       /* if not, this thread should not take the critical
-	       	* section at the very first place */
-	       /* thread that calls to release should have called the
-	       	* component_take and had the critical section */
 
-	       if (unlikely(cos_get_thd_id() == timer_thd)) {
-		       sched_timeout_thd(cos_spd_id());
-		       sched_timeout(cos_spd_id(), wakeup_time);
-		       printc("replay the sched_timeout_thd\n");
-	       }
+	assert(rd && rd->thd == cos_get_thd_id());
+	rd->state = THD_STATE_RUNNING;
+	rd->lock_state = 0;
+	
+	return ret;
+}
 
-	       /* rebuild_net_brand(); */
-	       goto redo;
-       }
+/* only used by timed_evt */
+CSTUB_FN(int, sched_timeout_thd) (struct usr_inv_cap *uc,
+				  spdid_t spdid)
+{
+	long fault = 0;
+	long ret;
 
-       crt_sec_owner = 0;
-       crt_sec_taken = 0;
-       /* printc("thread %d calls << sched_component_release >>done!!!\n",cos_get_thd_id()); */
-
-CSTUB_POST
-
-
-CSTUB_FN_ARGS_1(int, sched_timeout_thd, spdid_t, spdid)
-
-       /* printc("<< cli: sched_timeout_thd >>>\n"); */
 redo:
+	printc("<< cli: sched_timeout_thd >>>\n");
 
-CSTUB_ASM_1(sched_timeout_thd, spdid)
+	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
 
-       if (unlikely (fault)){
-	       /* cos_brand_cntl(COS_BRAND_REMOVE_THD, 0, 0, 0); */
+	return ret;
+}
 
-	       /* printc("spd_ update cap %d \n", uc->cap_no); */
-	       if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-		       printc("set cap_fault_cnt failed\n");
-		       BUG();
-	       }
-       	       fcounter++;
-
-	       if (unlikely(cos_get_thd_id() == timer_thd)) {
-		       sched_timeout_thd(cos_spd_id());
-		       sched_timeout(cos_spd_id(), wakeup_time);
-		       printc("replay the sched_timeout_thd\n");
-	       }
-
-	       /* rebuild_net_brand(); */
-	       goto redo;
-       }
-
-       if(!ret) timer_thd = cos_get_thd_id(); /* record the wakeup thread over the interface */
-       /* printc("interface: time event  thread is %d\n",timer_thd); */
-
-CSTUB_POST
-
-
-CSTUB_FN_ARGS_2(int, sched_timeout, spdid_t, spdid, unsigned long, amnt)
-	struct period_thd *item;
-       /* printc("<< cli: sched_timeout >>>\n"); */
+CSTUB_FN(int, sched_timeout) (struct usr_inv_cap *uc,
+			      spdid_t spdid, unsigned long amnt)
+{
+	long fault = 0;
+	long ret;
 redo:
-CSTUB_ASM_2(sched_timeout, spdid, amnt)
+	printc("<< cli: sched_timeout >>>\n");
 
-       if (unlikely (fault)){
-	       if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
-		       printc("set cap_fault_cnt failed\n");
-		       BUG();
-	       }
-       	       fcounter++;
-
-	       if (unlikely(cos_get_thd_id() == timer_thd)) {
-		       sched_timeout_thd(cos_spd_id());
-		       sched_timeout(cos_spd_id(), wakeup_time);
-	       }
-
-	       /* rebuild_net_brand(); */
-       	       goto redo;
-       }
-       /* printc("cli: thd %d amnt %lu for the sched_timeout \n", cos_get_thd_id(), amnt); */
-       if (cos_get_thd_id() == timer_thd) wakeup_time = amnt; 
-       /* printc("wakeup time is set to  %lu \n", wakeup_time); */
-
-CSTUB_POST
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, amnt);
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
+	
+	return ret;
+}
 
 
-/* CSTUB_FN_ARGS_2(int, sched_create_net_brand, spdid_t, spdid, unsigned short int, port) */
+CSTUB_FN(int, sched_timestamp) (struct usr_inv_cap *uc)
+{
+	long fault = 0;
+	long ret;
 
-/* 	printc("<< cli: thd %d sched_create_net_brand >>>\n", cos_get_thd_id()); */
-/* redo: */
+redo:
+	printc("<< cli: sched_timestamp >>>\n");
 
-/* CSTUB_ASM_2(sched_create_net_brand, spdid, port) */
+	CSTUB_INVOKE_NULL(ret, fault, uc);
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
 
-/*        if (unlikely (fault)){ */
-/* 	       if (unlikely(net_tid && net_bid)) { /\* remove the brand *\/ */
-/* 	       	       cos_brand_cntl(COS_BRAND_REMOVE_THD, net_bid, net_tid, 0); */
-/* 	       } */
+	return ret;
+}
 
-/* 	       /\* printc("spd_ update cap %d \n", uc->cap_no); *\/ */
-/* 	       if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) { */
-/* 		       printc("set cap_fault_cnt failed\n"); */
-/* 		       BUG(); */
-/* 	       } */
-/*        	       fcounter++; */
+CSTUB_FN(int, sched_create_net_acap) (struct usr_inv_cap *uc, 
+				      spdid_t spdid, int acap_id, unsigned short int port)
+{
+	long fault = 0;
+	long ret;
+	
+redo:
+	printc("<< cli: sched_create_net_acap >>>\n");
 
+	CSTUB_INVOKE(ret, fault, uc, 3, spdid, acap_id, port);
+	if (unlikely (fault)){
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
 
-/* 	       goto redo; */
-/*        } */
-
-/*        /\* if(!ret) port = port; *\/ */
-/*        printc("interface: create_net_brand is %d\n",ret); */
-
-/* CSTUB_POST */
-
-/* CSTUB_FN_ARGS_3(int, sched_add_thd_to_brand, spdid_t, spdid, unsigned short int, bid, unsigned short int, tid) */
-
-/* 	printc("<< cli: thd %d sched_add_thd_to_brand >>>\n", cos_get_thd_id()); */
-/* redo: */
-
-/* CSTUB_ASM_3(sched_add_thd_to_brand, spdid, bid, tid) */
-
-/*        if (unlikely (fault)){ */
-/* 	       if (unlikely(net_tid && net_bid)) { /\* remove the brand *\/ */
-/* 	       	       cos_brand_cntl(COS_BRAND_REMOVE_THD, net_bid, net_tid, 0); */
-/* 	       } */
-
-/* 	       /\* printc("spd_ update cap %d \n", uc->cap_no); *\/ */
-/* 	       if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) { */
-/* 		       printc("set cap_fault_cnt failed\n"); */
-/* 		       BUG(); */
-/* 	       } */
-/*        	       fcounter++; */
-/* 	       goto redo; */
-/*        } */
-
-/*        printc("add: bid %d tid %d\n", bid, tid); */
-/*        net_bid = bid; */
-/*        net_tid = tid; */
-
-/* CSTUB_POST */
+	return ret;
+}

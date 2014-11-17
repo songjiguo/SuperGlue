@@ -45,20 +45,13 @@
 #include <mem_mgr.h>
 #include <recovery_upcall.h>
 
+static int test_control = 0;  // Jiguo: for trigger the fault test
+
 /***************************************************/
 /*** Data-structure for tracking physical memory ***/
 /***************************************************/
-struct mapping {
-	u16_t   flags;
-	spdid_t spdid;
-	vaddr_t addr;
 
-	struct frame *f;
-	/* child and sibling mappings */
-	struct mapping *p, *c, *_s, *s_;
-	struct mapping *next, *prev;
-} __attribute__((packed));
-
+struct mapping;
 /* A tagged union, where the tag holds the number of maps: */
 struct frame {
 	int nmaps;
@@ -70,34 +63,21 @@ struct frame {
 } frames[COS_MAX_MEMORY];
 struct frame *freelist;
 
-#define MAX_UPCALL_LIST_DEPTH 8
-
 static inline int  frame_index(struct frame *f) { return f-frames; }
 static inline int  frame_nrefs(struct frame *f) { return f->nmaps; }
 static inline void frame_ref(struct frame *f)   { f->nmaps++; }
 
-static struct mapping *mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, vaddr_t to, int root_page);
-static struct mapping *mapping_lookup(spdid_t spdid, vaddr_t addr);
-
 static inline struct frame *
 frame_alloc(void)
 {
-	spdid_t root_spd;
-
 	struct frame *f = freelist;
+
 	if (!f) return NULL;
-again:
 	freelist = f->c.free;
+	f->nmaps = 0;
+	f->c.m   = NULL;
 
-	root_spd = (spdid_t)cos_mmap_introspect(COS_MMAP_INTROSPECT_SPD, 0, 0, 0, frame_index(f));
-	if (unlikely(root_spd)){
-		if (root_spd == cos_spd_id()) return f;
-		f = freelist;
-		if (!f) return NULL;
-		goto again;
-	}
-
-	return f;       	/* return an unused frame or NULL or reused */
+	return f;
 }
 
 static inline void
@@ -128,10 +108,12 @@ static inline void
 mm_init(void)
 {
 	static int first = 1;
+	printc("thread %d is doing mm init....(first %d)\n", cos_get_thd_id(), first);
 	if (unlikely(first)) {
 		first = 0;
 		frame_init();
 	}
+
 }
 
 /*************************************/
@@ -143,39 +125,29 @@ static inline int frame_index(struct frame *f);
 static inline void *
 __page_get(void)
 {
-	spdid_t root_spd;
-	vaddr_t root_addr;
-
-	void *hp;
-	struct frame *f;
-	/* printc("elephant\n"); */
-again:
-	hp = cos_get_vas_page(); /* use lib function if USE_VALLOC is not defined */
-	f = frame_alloc();
-
-	assert(hp && f);
-	frame_ref(f);
+	struct frame *f = frame_alloc();
 	
-	root_spd = (spdid_t)cos_mmap_introspect(COS_MMAP_INTROSPECT_SPD, 0, 0, 0, frame_index(f));
-	if (unlikely(root_spd == cos_spd_id())){ /* reuse the same page for ourself */
-		root_addr = (vaddr_t)cos_mmap_introspect(COS_MMAP_INTROSPECT_ADDR, 0, 0, 0, frame_index(f));
-		if (root_addr != (vaddr_t)hp) {
-			f->nmaps  = -1; 	 
-			f->c.addr = root_addr; 
-			/* /\* cos_release_vas_page(hp); *\/ */
-			/* /\* frame_deref(f); *\/ */
-			/* printc("found an used one, goto again\n"); */
-			goto again;
-		}
+	/* If a page is not removed from page table after a fault, we
+	 * need find the next available page -- Jiguo C^3 only */
+again:    
+	printc("elephant\n");
+	void *hp = cos_get_vas_page();
+	assert(hp && f);
+	if (cos_mmap_cntl(COS_MMAP_GRANT, MAPPING_RW, cos_spd_id(), 
+			  (vaddr_t)hp, frame_index(f))) {
+		printc("grant @ %p for frame %d\n", hp, frame_index(f));
+		/* BUG(); */
+		goto again;
 	}
-	/* this should only be set when the frame is actually picked */
+	frame_ref(f);
 	f->nmaps  = -1; 	 /* belongs to us... */
 	f->c.addr = (vaddr_t)hp; /* ...at this address */
- 	
-	int ret;
-	/* printc("4\n"); */
-	ret =  cos_mmap_cntl(COS_MMAP_GRANT, COS_MMAP_SET_ROOT, cos_spd_id(), (vaddr_t)hp, frame_index(f));
-	if (unlikely(ret)) memset(hp, 0, PAGE_SIZE);
+	
+	/* Jiguo: C^3 MM. So we can remove all allocated frame id for MM in __get_page */
+	if (cos_mmap_cntl(COS_MMAP_SETROOT, 0, cos_spd_id(), (vaddr_t)hp, frame_index(f))) {
+		assert(0);
+	}
+
 	return hp;
 }
 #define CPAGE_ALLOC() __page_get()
@@ -209,12 +181,15 @@ cvas_alloc(spdid_t spdid)
 {
 	struct comp_vas *cv;
 
+	printc("cvas_alloc for spd %d\n", spdid);
+
+	/* assert(!cvas_lookup(spdid)); */
+	if ((cv = cvas_lookup(spdid))) {
+		cvect_del(&comps, cv->spdid);
+	}
 	assert(!cvas_lookup(spdid));
 	cv = cslab_alloc_cvas();
-	if (!cv) {
-		printc("can not vas alloc\n");
-		goto done;
-	}
+	if (!cv) goto done;
 	cv->pages = cvect_alloc();
 	if (!cv->pages) goto free;
 	cvect_init(cv->pages);
@@ -251,7 +226,33 @@ cvas_deref(struct comp_vas *cv)
 /**************************/
 /*** Mapping operations ***/
 /**************************/
+struct mapping {
+	u16_t   flags;
+	spdid_t spdid;
+	vaddr_t addr;
+
+	struct frame *f;
+	/* child and sibling mappings */
+	struct mapping *p, *c, *_s, *s_;
+} __attribute__((packed));
 CSLAB_CREATE(mapping, sizeof(struct mapping));
+
+
+/* Jiguo: After fault, there might old content left in the cslab. So
+ * clean it after each cslab_alloc */
+static void
+cslab_mapping_reset(struct mapping *m)
+{
+	assert(m);
+
+	m->flags = 0;
+	m->spdid = 0;
+	m->addr  = 0;
+
+	m->f = m->p = m->c = m->_s = m->s_ = NULL;
+	
+	return;
+}
 
 static void
 mapping_init(struct mapping *m, spdid_t spdid, vaddr_t a, struct mapping *p, struct frame *f)
@@ -268,9 +269,6 @@ mapping_init(struct mapping *m, spdid_t spdid, vaddr_t a, struct mapping *p, str
 		if (!p->c) p->c = m;
 		else       ADD_LIST(p->c, m, _s, s_);
 	}
-
-	/* for upcall list */
-	INIT_LIST(m, next, prev);
 }
 
 static struct mapping *
@@ -282,111 +280,78 @@ mapping_lookup(spdid_t spdid, vaddr_t addr)
 	return cvect_lookup(cv->pages, addr >> PAGE_SHIFT);
 }
 
-static struct mapping *recovery_rebuild_mapping(spdid_t s_spd, vaddr_t s_addr);
-/* IMPORTANT: do not make assumption that virtual addresses are all different */
-/*            Across components, vaddr could be same in the future */
-
-/* m = mapping_crt(NULL, f, spd, addr, 1);     get */
-/* n = mapping_crt(m, m->f, d_spd, d_addr, 0); alias*/
-
 /* Make a child mapping */
 static struct mapping *
-mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, vaddr_t to, int root_page)
+__mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, 
+	      vaddr_t to, int flags, int grant)
 {
-	/* printc("in map_crt: dest %d to %p\n", dest, to); */
 	struct comp_vas *cv = cvas_lookup(dest);
 	struct mapping *m = NULL;
 	long idx = to >> PAGE_SHIFT;
-	int mm_flag, ret;
 
-	ret = mm_flag = 0;
 	assert(!p || p->f == f);
 	assert(dest && to);
+
+	/* printc("mapping_crt 1 (dest %d, idx %d)\n", dest, idx); */
 	/* no vas structure for this spd yet... */
 	if (!cv) {
+		printc("mapping_crt: cvas_alloc for spd %d\n", dest);
 		cv = cvas_alloc(dest);
 		if (!cv) goto done;
 		assert(cv == cvas_lookup(dest));
 	}
 	assert(cv->pages);
-	/* if (cvect_lookup(cv->pages, idx)) goto collision; */
-	m = cvect_lookup(cv->pages, idx);
-	if (unlikely(m)) goto exist;
-	/* int i = 0; */
-	/* struct mapping *mm = NULL; */
-	/* for (i = 0; i<1; i++) { */
-	/* 	mm = cvect_lookup(cv->pages, idx+i); */
-	/* 	printc("exist m : m->spd %d m->addr %x idx %ld\n", mm->spdid, (unsigned int)mm->addr, idx+i); */
-	/* } */
-	/* 	goto exist; */
-
+	/* printc("mapping_crt 2.1 (dest %d idx %d)\n", dest, idx); */
+	if (cvect_lookup(cv->pages, idx)) {
+		printc("mapping_crt 2.5\n");
+		cvect_del(cv->pages, idx);
+		/* goto collision; */
+	}
+	/* if (cvect_lookup(cv->pages, idx)) cvect_del(cv->pages, idx);  // collision */
 	cvas_ref(cv);
 	m = cslab_alloc_mapping();
+	/* printc("mapping_crt 3\n"); */
 	if (!m) goto collision;
-
-#ifdef MEA_ADD_ROOT
-	unsigned long long start = 0;
-	unsigned long long end = 0;
-
-	if (root_page) {
-		mm_flag = COS_MMAP_SET_ROOT;
-		if (dest == 7) rdtscll(start);
-	}
-	/* printc("2\n"); */
-	ret = cos_mmap_cntl(COS_MMAP_GRANT, mm_flag, dest, to, frame_index(f));
-	if (root_page && dest == 7) {
-		rdtscll(end);
-		printc("COST (add root page info into kernel) : %llu\n", end-start);
-	}
-#else
-	if (root_page) mm_flag = COS_MMAP_SET_ROOT;
-	/* printc("2.2 dest %d addr %p\n", dest, to); */
-	ret = cos_mmap_cntl(COS_MMAP_GRANT, mm_flag, dest, to, frame_index(f));
-#endif
-	if (ret) {
-		/* printc("ret %d ENOENT %d\n", ret, -ENOENT); */
-		/* if (ret == -ENOMEM) goto failed; /\* e.g, the passed spdid is flipped, we need restart mm *\/ */
-		/* /\* printc("555 ret %d\n", ret); *\/ */
-		/* if (cos_mmap_introspect(COS_MMAP_INTROSPECT_FRAME, 0, dest, to, 0) != frame_index(f)) { */
-		/* 	printc("found mismatch here\n"); */
-		/* 	goto no_mapping; */
-		/* } */
-
-		if (ret == -ENOENT) {
-			/* printc("maybe has crashed before... s_addr %p (spd %d) mapping (thd %d)\n", (void *)to, dest,cos_get_thd_id()); */
-			assert(0);
-			/* if(cv) cvas_deref(cv); */
-			/* m->flags = 555; /\* need restart, for ubenchmark only. Need fix later *\/ */
-			/* assert(m); */
-			/* return m; */
-		} else {
-			if (cos_mmap_introspect(COS_MMAP_INTROSPECT_FRAME, 0, dest, to, 0) != frame_index(f)) {
-				printc("found mismatch here\n");
-				goto no_mapping;
-			}	
+	
+	cslab_mapping_reset(m);  // Jiguo: clear up all old content in case after a fault
+	
+	/* if (m->c) printc("\nthis is impossible !!!!!\n\n"); */
+	
+	/* During the recovery, the page for the same frame id is
+	 * already in the page table. So no need to grant again  */
+	if (grant) {
+	again:
+		if (cos_mmap_cntl(COS_MMAP_GRANT, flags, dest, to, frame_index(f))) {
+			printc("mem_man: could not grant at %x:%d\n", dest, (int)to);
+			/* C^3 MM: after fault, we might need revoke and try again */
+			cos_mmap_cntl(COS_MMAP_REVOKE, 0, dest, to, 0);
+			/* goto no_mapping; */
+			goto again;
 		}
 	}
-	/* printc("6\n"); */
 
+	/* printc("mapping_crt 4\n"); */
 	mapping_init(m, dest, to, p, f);
 	assert(!p || frame_nrefs(f) > 0);
+	/* printc("mapping_crt 5\n"); */
 	frame_ref(f);
 	assert(frame_nrefs(f) > 0);
 	if (cvect_add(cv->pages, m, idx)) BUG();
+	/* printc("mapping_crt 6\n"); */
 done:
 	return m;
 no_mapping:
-	if(m) cslab_free_mapping(m);
+	cslab_free_mapping(m);
 collision:
-	if(cv) cvas_deref(cv);
+	cvas_deref(cv);
 	m = NULL;
 	goto done;
-exist:
-	mapping_init(m, dest, to, p, f);
-	assert(!p || frame_nrefs(f) > 0);
-	frame_ref(f);
-	assert(frame_nrefs(f) > 0);
-	goto done;
+}
+
+static struct mapping *
+mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, vaddr_t to, int flags)
+{
+	__mapping_crt(p, f, dest, to, flags, 1);
 }
 
 /* Take all decedents, return them in a list. */
@@ -469,32 +434,14 @@ mapping_del(struct mapping *m)
 /**********************************/
 /*** Public interface functions ***/
 /**********************************/
-
-static void recovery_upcalls_helper(spdid_t spd, vaddr_t addr, int flags);
-/* static struct mapping *recovery_rebuild_mapping(spdid_t s_spd, vaddr_t s_addr); */
-
-static int get_test = 0;
-static int alias_test = 0;
-static int revoke_test = 0;
-
-/* 
-   this function is used only for the fault injection purpose: without
+/* this function is used only for the fault injection purpose: without
    delay, it is hard to inject the fault while the thread is running
-   in MM (test purpose only)
-*/
+   in MM (test purpose only) */
 void some_delay()
 {
 	volatile int ccc = 0;
 	while(ccc++ < 500000) {;};
 }
-////////////////////////////
-/*                 ,--.   */
-/*  ,---.  ,---. ,-'  '-. */
-/* | .-. || .-. :'-.  .-' */
-/* ' '-' '\   --.  |  |   */
-/* .`-  /  `----'  `--'   */
-/* `---'                  */
-////////////////////////////
 
 vaddr_t mman_get_page(spdid_t spd, vaddr_t addr, int flags)
 {
@@ -502,41 +449,40 @@ vaddr_t mman_get_page(spdid_t spd, vaddr_t addr, int flags)
 	struct mapping *m = NULL;
 	vaddr_t ret = -1;
 
-	int limit_cnt = 100;
-	
-	/* if (spd != 5) printc("mman_get_page (spd %d)....addr %p\n", spd,(unsigned int)addr); */
-	/* if (spd == 7) printc("mman_get_page....addr %x\n", (unsigned int)addr); */
-	if (spd == 7) get_test++;
-
-#ifdef MEA_GET
-	if (spd == 7 && get_test%8 == 0) assert(0);
-#endif
-
 	LOCK();
-	some_delay();
+
+	some_delay();    // for fault injection only
 
 	f = frame_alloc();
 	if (!f) goto done; 	/* -ENOMEM */
 	f->nmaps = 0;
 	f->c.m   = NULL;
 
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MM_GET_PAGE)
+	if (spd == 10 && test_control++ == 5) {
+		printc("trigger fault in mman_get_page: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spd);
+		assert(0);
+	}
+#endif
+
 	assert(frame_nrefs(f) == 0);
 	frame_ref(f);
 
 	/* printc("kevin, spd %d  addr %p\n", spd, addr); */
-	m = mapping_crt(NULL, f, spd, addr, 1);
+	m = mapping_crt(NULL, f, spd, addr, flags);
 	if (!m) goto dealloc;
 
-	f->c.m = m;
+	if (cos_mmap_cntl(COS_MMAP_SETROOT, 0, spd, addr, frame_index(f))) {
+		assert(0);
+	}
 
-	assert(EMPTY_LIST(m, next, prev));
+	f->c.m = m;
 	assert(m->addr == addr);
 	assert(m->spdid == spd);
 	assert(m == mapping_lookup(spd, addr));
 
 	ret = m->addr;
-	/* if (spd == 7) */
-	/* 	printc("GET %d in spd %d @ %p\n", frame_index(m->f), spd, (void *)addr); */
 done:
 	UNLOCK();
 	return ret;
@@ -545,164 +491,133 @@ dealloc:
 	goto done;		/* -EINVAL */
 }
 
-
-/////////////////////////////////////
-/*         ,--.,--.                */
-/*  ,--,--.|  |`--' ,--,--. ,---.  */
-/* ' ,-.  ||  |,--.' ,-.  |(  .-'  */
-/* \ '-'  ||  ||  |\ '-'  |.-'  `) */
-/*  `--`--'`--'`--' `--`--'`----'  */
-/////////////////////////////////////
-
-vaddr_t mman_alias_page(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr)
+vaddr_t __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_addr)
 {
 	struct mapping *m, *n;
 	vaddr_t ret = 0;
-
+	spdid_t d_spd;
+	int flags;
+	
+	d_spd = d_spd_flags >> 16;
+	flags = d_spd_flags & 0xFFFF;
+	
 	/* printc("in alias function\n"); */
-	
-	if (s_spd == 7) alias_test++;
-	
-#ifdef MEA_ALIAS
-	if (s_spd == 7 && alias_test%8 == 0) assert(0);
-#endif
-
 	LOCK();
 	some_delay();
 
 	m = mapping_lookup(s_spd, s_addr);
 	if (unlikely(!m)) {
-		/* printc("crashed (alias) --> rebuild s_addr %p (spd %d) mapping (thd %d)\n", (void *)s_addr, s_spd,cos_get_thd_id()); */
-		m = recovery_rebuild_mapping(s_spd, s_addr);
-		assert(m);
-		assert(EMPTY_LIST(m, next, prev));
+		int fr_idx = (int)cos_mmap_introspect(COS_MMAP_INTROSPECT_FRAME, 
+						      0, s_spd, s_addr, 0);
+		printc("alias: can not find m. Intro frame fr_idx is %d\n", fr_idx);
+		if (!fr_idx) goto done;    // real an error, otherwise create a new map
+		assert(fr_idx);
+		m = __mapping_crt(NULL, &frames[fr_idx], s_spd, s_addr, flags, 0);
+		assert(m == mapping_lookup(s_spd,s_addr));
 	}
-	assert(m == mapping_lookup(s_spd,s_addr));
-	/* printc("andy\n"); */
-	n = mapping_crt(m, m->f, d_spd, d_addr, 0);
+	/* printc("in alias function.....2\n"); */
+	assert(m && m->f);
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MM_ALIAS_PAGE)
+	if (s_spd == 10 && test_control++ == 5) {
+		printc("trigger fault in mman_alias_page: thd %d spd %ld passed s_spd %d dest_spd %d\n", cos_get_thd_id(), cos_spd_id(), s_spd, d_spd);
+		assert(0);
+	}
+#endif
+
+	n = mapping_crt(m, m->f, d_spd, d_addr, flags);
+	/* printc("in alias function.....3\n"); */
 	if (!n) goto done;
-
-	/* printc("thread %d get n!! n->addr %p n->spdid %d  n->p %p\n",cos_get_thd_id(), n->addr, n->spdid, n->p); */
-
-	assert(EMPTY_LIST(n, next, prev));
 	assert(n->addr  == d_addr);
 	assert(n->spdid == d_spd);
 	assert(n->p == m || n->p == NULL);
-
 	ret = d_addr;
 done:
 	UNLOCK();
 	return ret;
 }
 
-vaddr_t __mman_alias_page_rec(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr)
+/* rebuild m's children before we delete all. First we
+ * switch to the recovery thread. Then upcall into spd
+ * and replay the alias, which will rebuild all
+ * siblings. Then iterate all siblings (recursively)
+ * until no more siblings (DFS) */
+static void 
+rebuild_all_alias(spdid_t spd, vaddr_t addr) 
 {
-	/* printc("alias helper\n"); */
-	struct mapping *m, *n;
-	vaddr_t ret = 0;
+	spdid_t rec_spd;
+	vaddr_t rec_addr;
+	rec_spd = spd;
+	rec_addr = addr;		
 
-	LOCK();
-	m = mapping_lookup(s_spd, s_addr);
-	if (unlikely(!m)) {
-	/* 	printc("crashed (__alias) --> rebuild s_addr %p mapping (thd %d)\n", (void *)s_addr, cos_get_thd_id()); */
-		m = recovery_rebuild_mapping(s_spd, s_addr);
-		assert(m);
-		assert(EMPTY_LIST(m, next, prev));
-	}
-	assert(m == mapping_lookup(s_spd,s_addr));
-	/* printc("try to get mapping for n\n"); */
-	/* printc(" m: m->addr %p m->spdid %d  m->p %p\n",m->addr, m->spdid, m->p); */
-	/* printc("d_spd %d d_addr %p\n", d_spd, d_addr); */
-	/* printc("susan\n"); */
-	n = mapping_crt(m, m->f, d_spd, d_addr, 0);
-	if (!n) goto done;
-
-	/* printc("thread %d get n!! n->addr %p n->spdid %d  n->p %p\n",cos_get_thd_id(), n->addr, n->spdid, n->p); */
-
-	assert(EMPTY_LIST(n, next, prev));
-	assert(n->addr  == d_addr);
-	assert(n->spdid == d_spd);
-	assert(n->p == m || n->p == NULL);
-
-	ret = d_addr;
-
-        /* recovery thread only */
-	/* assume recovery thread won't fail */
-	static int max_upcalls = 0;
-	/* create the sub upcall_list from n, first head node is m */
-	ADD_LIST(m, n, next, prev); /* should insert between 2 nodes here, not the head */
-	/* max_upcalls++; */
-	/* assert(max_upcalls < MAX_UPCALL_LIST_DEPTH); /\* upcall depths *\/ */
+	printc("mm: recovery_upcall passing rec_spd %d rec_addr %p\n",
+	       rec_spd, rec_addr);
+	recovery_upcall(cos_spd_id(), COS_UPCALL_RECOVERY, rec_spd, rec_addr);
+	printc("mm: return from recovery_upcall passing rec_spd %d rec_addr %p\n",
+	       rec_spd, rec_addr);
 	
-	/* printc("upcall spd %d record is added to m->spd %d\n", n->spdid, m->spdid); */
-	/* struct mapping *a; */
-	/* for(a = FIRST_LIST(m, next, prev); */
-	/*     a != m; */
-	/*     a = FIRST_LIST(a, next, prev)) { */
-	/* 	printc("on list @addr %x\n", (unsigned int)a->addr); */
-	/* } */
+	struct mapping *rec_m = mapping_lookup(rec_spd, rec_addr);
+	assert(rec_m);
+	struct mapping *rec_c = rec_m->c;
+	printc("there is child\n");
+	if (!rec_c) return;
+	struct mapping *rec_s;
+	printc("ready to rebuild all its other children\n");
+	for (rec_s = FIRST_LIST(rec_c, _s, s_) ; 
+	     rec_s != rec_c; 
+	     rec_s = FIRST_LIST(rec_s, _s, s_)) {
+		rec_spd = rec_s->spdid;
+		rec_addr = rec_s->addr;
+		/* be careful with the recursion depth, this should
+		 * change to the stack, not recursive */
+		printc("mm: recovery_upcall one child !!!! passing rec_spd %d rec_addr %p\n",
+		       rec_spd, rec_addr);
+		rebuild_all_alias(rec_spd, rec_addr);
+	}
 
-done:
-	UNLOCK();
-	return ret;
+	return;
 }
-
-
-/////////////////////////////////////////////////
-/*                              ,--.           */
-/* ,--.--. ,---.,--.  ,--.,---. |  |,-. ,---.  */
-/* |  .--'| .-. :\  `'  /| .-. ||     /| .-. : */
-/* |  |   \   --. \    / ' '-' '|  \  \\   --. */
-/* `--'    `----'  `--'   `---' `--'`--'`----' */
-/////////////////////////////////////////////////
 
 int mman_revoke_page(spdid_t spd, vaddr_t addr, int flags)
 {
 	struct mapping *m;
 	int ret = 0;
 
-	/* if (spd != 5) printc("mman_rev_page (spd %d)....addr %p\n", spd, addr); */
-	/* if (spd == 7) printc("MM: mman_revoke_page....thd %d\n", cos_get_thd_id()); */
-	if (spd == 7) revoke_test++;
-
-#ifdef MEA_REVOKE
-	if (spd == 7 && revoke_test%5 == 0 && flags == 0) assert(0);
-#endif
 	LOCK();
-	some_delay();
-
 	m = mapping_lookup(spd, addr);
-	assert(m);
+	if (!m) {
+		
+		UNLOCK();
+		int fr_idx = (int)cos_mmap_introspect(COS_MMAP_INTROSPECT_FRAME,
+						      0, spd, addr, 0);
+		printc("mman_revoke: can not find mapping. Intro fr_idx is %d\n", fr_idx);
+		if (!fr_idx) {
+			ret = -1;
+			goto done;    // real an error, otherwise create a new map
+		}
+		m = __mapping_crt(NULL, &frames[fr_idx], spd, addr, flags, 0);
+		assert(m == mapping_lookup(spd,addr));
+
+		rebuild_all_alias(spd, addr);
+		
+		LOCK();
+	}
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_MM_REVOKE_PAGE)
+	if (spd == 10 && test_control++ == 5) {
+		printc("trigger fault in mman_revoke_page: thd %d spd %ld passed spd %d\n", 
+		       cos_get_thd_id(), cos_spd_id(), spd);
+		assert(0);
+	}
+#endif
+
 	mapping_del_children(m);
+done:
 	UNLOCK();
 	return ret;
 }
 
-/* a crash happened before */
-int __mman_revoke_page(spdid_t spd, vaddr_t addr, int flags)
-{
-	struct mapping *m;
-	int ret = 0;
 
-	/* if (spd == 7) printc("MM: __mman_revoke_page....thd %d\n", cos_get_thd_id()); */
-	if (spd == 7 && revoke_test < 99) revoke_test++;
-
-#ifdef MEA_REVOKE
-	if (spd == 7 && revoke_test == 5 && flags == 0) assert(0);
-#endif
-
-#if (LAZY_RECOVERY)
-	recovery_upcalls_helper(spd, addr, flags);
-#endif
-	mman_revoke_page(spd, addr, flags);
-
-	/* revoke_page should have release the lock */
-	return ret;
-}
-
-/////////////////////////////////////////////////////////
-/* might not be used in the future. A malloc manager should take
- * care */
 int mman_release_page(spdid_t spd, vaddr_t addr, int flags)
 {
 	struct mapping *m;
@@ -710,12 +625,12 @@ int mman_release_page(spdid_t spd, vaddr_t addr, int flags)
 
 	LOCK();
 
-	/* if (spd != 5) printc("mman_rel_page (spd %d)....addr %p\n", spd, addr); */
-	/* printc("1\n"); */
-	if (cos_mmap_introspect(COS_MMAP_INTROSPECT_FRAME, 0, spd, addr, 0) == -1) {
-		printc("The page %p does not exist when release\n", (void *)addr);
-		goto done;
-	}
+	/* printc("mman_release_page (thd %d) addr %p\n", cos_get_thd_id(), (void *)addr); */
+
+	/* Jiguo: when flags > 0, it is used for reflection
+	 * purpose. flags == src_spd from which we want to revoke
+	 * pages */
+	if (flags > 0) spd = flags;
 
 	m = mapping_lookup(spd, addr);
 	if (!m) {
@@ -727,20 +642,6 @@ done:
 	UNLOCK();
 	return ret;
 }
-
-
-/* int __mman_release_page(spdid_t spd, vaddr_t addr, int flags) */
-/* { */
-/* 	struct mapping *m; */
-/* 	int ret = 0; */
-
-/* #if (LAZY_RECOVERY) */
-/* 	recovery_upcalls_helper(spd, addr, flags); */
-/* #endif */
-/* 	mman_release_page(spd, addr, flags); */
-
-/* 	return ret; */
-/* } */
 
 void mman_print_stats(void) {}
 
@@ -762,70 +663,8 @@ void mman_release_all(void)
 	UNLOCK();
 }
 
-
-////////////////////////////////////////////////////////////////
-/* ,--.--. ,---.  ,---. ,---.,--.  ,--.,---. ,--.--.,--. ,--. */
-/* |  .--'| .-. :| .--'| .-. |\  `'  /| .-. :|  .--' \  '  /  */
-/* |  |   \   --.\ `--.' '-' ' \    / \   --.|  |     \   '   */
-/* `--'    `----' `---' `---'   `--'   `----'`--'   .-'  /    */
-/*                                                  `---'     */
-////////////////////////////////////////////////////////////////
-
-static struct mapping *
-recovery_rebuild_mapping(spdid_t s_spd, vaddr_t s_addr)
-{
-	/* if mmaping does not exist, create with a 'NULL previous' node */
-	/* this could result many independent trees */
-	struct mapping *m = NULL;
-	int fr_idx = 0;
-	fr_idx = (int)cos_mmap_introspect(COS_MMAP_INTROSPECT_FRAME,
-					  0, s_spd, s_addr, 0);
-
-	/* printc("fr_idx is %d\n", fr_idx); */
-
-	assert(fr_idx);
-	/* printc("peter\n"); */
-	m = mapping_crt(NULL, &frames[fr_idx], s_spd, s_addr, 0);
-	if (!m) goto err;
-
-	assert(EMPTY_LIST(m, next, prev));
-	assert(fr_idx == frame_index(m->f));
-	assert(m->p == NULL);
-done:
-	return m;
-err:
-	m = NULL;
-	goto done;
-}
-
-/* FIXME: Let recovery thread come to here and do everything */
-static void
-recovery_upcalls_helper(spdid_t spd, vaddr_t addr, int flags)
-{
-	struct mapping *m, *n, *p;
-	int thd;
-	volatile unsigned long long start, end;
-
-	/* printc("[.....entering upcall helper........] thd %d\n", cos_get_thd_id()); */
-
-	thd = cos_get_thd_id();
-	m = mapping_lookup(spd, addr); /* m should exist */
-	assert(m);
-
-	n = FIRST_LIST(m, next, prev);
-	while (n && n != m) {
-		/* printc("<<upcall to n->spdid %d, n->addr %x thd %d>>\n", n->spdid, (unsigned int)n->addr, cos_get_thd_id()); */
-		rdtscll(start);
-		recovery_upcall(cos_spd_id(), COS_UPCALL_RECOVERY, n->spdid, n->addr);
-		p = FIRST_LIST(n, next, prev);
-		REM_LIST(n, next, prev);
-		n = p;
-		rdtscll(end);
-		printc("upcall_helper cost %llu\n", end - start);
-	}
-
-	/* printc("leaving upcall helper......... thd %d\n", cos_get_thd_id()); */
-}
+// dummy function for the reflection
+vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt) {return 0;}
 
 /*******************************/
 /*** The base-case scheduler ***/
@@ -835,10 +674,22 @@ recovery_upcalls_helper(spdid_t spd, vaddr_t addr, int flags)
 
 int  sched_init(int reboot)   { printc("mem sched_init\n");return 0; }
 extern void parent_sched_exit(void);
+
+PERCPU_ATTR(static volatile, int, initialized_core); /* record the cores that still depend on us */
+
 void
 sched_exit(void)
 {
-	mman_release_all();
+	int i;
+	printc("sched_exit in MM\n");
+	*PERCPU_GET(initialized_core) = 0;
+	if (cos_cpuid() == INIT_CORE) {
+		/* The init core waiting for all cores to exit. */
+		for (i = 0; i < NUM_CPU ; i++)
+			if (*PERCPU_GET_TARGET(initialized_core, i)) i = 0;
+		/* Don't delete the memory until all cores exit */
+		mman_release_all(); 
+	}
 	parent_sched_exit();
 }
 
@@ -864,12 +715,72 @@ int
 sched_child_thd_crt(spdid_t spdid, spdid_t dest_spd) { BUG(); return 0; }
 
 
+/* Jiguo C^3 MM: initialize the frame free list by introspecting the
+ * kernel tracked frame-page. When uReboot MM, the root page should be
+ * reused and for simplicity, we find all tracked root page and
+ * reserve their frame id. This is because the pages are only related
+ * by frame id which are only mainted by MM, not explicitly over the
+ * client interface (such as torrent id) */
+static struct comp_vas *cvas_alloc(spdid_t spdid);
+static void
+frame_re_init(void)
+{
+	int i, indx = 0;
+	
+	while(1) {
+		/* printc("mm: frame_re_init before (indx %d)\n", indx); */
+		indx = cos_mmap_introspect(COS_MMAP_INTROSPECT_INDEX, 0, 0, 0, indx+1);
+		if (!indx) break;  // zero means no more frame needs to be reserved
+		/* printc("mm: frame_re_init after (indx %d)\n", indx); */
+		frames[indx-1].c.free = &frames[indx+1];   // skipped the reserved one
+	}
+
+	// not work with spd 5, 6....??
+	struct comp_vas *cv = cvas_alloc(10);
+	assert(cv);
+	cv = cvas_alloc(11);
+	assert(cv);
+
+	/* for (i = 0; i < MAX_NUM_SPDS; i++) { */
+	/* 	if(cos_mmap_introspect(COS_MMAP_INTROSPECT_SPD, 0, i, 0, 0)){ */
+	/* 		printc("mm: frame_re_init found spd %d\n", i); */
+	/* 		if (i == 5) continue; */
+	/* 		struct comp_vas *cv = cvas_alloc(i); */
+	/* 		assert(cv); */
+	/* 	} */
+	/* } */
+	
+	return;
+}
+
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
+	printc("upcall type %d, core %ld, thd %d, args %p %p %p\n",
+	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
 	switch (t) {
-	case COS_UPCALL_BOOTSTRAP:
-		/* printc("MM: thread %d\n", cos_get_thd_id()); */
-		mm_init(); break;
+	case COS_UPCALL_THD_CREATE:
+		if (cos_cpuid() == INIT_CORE) {
+			int i;
+			for (i = 0; i < NUM_CPU; i++)
+				*PERCPU_GET_TARGET(initialized_core, i) = 0;
+			mm_init(); 
+		} else {
+			/* Make sure that the initializing core does
+			 * the initialization before any other core
+			 * progresses */
+			while (*PERCPU_GET_TARGET(initialized_core, INIT_CORE) == 0) ;
+		}
+		*PERCPU_GET(initialized_core) = 1;
+		break;
+	case COS_UPCALL_REBOOT:
+		printc("mm: cos_upcall here to reboot 2 (passed arg1 %d)\n", (int)arg1);
+		mm_init(); 
+		
+		/*  /\* C^3 MM only -- 1) reserve frame for already */
+		/*   * allocated ones for other spds 2) remove allocated */
+		/*   * frames for MM itself in __page_get  *\/ */
+		frame_re_init();
+		break;
 	default:
 		BUG(); return;
 	}

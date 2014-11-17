@@ -178,8 +178,8 @@ llboot_thd_done(void)
 			printc("ready to upcall and recover\n");
 			assert(pthd);
 			llboot->recover_spd = 0;
-			cos_upcall_args(COS_UPCALL_REBOOT, rspd, 
-					(llboot->prev_thd << 16) | llboot->init_thd);
+			/* the last parameter only for scheduler */
+			cos_upcall_args(COS_UPCALL_REBOOT, rspd, llboot->recovery_arg);
 			/* cos_upcall(rspd, arg);  /\* This will escape from the loop *\/ */
 			assert(0);
 		} else {		        /* ...done ureboot... */
@@ -205,6 +205,10 @@ recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 	llboot->recover_spd  = dest;
 	llboot->operation    = op;
 	llboot->recovery_arg = arg;
+
+	if (dest == LLBOOT_SCHED) {
+		llboot->recovery_arg = (llboot->prev_thd << 16) | llboot->init_thd;
+	}
 	
 	while (llboot->prev_thd == cos_get_thd_id()) cos_switch_thread(llboot->recovery_thd, 0);
 
@@ -243,7 +247,7 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 		assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));
 		assert(!cos_thd_cntl(COS_THD_INVFRM_SET_IP, tid, 1, r_ip-8));
 		assert(!cos_fault_cntl(COS_SPD_FAULT_TRIGGER, spdid, 0));
-		
+
 		recovery_upcall(cos_spd_id(), COS_UPCALL_REBOOT, spdid, reboot);
 
 		return 0;
@@ -269,17 +273,14 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
  * rolled back any way.  For the fault handler, the spdid does matter
  * since we need u-reboot it. The difference comes from 
 
-  -- when the fault occurs, the spd needs to be u-rebooted 
-
-  -- when the fault occurs, we need "redirect" the execution to the fault handler
-  
-  -- when the fault is detected later (that is where we are now), we
-     do not need reboot the spd. And we only need "roll" back the
-     current execution
-
-  -- Also, the timer/IPI/init/idle threads are already updated their
-     fault counter. So switch back to a failed&rebooted scheduler
-     should not cause any fault detection (when the scheduler fails)
+  -- when the fault occurs, the spd needs to be u-rebooted when the
+  -- fault occurs, we need "redirect" the execution to the fault
+  -- handler when the fault is detected later (that is where we are
+  -- now), we do not need reboot the spd. And we only need "roll" back
+  -- the current execution Also, the timer/IPI/init/idle threads are
+  -- already updated their fault counter. So switch back to a
+  -- failed&rebooted scheduler should not cause any fault detection
+  -- (when the scheduler fails)
  */
 
 int
@@ -299,7 +300,12 @@ fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	}
 	
 	printc("<< LL fault notification @@@@@(tid %d)>>\n", tid);
-	cos_upcall(flags, 0);	/* upcall to ths dest spd (home spd), for other threads */
+	/* If init thread gets here, either it fails to create the
+	 * system (shced, mm...) or fails to exit. In either case we
+	 * do not want to recover any state. Just kill the system. */
+	if (cos_get_thd_id() == llboot->init_thd) cos_switch_thread(llboot->alpha, 0);
+
+	/* cos_upcall(flags, 0);	/\* upcall to ths dest spd (home spd), for other threads *\/ */
 
 	assert(0);
 	return 0;

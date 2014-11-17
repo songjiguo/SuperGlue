@@ -78,8 +78,6 @@ static inline int sched_is_child(void) { return !sched_is_root(); }
 /* What is the spdid of the booter component? */
 #define BOOT_SPD 5
 
-static int test_control = 0;  // Jiguo: for trigger the fault test
-
 //#define FPRR_REPORT_EVTS
 
 #ifdef FPRR_REPORT_EVTS
@@ -402,9 +400,7 @@ static int sched_switch_thread_target(int flags, report_evt_t evt, struct sched_
 				/* we don't want next to be us! We are an
 				 * upcall completing execution */
 				timer_start(&tfp);
-				/* printc("Kevin (thd %d)\n", cos_get_thd_id()); */
 				next = schedule(current);
-				/* printc("Kevin next %d current %d\n", next->id, current->id); */
 				timer_end(&tfp);
 				assert(sched_is_root() || PERCPU_GET(sched_base_state)->timer != next);
 				assert(next != current);
@@ -412,7 +408,6 @@ static int sched_switch_thread_target(int flags, report_evt_t evt, struct sched_
 			} else {
 				timer_start(&tfp);
 				next = schedule(NULL);
-				/* printc("Andy next %d current %d\n", next->id, current->id); */
 				timer_end(&tfp);
 				assert(sched_is_root() || PERCPU_GET(sched_base_state)->timer != next);
 				assert(!sched_thd_member(next));
@@ -445,8 +440,8 @@ static int sched_switch_thread_target(int flags, report_evt_t evt, struct sched_
 		assert(!sched_thd_blocked(next));
 		report_event(SWITCH_THD);
 		timer_end(&t);
-		printc("sched: call cos_switch_thread_release(next %d)\n", next->id);
 		ret = cos_switch_thread_release(next->id, flags);
+
 		assert(ret != COS_SCHED_RET_ERROR);
 		if (COS_SCHED_RET_CEVT == ret) { report_event(CEVT_RESCHED); }
 		/* success, or we need to check for more child events:
@@ -529,9 +524,9 @@ static void sched_timer_tick(void)
 			report_thd_accouting();
 			//cos_stats();
 		}
+		/* printc("PERCPU_GET(sched_base_state)->ticks %llu\n", */
+		/*        PERCPU_GET(sched_base_state)->ticks); */
 		/* are we done running? */
-		printc("PERCPU_GET(sched_base_state)->ticks %llu\n",
-		       PERCPU_GET(sched_base_state)->ticks);
 		if (unlikely(PERCPU_GET(sched_base_state)->ticks >= RUNTIME_SEC*TIMER_FREQ+1)) {
 			sched_exit();
 			while (COS_SCHED_RET_SUCCESS !=
@@ -839,19 +834,9 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	thd = sched_get_mapping(thd_id);
 	if (!thd) goto error;
 	
-#if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_WAKEUP)
-	test_control++;
-	if (spdid == 10 && cos_get_thd_id() == 12 && test_control == 4) {
-		printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", 
-		       cos_get_thd_id(), cos_spd_id(), spdid);
-		assert(0);
-	}
-#endif
-
 	/* only increase the count once */
 	fp_pre_wakeup(thd);
 	
-	printc("1\n");
 	if (thd->dependency_thd) {
 		assert(sched_thd_dependent(thd));
 		assert(thd->ncs_held == 0 || thd->id == cos_get_thd_id());
@@ -864,7 +849,6 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 		 * before it could complete the call to block), no reason to
 		 * wake it via scheduling.
 		 */
-		printc("1.45\n");
 		if (!sched_thd_blocked(thd)) goto cleanup;
 		/* 
 		 * We are waking up a thread, which means that if we
@@ -884,13 +868,11 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 		assert(!sched_thd_dependent(thd));
 	}
 
-	printc("2\n");
 	assert(!sched_thd_dependent(thd));
 	sched_switch_thread(0, WAKE_LOOP);
 done:
 	return 0;
 cleanup:
-	printc("3\n");
 	cos_sched_lock_release();
 	goto done;
 error:
@@ -966,7 +948,7 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		if (sched_thd_on_current_core(dep_thd)) {
 			dependency_thd = dep_thd;
 		} else {
-			/* printc("Core %ld, thd %d: Dependency on a remote core, dep thread %d, from spd %d.\n", cos_cpuid(), cos_get_thd_id(), dep_thd, spdid); */
+			printc("Core %ld, thd %d: Dependency on a remote core, dep thread %d, from spd %d.\n", cos_cpuid(), cos_get_thd_id(), dep_thd, spdid);
 			dependency_thd = 0; /* Ignore dependency if on different cores */
 		}
 	}
@@ -977,15 +959,6 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		       thd->blocking_component == spdid))) goto warn;
 	assert(!sched_thd_free(thd));
 	assert(!sched_thd_blocked(thd));
-
-#if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_BLOCK)
-	test_control++;
-	if (spdid == 10 && cos_get_thd_id() == 11 && test_control == 4) {
-		printc("trigger fault in sched_block: thd %d spd %ld passed spd %d\n", 
-		       cos_get_thd_id(), cos_spd_id(), spdid);
-		assert(0);
-	}
-#endif
 
 	/* 
 	 * possible FIXME: should we be modifying the wake_cnt at all
@@ -1109,6 +1082,7 @@ int sched_component_take(spdid_t spdid)
 	struct sched_thd *holder, *curr;
 	int first = 1;
 
+	//printc("sched take %d\n", spdid);
 	cos_sched_lock_take();
 	report_event(COMP_TAKE);
 	curr = sched_get_current();
@@ -1120,22 +1094,10 @@ int sched_component_take(spdid_t spdid)
 	while (1) {
 		report_event(COMP_TAKE_ATTEMPT);
 		/* If the current thread is dependent on another thread, switch to it for help! */
-
-#if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_COMPONENT_TAKE)
-		test_control++;
-		printc("sched take %d (thd %d test_control %d)\n", 
-		       spdid, cos_get_thd_id(), test_control);
-		if (spdid == 10 && cos_get_thd_id() == 11 && test_control == 6) {
-			printc("trigger fault in sched_component_take: thd %d spd %ld passed spd %d\n", 
-			       cos_get_thd_id(), cos_spd_id(), spdid);
-			assert(0);
-		}
-#endif
-
 		holder = sched_take_crit_sect(spdid, curr);
 		if (NULL == holder) break;
 		curr->flags |= THD_DEPENDENCY;
-		
+
 		/* FIXME: proper handling of recursive locking */
 		assert(curr != holder);
 		report_event(COMP_TAKE_CONTENTION);
@@ -1165,17 +1127,7 @@ int sched_component_release(spdid_t spdid)
 	curr = sched_get_current();
 	assert(curr);
 
-#if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_COMPONENT_RELEASE)
-	test_control++;
-	printc("sched take %d (thd %d test_control %d)\n", 
-	       spdid, cos_get_thd_id(), test_control);
-	if (spdid == 10 && cos_get_thd_id() == 11 && test_control == 6) {
-		printc("trigger fault in sched_component_take: thd %d spd %ld passed spd %d\n",
-		       cos_get_thd_id(), cos_spd_id(), spdid);
-		assert(0);
-	}
-#endif
-
+	// Jiguo: do not print this msg since we might reflect and release the lock
 	if (sched_release_crit_sect(spdid, curr)) {
 		printc("fprr: error releasing spd %d's critical section (contended %d)\n",
 		       spdid, curr->contended_component);
@@ -1229,9 +1181,6 @@ static int fp_kill_thd(struct sched_thd *t)
 	REM_LIST(t, next, prev);
 	ADD_LIST(&PERCPU_GET(sched_base_state)->graveyard, t, prio_next, prio_prev);
 
-	// Jiguo: remove the tracking thread info
-	cos_sched_cntl(COS_SCHED_THD_REMOVE, t->id, 0);
-
 	sched_switch_thread(0, NULL_EVT);
 
 	/* reincarnated!!! */
@@ -1265,9 +1214,8 @@ static struct sched_thd *__sched_setup_thread_no_policy(int tid)
 
 extern int parent_sched_child_thd_crt(spdid_t spdid, spdid_t dest_spd);
 
-static struct sched_thd *__sched_setup_thread_arg(int dest_spd_id, void *metric_str, 
-						  crt_thd_fn_t fn, void *d, int param, 
-						  int fault)
+static struct sched_thd *sched_setup_thread_arg(int dest_spd_id, void *metric_str, 
+						crt_thd_fn_t fn, void *d, int param)
 {
 	/* fn and d are function and data pointers if creating within
 	 * the scheduler. If creating for a remote component, fn is
@@ -1278,7 +1226,6 @@ static struct sched_thd *__sched_setup_thread_arg(int dest_spd_id, void *metric_
 	/* can we reuse an already created (but since killed) thread? */
 	if (!EMPTY_LIST(&PERCPU_GET(sched_base_state)->graveyard, prio_next, prio_prev)) {
 		/* Only can do remote components here. */
-		printc("using a thread from graveyard\n");
 		assert(dest_spd_id && (dest_spd_id != cos_spd_id()));
 		new = FIRST_LIST(&PERCPU_GET(sched_base_state)->graveyard, prio_next, prio_prev);
 		assert(new->flags & THD_DYING);
@@ -1287,7 +1234,6 @@ static struct sched_thd *__sched_setup_thread_arg(int dest_spd_id, void *metric_
 		new->spdid = (spdid_t)dest_spd_id;
 		new->init_data = (int)fn;
 	} else {
-		printc("creating a new one\n");
 		tid = (sched_is_root())                       ?
 			cos_create_thread(dest_spd_id, (int)fn, (int)d) :
 			parent_sched_child_thd_crt(cos_spd_id(), (spdid_t)(int)d);
@@ -1297,42 +1243,13 @@ static struct sched_thd *__sched_setup_thread_arg(int dest_spd_id, void *metric_
 	}
 	thread_new(new);
 
-	printc("a thread (new->id %d) is created: new->spdid %d new->init_data %d\n",  
-	       new->id, new->spdid, new->init_data);
-
 	new->cpuid = cos_cpuid(); /* no thread migration between cores */
 	sched_set_thd_core(new->id, cos_cpuid());
 
-#if (RECOVERY_ENABLE == 1)
-	if (!fault) {
-		int tmp = *(int *)metric_str;
-		assert(tmp);
-		printc("tmp is %p\n", tmp);
-		cos_sched_cntl(COS_SCHED_THD_DEST, new->id, (int)dest_spd_id);
-		cos_sched_cntl(COS_SCHED_THD_METRIC, new->id, tmp);
-		cos_sched_cntl(COS_SCHED_THD_FN, new->id, (int)fn);
-		cos_sched_cntl(COS_SCHED_THD_D, new->id, (int)d);
-		cos_sched_cntl(COS_SCHED_THD_PARAM, new->id, param);	
-	}
-#endif
-	
 	if (param) thread_param_set(new,  (struct sched_param_s *)metric_str);
-	else       thread_params_set(new, (char *)metric_str);  // not used any more?
+	else       thread_params_set(new, (char *)metric_str);
 	
 	return new;
-}
-
-
-static struct sched_thd *sched_setup_thread_arg(int dest_spd_id, void *metric_str, 
-						crt_thd_fn_t fn, void *d, int param)
-{
-	return __sched_setup_thread_arg(dest_spd_id, metric_str, fn, d, param, 0);
-}
-
-static struct sched_thd *sched_setup_thread_arg_rec(int dest_spd_id, void *metric_str, 
-						    crt_thd_fn_t fn, void *d, int param)
-{
-	return __sched_setup_thread_arg(dest_spd_id, metric_str, fn, d, param, 1);
 }
 
 /* this should just create the thread, not set the prio...there should
@@ -1427,23 +1344,11 @@ static inline int sched_create_thd_current_core(spdid_t spdid, u32_t sched_param
 	sp[2] = ((union sched_param)sched_param_2).c;
 	sp[3] = (union sched_param){.c = {.type = SCHEDP_NOOP}}.c;
 
-	printc("Core %ld thd %d going to create new thd...\n", cos_cpuid(), cos_get_thd_id());
+	/* printc("Core %ld thd %d going to create new thd...\n", cos_cpuid(), cos_get_thd_id()); */
 	cos_sched_lock_take();
-
-#if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_CREATE_THD)
-	test_control++;
-	if (spdid == 9 && cos_get_thd_id() == 8 && test_control == 3) {
-		printc("trigger fault in sched_create_thd: thd %d spd %ld passed spd %d\n", 
-		       cos_get_thd_id(), cos_spd_id(), spdid);
-		assert(0);
-	}
-#endif
-
 	curr = sched_get_current();
 	new = sched_setup_thread_arg(spdid, &sp, (void *)init_data, 0, 1);
 	cos_sched_lock_release();
-	assert(curr);
-	assert(new);
 	printc("Core %ld, sched %d: created thread %d in spdid %d (requested by %d)\n",
 	       cos_cpuid(), (unsigned int)cos_spd_id(), new->id, spdid, curr->id);
 
@@ -1474,9 +1379,7 @@ sched_create_thd(spdid_t spdid, u32_t sched_param_0, u32_t sched_param_1, u32_t 
 	
 		goto done;
 	} else {
-		printc("KKKKKKK\n");
 		ret = sched_create_thd_current_core(spdid, sched_params[0], sched_params[1], sched_params[2]);
-		printc("MMMMMMM\n");
 	}
 done:
 	return ret;
@@ -1502,9 +1405,6 @@ done:
 	return ret;
 }
 
-
-/* Jiguo: changed the return value to be either thd id or -1 for
- * error */
 static int current_core_create_thread_default(spdid_t spdid, u32_t sched_param_0, 
 						    u32_t sched_param_1, u32_t sched_param_2)
 {
@@ -1517,24 +1417,13 @@ static int current_core_create_thread_default(spdid_t spdid, u32_t sched_param_0
 	sp[3] = (union sched_param){.c = {.type = SCHEDP_NOOP}}.c;
 	cos_sched_lock_take();
 	new = sched_setup_thread_arg(spdid, &sp, 0, 0, 1);
-
-#if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_CREATE_THD_DEFAULT)
-	/* assert(spdid == 5);  // only booter calls this */
-	test_control++;
-	if (cos_get_thd_id() == 5 && test_control == 4) {
-		printc("trigger fault in sched_create_thd_default: thd %d spd %ld spd %d\n", 
-		       cos_get_thd_id(), cos_spd_id(), spdid);
-		assert(0);
-	}
-#endif
-
 	printc("Core %ld, sched %d: created default thread %d in spdid %d (requested by %d from %d)\n",
 	       cos_cpuid(), (unsigned int)cos_spd_id(), new->id, spdid, sched_get_current()->id, spdid);
 	sched_switch_thread(0, NULL_EVT);
 
 	if (!new) return -1;
 
-	return new->id;
+	return 0;
 }
 
 /* Create a thread in target with the default parameters */
@@ -1542,7 +1431,7 @@ int
 sched_create_thread_default(spdid_t spdid, u32_t sched_param_0, 
 			    u32_t sched_param_1, u32_t sched_param_2)
 {
-	int ret = 0;
+	int ret;
 
 	u32_t sched_params[MAX_NUM_SCHED_PARAM] = {sched_param_0, sched_param_1, sched_param_2};
 
@@ -1561,7 +1450,7 @@ sched_create_thread_default(spdid_t spdid, u32_t sched_param_0,
 		ret = xcore_exec(core_id, (void *)current_core_create_thread_default, 4, param, 1);
 	}
 
-	return ret;
+	return 0;
 }
 
 static void activate_child_sched(struct sched_thd *g)
@@ -1627,8 +1516,6 @@ int sched_child_thd_crt(spdid_t spdid, spdid_t dest_spd)
 {
 	struct sched_thd *t, *st, *new;
 	int tid;
-
-	assert(0);  // quick test if this function is called by any child -- Jiguo
 
 	cos_sched_lock_take();
 	t = sched_get_current();
@@ -1888,7 +1775,7 @@ int sched_create_net_acap(spdid_t spdid, int acap_id, unsigned short int port)
 extern void parent_sched_exit(void);
 void sched_exit(void)
 {
-	printc("In sched_exit, core %ld, switching to %d\n", cos_cpuid(), PERCPU_GET(sched_base_state)->init->id);
+	/* printc("In sched_exit, core %ld, switching to %d\n", cos_cpuid(), PERCPU_GET(sched_base_state)->init->id); */
 	cos_sched_clear_events();
 //	cos_switch_thread_release(PERCPU_GET(sched_base_state)->init->id, 0);
 	while (1) {
@@ -2079,10 +1966,8 @@ parent_sched_child_cntl_thd(spdid_t spdid);
 
 /* Initialize the child scheduler. */
 static void 
-sched_child_init()
+sched_child_init(void)
 {
-
-	printc("child scheduler init.....\n");
 	/* Child scheduler */
 	sched_type = SCHED_CHILD;
 	__sched_init();
@@ -2122,7 +2007,7 @@ extern struct cos_component_information cos_comp_info;
 
 /* Initialize the root scheduler */
 volatile int initialized[NUM_CPU_COS];
-int sched_root_init()
+int sched_root_init(void)
 {
 	struct sched_thd *new;
 	int ret, i;
@@ -2134,10 +2019,9 @@ int sched_root_init()
 	} else {
 		while (initialized[INIT_CORE] == 0) ;
 	}
-	
-	printc("<<< CPU %ld, in root init, thd %d going to run.>>>\n", 
-	       cos_cpuid(), cos_get_thd_id());
-	
+
+	/* printc("<<< CPU %ld, in root init, thd %d going to run.>>>\n", cos_cpuid(), cos_get_thd_id()); */
+
 	__sched_init();
 
 	/* switch back to this thread to terminate the system. */
@@ -2146,16 +2030,11 @@ int sched_root_init()
 
 	sched_init_create_threads(initialized[INIT_CORE] == 0);
 
-	printc("<<< to create timeer....>>>\n");
-
 	/* Create the clock tick (timer) thread */
 	fp_create_timer();
 
-	printc("<<< to create timeer....done>>>\n");
 	/* Create the IPI handling thread for the current core */
 	fp_create_IPI_handler();
-
-	printc("<<< to create IPI handler....done and schedule()>>>\n");
 
 	new = schedule(NULL);
 
@@ -2165,8 +2044,6 @@ int sched_root_init()
 		while (initialized[i] == 0) ;
 	}
 	printc("<<<Core %ld, thread %d: sched_init done.>>>\n", cos_cpuid(), cos_get_thd_id());
-
-	printc("switching to thd %d\n", new->id);
 
 	if ((ret = cos_switch_thread(new->id, 0))) {
 		printc("switch thread failed with %d\n", ret);
@@ -2184,15 +2061,14 @@ sched_isroot(void) { return 0; }
 
 extern int parent_sched_isroot(void);
 int
-sched_init()
+sched_init(void)
 {
-	printc("Sched init has thread %d\n", cos_get_thd_id());
-        
-        // don't re-initialize. should be removed if doing recovery test. 
-	assert(!(PERCPU_GET(sched_base_state)->init));
+//	printc("Sched init has thread %d\n", cos_get_thd_id());
+	assert(!(PERCPU_GET(sched_base_state)->init)); // don't re-initialize. should be removed if doing recovery test. 
 
 	/* Promote us to a scheduler! */
 	if (parent_sched_child_cntl_thd(cos_spd_id())) BUG();
+
 	if (cos_sched_cntl(COS_SCHED_EVT_REGION, 0, (long)PERCPU_GET(cos_sched_notifications))) BUG();
 
 	/* Are we root? */
@@ -2201,164 +2077,25 @@ sched_init()
 	return 0;
 }
 
-/* C3: sched_reboot is the function to rebuild scheduler state */
-static int
-sched_reboot(int arg)
-{
-	int ret = 0;
-	int llboot_init_thd, fault_thd;
-
-	llboot_init_thd = arg & 0xFFFF;
-	fault_thd       = (arg >> 16) & 0xFFFF;
-
-	assert(llboot_init_thd && fault_thd);
-	
-	printc("\n[[[[ this is rebooting (llboot_init thd %d fault_thd %d)!!!!]]]\n\n",
-	       llboot_init_thd, fault_thd);
-
-        // don't re-initialize. should be removed if doing recovery test. 
-	assert(!(PERCPU_GET(sched_base_state)->init));
-	if (cos_sched_cntl(COS_SCHED_EVT_REGION, 0, (long)PERCPU_GET(cos_sched_notifications))) BUG();
-	
-	if (cos_cpuid() == INIT_CORE) {
-		assert(initialized[INIT_CORE] == 0);
-		print_config_info();
-		/* Init the cross-core communicate spin lock. */
-	} else {
-		while (initialized[INIT_CORE] == 0) ;
-	}
-	printc("<<< CPU %ld, in root init, thd %d going to run.>>>\n", 
-	       cos_cpuid(), cos_get_thd_id());
-	
-	__sched_init();
-
-	PERCPU_GET(sched_base_state)->init = sched_alloc_thd(llboot_init_thd);
-	assert(PERCPU_GET(sched_base_state)->init);
-	/* update init thread's fault counter */
-	if (cos_sched_cntl(COS_SCHED_THD_RESET_FAULTCNT, llboot_init_thd, 0)) {
-		assert(0);
-	}
-	
-	int thd_id, thd_nums, type, dest, metric, fn, d, param;
-	thd_id = cos_sched_introspect(COS_SCHED_INTRO_THD_FIRST, 0, 0);
-	while(thd_id) {
-		printc("found a thread... %d recorded\n", thd_id);
-		metric = cos_sched_introspect(COS_SCHED_INTRO_THD_METRIC, 0, thd_id);
-		assert(metric);
-		dest   = cos_sched_introspect(COS_SCHED_INTRO_THD_DEST, 0, thd_id);
-		assert(dest);
-		fn     = cos_sched_introspect(COS_SCHED_INTRO_THD_FN, 0, thd_id);
-		d      = cos_sched_introspect(COS_SCHED_INTRO_THD_D, 0, thd_id);
-		param  = cos_sched_introspect(COS_SCHED_INTRO_THD_PARAM, 0, thd_id);
-		printc("recovery sched: found dest %d fn %d d %d param %d metric %p\n", 
-		       dest, fn, d, param, metric);
-		
-		struct sched_param_s tmp;
-		tmp.type      = metric & 0xFF;
-		tmp.init_data = (metric & 0xFF00) >> 8;
-		tmp.value     = (metric & 0xFFFF0000) >> 16;
-		printc("new param: tmp.type %d tmp.init_data %d tmp.value %d tmp is %p\n",
-		       tmp.type, tmp.init_data, tmp.value, tmp);
-		
-		struct sched_thd *rec_thd = __sched_setup_thread_no_policy(thd_id);
-		assert(rec_thd);
-		printc("get the new thread %d\n", rec_thd->id);		
-		rec_thd->spdid = dest;
-		rec_thd->cpuid = cos_cpuid();
-		sched_set_thd_core(rec_thd->id, cos_cpuid());
-		if (param) thread_param_set(rec_thd,  &tmp);
-
-		switch (tmp.type) {
-		case SCHEDP_IDLE:
-			PERCPU_GET(sched_base_state)->idle = rec_thd;
-			/* update each restored thread's fault counter */
-			assert(!cos_sched_cntl(COS_SCHED_THD_RESET_FAULTCNT, rec_thd->id, 0));
-			break;
-		case SCHEDP_TIMER:
-			PERCPU_GET(sched_base_state)->timer = rec_thd;
-			assert(!cos_sched_cntl(COS_SCHED_THD_RESET_UPCALL, rec_thd->id, 0));
-			assert(!cos_sched_cntl(COS_SCHED_THD_RESET_FAULTCNT, rec_thd->id, 0));
-			break;
-		case SCHEDP_IPI_HANDLER:
-			PERCPU_GET(sched_base_state)->IPI_handler = rec_thd;
-			assert(!cos_sched_cntl(COS_SCHED_THD_RESET_UPCALL, rec_thd->id, 0));
-			assert(!cos_sched_cntl(COS_SCHED_THD_RESET_FAULTCNT, rec_thd->id, 0));
-			break;
-		case SCHEDP_INIT:
-		default:
-			break;
-		}
-
-		thd_id = cos_sched_introspect(COS_SCHED_INTRO_THD_FIRST, 0, thd_id);
-		if (thd_id == -1) assert(0);
-		printc("found next thread... %d recorded\n", thd_id);
-	}
-
-	if (cos_sched_pending_event()) cos_sched_clear_events();
-
-	initialized[cos_cpuid()] = 1;
-	int i;
-	for (i = 0; i < NUM_CPU_COS; i++) {
-		/* Sync to start */
-		while (initialized[i] == 0) ;
-	}
-
-
-	/* decide if the system has done the create all threads? If
-	 * so, pick up the highest thread (timer) to mimic the finish
-	 * of normal sched_init and switch to the timer thread. If
-	 * not, returns to the faulty thread and continue to finish
-	 * the sched_init */
-	metric = cos_sched_introspect(COS_SCHED_INTRO_THD_METRIC, 0, fault_thd);
-	assert(metric);
-	struct sched_param_s fault_tmp;
-	fault_tmp.type      = metric & 0xFF;
-	fault_tmp.value     = (metric & 0xFFFF0000) >> 16;
-	int ftype  = fault_tmp.type;
-        /* Issue: hard code 29 which is the prio of the default thread
-	 * that might be still creating threads
-	 * (sched_create_thd). TODO: explcitly indicate the finish of
-	 * sched_init */
-	int fvalue = fault_tmp.value;   
-	if (ftype != SCHEDP_IDLE && ftype != SCHEDP_TIMER && 
-	    ftype != SCHEDP_IPI_HANDLER && ftype != SCHEDP_INIT && 
-	    fvalue!= 29) {
-		struct sched_thd *new = schedule(NULL);
-		if ((ret = cos_switch_thread(new->id, 0))) {
-			printc("recovery switch thread failed with %d\n", ret);
-		}
-	}
-	
-	printc("<<<Core %ld, recovery thread %d returns...>>>\n", 
-	       cos_cpuid(), cos_get_thd_id());
-
-	return 0;
-}
-
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
-	printc("upcall type %d, core %ld, thd %d, args %p %p %p\n",
-	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
+	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p\n", */
+	/*        t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3); */
 	switch (t) {
+//	case COS_UPCALL_BRAND_EXEC:
+//		sched_timer_tick();
+//		break;
 	case COS_UPCALL_THD_CREATE:
 		/* cos_upcall and cos_create_thread syscall pass this type. */
-		printc("sched: cos_upcall here to reboot 1 (ll init thd %d)\n", (int)arg1);
 		if (!arg1)  {
 			/* The llboot upcalls into here with arg1 = NULL */
-			printc("sched: cos_upcall here to sched_init()\n");
 			sched_init();
 			break;
-		} 
-		else {
+		} else {
 			((crt_thd_fn_t)arg1)(arg2);
 		}
 		break;
-	case COS_UPCALL_REBOOT:
-		printc("sched: cos_upcall here to reboot 2 (passed arg1 %d)\n", (int)arg1);
-		sched_reboot((int)arg1);
-		break;
 	case COS_UPCALL_DESTROY:
-		printc("upcall to destroy in scheduler\n");
 		fp_kill_thd(sched_get_current());
 		break;
 	case COS_UPCALL_UNHANDLED_FAULT:
@@ -2374,9 +2111,6 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		BUG();
 		return;
 	}
-
-	printc("upcall type %d, core %ld, thd %d, args %p %p %p  done!!!!\n",
-	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
 
 	return;
 }

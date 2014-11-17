@@ -367,7 +367,7 @@ boot_create_system(void)
 		
 		h = hs[i];
 		if ((spdid = cos_spd_cntl(COS_SPD_CREATE, 0, 0, 0)) == 0) BUG();
-		//printc("spdid %d, h->id %d\n", spdid, h->id);
+		printc("booter:spdid %d, h->id %d\n", spdid, h->id);
 		assert(spdid == h->id);
 
 		sect = cobj_sect_get(h, 0);
@@ -395,6 +395,7 @@ boot_create_system(void)
 		if (boot_spd_map(h, spdid, comp_info))           BUG();
 		if (cos_spd_cntl(COS_SPD_ACTIVATE, spdid, h->ncap, 0)) BUG();
 	}
+
 
 	for (i = 0 ; hs[i] != NULL ; i++) {
 		struct cobj_header *h;
