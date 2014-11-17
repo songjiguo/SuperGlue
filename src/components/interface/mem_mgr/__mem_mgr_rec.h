@@ -10,14 +10,12 @@
 #ifndef   	MEM_MGR_H
 #define   	MEM_MGR_H
 
+/* this enables alias_replay in each client interface */
+//#define MM_C3 
+
 /* #define TEST_MM_GET_PAGE */
 /* #define TEST_MM_ALIAS_PAGE */
-/* #define TEST_MM_REVOKE_PAGE */
-
-#define TEN2TEN           	/* 1 to 2 */
-//#define ONE2TEN
-
-#define ONE2FIVE  		/* 2 to 3/4 */
+#define TEST_MM_REVOKE_PAGE
 
 /* Map a physical frame into a component. */
 vaddr_t mman_get_page(spdid_t spd, vaddr_t addr, int flags);
@@ -28,13 +26,15 @@ vaddr_t mman_get_page(spdid_t spd, vaddr_t addr, int flags);
  * is allowed to remove the designated page.
  */
 int mman_release_page(spdid_t spd, vaddr_t addr, int flags);
-/* int __mman_release_page(spdid_t spd, vaddr_t addr, int flags); */
 /* remove all descendent mappings of this one (but not this one). */ 
 int mman_revoke_page(spdid_t spd, vaddr_t addr, int flags); 
-int __mman_revoke_page(spdid_t spd, vaddr_t addr, int flags);
 /* The invoking component (s_spd) must own the mapping. */
-vaddr_t mman_alias_page(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr);
-vaddr_t __mman_alias_page_rec(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr);
+vaddr_t __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_addr);
+static inline vaddr_t 
+mman_alias_page(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr, int flags)
+{ return __mman_alias_page(s_spd, s_addr, ((u32_t)d_spd<<16)|flags, d_addr); }
 void mman_print_stats(void);
+
+vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
 
 #endif 	    /* !MEM_MGR_H */

@@ -328,8 +328,9 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 	return 0;
 }
 
+#ifdef MM_C3
 void alias_replay(vaddr_t s_addr);
-
+#endif
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
 	switch (t) {
@@ -337,8 +338,9 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	{
 		printc("thread %d passing arg1 %p here (t %d)\n", 
 		       cos_get_thd_id(), arg1, t);
-		
+#ifdef MM_C3
 		alias_replay((vaddr_t)arg1);
+#endif
 			
 		return;
 	}

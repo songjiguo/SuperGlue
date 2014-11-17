@@ -133,7 +133,7 @@ chal_pgtbl_rem(paddr_t pgtbl, vaddr_t va)
 	pte->pte_low = 0;
 
 	/* if (pte_val(*pte) & _PAGE_PRESENT) printk("still in pgtbl?????\n"); */
-	printk("va %p is removed from pgtbl\n", va);
+	/* printk("va %p is removed from pgtbl\n", va); */
 	
 	return val;
 }
