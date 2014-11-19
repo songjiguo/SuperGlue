@@ -882,6 +882,7 @@ int net_listen(spdid_t spdid, net_connection_t nc, int queue)
 	tp = ic->conn.tp;
 	si = ic->spdid;
 	assert(NULL != tp);
+	printc("cos_net setting backlog to be %d\n", queue);
 	new_tp = tcp_listen_with_backlog(tp, queue);
 	if (NULL == new_tp) {
 		ret = -ENOMEM;
@@ -1293,7 +1294,6 @@ static int cos_net_evt_loop(void)
 
 		data = cbuf_alloc(alloc_sz, &cb);
 		assert(data);
-		/* printc("tnet_tip_tread (thd %d)\n", cos_get_thd_id()); */
 		sz = parent_tread(cos_spd_id(), ip_td, cb, alloc_sz);
 		tcp_tread_cnt++;
 		assert(sz > 0);

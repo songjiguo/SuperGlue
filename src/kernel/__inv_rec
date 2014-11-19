@@ -978,7 +978,7 @@ switch_thread_parse_data_area(struct cos_sched_data_area *da, int *ret_code)
 	if (unlikely(da->cos_evt_notif.pending_event)) {
 		cos_meas_event(COS_MEAS_RESCHEDULE_PEND);
 		*ret_code = COS_SCHED_RET_AGAIN;
-		printk("COS_SCHED_RET_AGAIN 1 (da->cos_next thd %d)\n", da->cos_next.next_thd_id);
+		/* printk("COS_SCHED_RET_AGAIN 1 (da->cos_next thd %d)\n", da->cos_next.next_thd_id); */
 		goto ret_err;
 	}
 	if (unlikely(da->cos_evt_notif.pending_cevt)) {
@@ -991,7 +991,7 @@ switch_thread_parse_data_area(struct cos_sched_data_area *da, int *ret_code)
 	da->cos_next.next_thd_id = 0;
 	if (unlikely(0 == next_thd)) {
 		*ret_code = COS_SCHED_RET_AGAIN;
-		printk("COS_SCHED_RET_AGAIN 2\n");
+		/* printk("COS_SCHED_RET_AGAIN 2\n"); */
 		goto ret_err;
 	}
 	/* FIXME: mask out the locking flags as they cannot apply */
@@ -1259,8 +1259,8 @@ cos_syscall_switch_thread_cont(int spd_id, unsigned short int rthd_id,
 	} else {
 		next_thd = switch_thread_parse_data_area(da, &ret_code);
 		if (unlikely(0 == next_thd)) {
-			printk("flags %d and parse data here da->next %d\n", flags, da->cos_next.next_thd_id);
-			printk("thd %d, rthd %d core %d (rflags %d)\n", thd_get_id(curr), rthd_id, get_cpuid(), rflags);
+			/* printk("flags %d and parse data here da->next %d\n", flags, da->cos_next.next_thd_id); */
+			/* printk("thd %d, rthd %d core %d (rflags %d)\n", thd_get_id(curr), rthd_id, get_cpuid(), rflags); */
 			printk("err: data area\n");
 			goto_err(ret_err, "data_area\n");
 		}
@@ -1795,7 +1795,6 @@ int cos_net_try_acap(struct cos_net_acap_info *net_acap, void *data, int len)
 	unsigned int *lenp;
 
 	cos_meas_event(COS_MEAS_PACKET_ACAP);
-	/* printk("cos_net_try_brand %ld\n", thd_get_id(core_get_curr_thd())); */
 	/* 
 	 * If there is no room for the network buffer, then don't
 	 * attempt the upcall.  This is analogous to not trying to
@@ -1842,12 +1841,6 @@ int cos_net_notify_drop(struct async_cap *acap)
 /****************************/
 /*** Translator Interface ***/
 /****************************/
-
-/* Jiguo: ramfs fault tolerace related?  */
-extern int pgtbl_add_entry(paddr_t pgtbl, vaddr_t vaddr, paddr_t paddr); 
-extern void *va_to_pa(void *va);
-//extern int pgtbl_rw_set(paddr_t pgtbl, vaddr_t va, int flag);
-
 static const struct cos_trans_fns *trans_fns = NULL;
 void cos_trans_reg(const struct cos_trans_fns *fns) { trans_fns = fns; }
 void cos_trans_dereg(void) { trans_fns = NULL; }

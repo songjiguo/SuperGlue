@@ -114,12 +114,12 @@ COS_VECT_CREATE_STATIC(tmap);
 
 cos_lock_t netif_lock;
 
-#define NET_LOCK_TAKE()    \
+#define NET_LOCK_TAKE()							\
 	do {								\
 		if (lock_take(&netif_lock)) prints("error taking net lock."); \
 	} while(0)
 
-#define NET_LOCK_RELEASE() \
+#define NET_LOCK_RELEASE()						\
 	do {								\
 		if (lock_release(&netif_lock)) prints("error releasing net lock."); \
 	} while (0)
@@ -513,11 +513,10 @@ static int interrupt_wait(void)
 	assert(wildcard_acap_id > 0);
 	if (-1 == (ret = cos_ainv_wait(wildcard_acap_id))) BUG();
 
-    rdtscll(start);
+	rdtscll(start);
 	if (ret > 0) {
 		cos_immediate_process_cnt = ret;
 	}
-	/* printc("ret from brand_wait is %d\n", ret); */
 	interrupt_wait_cnt++;
 #ifdef UPCALL_TIMING
 	last_upcall_cyc = (u32_t)ret;
@@ -561,7 +560,6 @@ int netif_event_wait(spdid_t spdid, char *mem, int sz)
 
 	if (sz < MTU) return -EINVAL;
 
-	/* printc("before %d: I\n", cos_get_thd_id()); */
 	/* rdtscll(start); */
 	interrupt_wait();
 	/* rdtscll(end); */

@@ -409,7 +409,9 @@ tcp_listen_input(struct tcp_pcb_listen *pcb)
 #if TCP_LISTEN_BACKLOG
     if (pcb->accepts_pending >= pcb->backlog) {
 	    /* gap */
-	    printc("ERROR: Listen attempt failed: backlog full");
+	    printc("pcb->accepts_pending %d pcb->backlog %d\n", 
+		   pcb->accepts_pending, pcb->backlog);
+	    printc("ERROR: Listen attempt failed: backlog full\n");
       return ERR_ABRT;
     }
 #endif /* TCP_LISTEN_BACKLOG */

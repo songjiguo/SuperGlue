@@ -599,3 +599,27 @@ periodic_wake_get_period(unsigned short int tid)
 	if (tid == hpthd) return 1;
 	return 0;
 }
+
+
+void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
+{
+	switch (t) {
+	case COS_UPCALL_THD_CREATE:
+	{
+		printc("thread %d passing arg1 %p here (t %d)\n", 
+		       cos_get_thd_id(), arg1, t);
+		
+		if (arg1 == 0) {
+			cos_init(arg1);
+		}
+		printc("thread %d passing arg1 %p here (t %d)\n", 
+		       cos_get_thd_id(), arg1, t);
+		return;
+	}
+	default:
+		/* fault! */
+		*(int*)NULL = 0;
+		return;
+	}
+	return;
+}

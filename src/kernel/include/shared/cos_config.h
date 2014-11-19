@@ -6,18 +6,19 @@
 
 #define CPU_TIMER_FREQ 100 // set in your linux .config
 
-#define RUNTIME                5 // seconds
+#define RUNTIME                10 // seconds
 
 // After how many seconds should schedulers print out their information?
 #define SCHED_PRINTOUT_PERIOD  50
 #define COMPONENT_ASSERTIONS   1 // activate assertions in components?
 
-#define LINUX_ON_IDLE          1 // should Linux be activated on Composite idle (set this if you want to stop Composite)
+//#define LINUX_ON_IDLE          1 // should Linux be activated on Composite idle (set this if you want to stop Composite)
 
 /* 
  * Should Composite run as highest priority?  Set if you want Composite run at the highest prio
  */
-//#define LINUX_HIGHEST_PRIORITY 1 
+#define LINUX_HIGHEST_PRIORITY 1 
+
 //#define FPU_ENABLED
 
 #define INIT_CORE              0 // the CPU that does initialization for Composite
@@ -75,6 +76,6 @@
 
 //#define LOG_MONITOR   1// Macro for low level log monitor 
 
-#define DEBUG_PERIOD  // for network debug only
+//#define DEBUG_PERIOD  // for network debug only
 
 #endif /* COS_CONFIG_H */

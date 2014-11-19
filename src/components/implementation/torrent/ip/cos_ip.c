@@ -150,7 +150,6 @@ tread(spdid_t spdid, td_t td, int cbid, int sz)
 	ret = parent_tread(cos_spd_id(), ntd, ncbid, sz);
 	if (ret < 0) goto free;
 	ip_tread_cnt++;
-	/* printc("ip tread from if 2\n"); */
 	memcpy(buf, nbuf, ret);
 free:
 	/* cbufp_deref(ncbid); */  // should keep this cbufp alive in netif for FT purpose?  Jiguo

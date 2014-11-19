@@ -1571,18 +1571,10 @@ int chal_attempt_ainv(struct async_cap *acap)
 					       thd_get_id(next));
 					///*assert*/BUG_ON(!(next->flags & THD_STATE_ACTIVE_UPCALL));
 				}
-#ifdef MEAS_INT_FAULT_DETECT
-				unsigned long long start, end;
-				rdtscll(start);
-#endif
-//				printk("brand %d next thd %d\n", brand->thread_id, next->thread_id);
+				/* printk("hijack: next thd %d\n", next->thread_id); */
 //				if (unlikely(interrupt_fault_detect(next))) {
 //					/* Peter: detect fault on interrupt path */
 //					thd_interrupt_fault_notif(next, regs);
-#ifdef MEAS_INT_FAULT_DETECT
-					rdtscll(end);
-					printk("interrupt notification cost 1: %llu\n", (end-start));
-#endif
 //				} else {
 //					interrupt_fault_update(cos_current);
 //

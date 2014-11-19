@@ -157,31 +157,6 @@ ns_lookup(spdid_t spdid, int id)
 	return ret;
 }
 
-/* call this after the fault, or in cos_init once */
-int
-ns_invalidate() 
-{
-	/* int ret = -1; */
-	/* int i; */
-	/* struct evt_node *m; */
-	
-	/* printc("evt name server delete not recevied\n"); */
-	
-	/* LOCK(); */
-	
-	/* for (i = 0 ; i < (int)COS_MAP_BASE ; i++) { */
-	/* 	m = mapping_find(i); */
-	/* 	if (m && !m->received) { */
-	/* 		printc("delete a not received %d\n", i); */
-	/* 		cos_map_del(&ns_evtids, i); */
-	/* 	} */
-	/* } */
-
-	/* UNLOCK(); */
-	/* return ret; */
-	return 0;
-}
-
 /* for now, this reflection function is used to check if an entry is
  * presented 
  type 0: check if entry for id is presented
