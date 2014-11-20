@@ -55,10 +55,12 @@ int fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *i
 
 	printc("pgfault parameters: spdid %d fault_addr %p flags %d ip %p (thd %d)\n", spdid, fault_addr, flags, ip, cos_get_thd_id());
 
-	if (test_num++ > 6) {
-		printc("has failed %d times\n", test_num);
-		assert(0);
-	}
+
+	// remove this for web server test
+	/* if (test_num++ > 6) { */
+	/* 	printc("has failed %d times\n", test_num); */
+	/* 	assert(0); */
+	/* } */
 
 	printc("in the fault_page_fault_handler 1\n");
 	/* printc("Thread %d faults in spd %d @ %p\n", tid, spdid, fault_addr); */

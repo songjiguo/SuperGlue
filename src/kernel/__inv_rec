@@ -1261,7 +1261,7 @@ cos_syscall_switch_thread_cont(int spd_id, unsigned short int rthd_id,
 		if (unlikely(0 == next_thd)) {
 			/* printk("flags %d and parse data here da->next %d\n", flags, da->cos_next.next_thd_id); */
 			/* printk("thd %d, rthd %d core %d (rflags %d)\n", thd_get_id(curr), rthd_id, get_cpuid(), rflags); */
-			printk("err: data area\n");
+			/* printk("err: data area\n"); */   // simply remove for test Jiguo
 			goto_err(ret_err, "data_area\n");
 		}
 
@@ -1277,7 +1277,6 @@ cos_syscall_switch_thread_cont(int spd_id, unsigned short int rthd_id,
 
 		if (unlikely(NULL == thd)) {
 			printk("err: get target\n");
-			assert(0);   // Jiguo: remove this later
 			goto_err(ret_err, "get target");
 		}
 	}

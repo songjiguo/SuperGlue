@@ -514,10 +514,10 @@ static int interrupt_wait(void)
 	if (-1 == (ret = cos_ainv_wait(wildcard_acap_id))) BUG();
 
 	rdtscll(start);
-	if (ret > 0) {
-		cos_immediate_process_cnt = ret;
-	}
-	interrupt_wait_cnt++;
+	/* if (ret > 0) { */
+	/* 	cos_immediate_process_cnt = ret; */
+	/* } */
+	/* interrupt_wait_cnt++; */
 #ifdef UPCALL_TIMING
 	last_upcall_cyc = (u32_t)ret;
 #endif	
@@ -571,7 +571,7 @@ int netif_event_wait(spdid_t spdid, char *mem, int sz)
 	/* printc("after %d: I\n", cos_get_thd_id()); */
 	NET_LOCK_TAKE();
 	if (interrupt_process(mem, sz, &ret_sz)) BUG();
-	interrupt_process_cnt++;
+	/* interrupt_process_cnt++; */
 	NET_LOCK_RELEASE();
 
 	return ret_sz;

@@ -11,7 +11,8 @@
 
 #define NUM_TMEM_MGR 2
 
-#define MAX_NUM_MEM 320
+/* #define MAX_NUM_MEM 320 */
+#define MAX_NUM_MEM 800
 
 int mempool_put_mem(spdid_t d_spdid, void* mgr_addr);
 void *mempool_get_mem(spdid_t spdid, int pages);

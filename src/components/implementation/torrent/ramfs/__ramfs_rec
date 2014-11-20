@@ -340,7 +340,7 @@ treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 	char *buf;
 	cbufp_t cb;
 
-	printc("ramfs: tread (td %d len %d)\n", td, len);
+	/* printc("ramfs: tread (td %d len %d)\n", td, len); */
 	if (tor_isnull(td)) return -EINVAL;
 
 	LOCK();
@@ -358,14 +358,24 @@ treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 	fso = t->data;
 	assert(fso->size <= fso->allocated);
 	assert(t->offset <= fso->size);
-	printc("ramfs: tread 1\n");
 	if (!fso->size) ERR_THROW(0, done);
-	printc("ramfs: tread 2\n");
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TREADP)
+	/* printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n",  */
+	/*        cos_get_thd_id(), cos_spd_id(), spdid); */
+
+	// ubenchmark
+	/* test_control++; */
+	/* if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) { */
+	/* 	printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n",  */
+	/* 	       cos_get_thd_id(), cos_spd_id(), spdid); */
+	/* 	assert(0); */
+	/* } */
+	
+	// web server
 	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
-		printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n", 
+	if (spdid == 22 && cos_get_thd_id() == 15 && test_control == 500) {
+		printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -377,16 +387,16 @@ treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 
 	buf = cbufp_alloc(len, &cb);
 	assert(buf);
-	cbufp_send(cb);
+	cbufp_send_deref(cb);    // for tread, we need this to not keep cbufp around
 	assert(fso->data);
-	printc("t->offset %d (ret %d)\n", t->offset, ret);
-	printc("t->data %d\n", fso->data);
+	/* printc("t->offset %d (ret %d)\n", t->offset, ret); */
+	/* printc("t->data %s\n", fso->data); */
 	memcpy(buf, fso->data + t->offset, ret);
-	printc("read buf -- %s\n", buf);
+	/* printc("read buf -- %s\n", buf); */
 	t->offset += ret;
 
 	*sz = ret;
-	printc("after read: fso->size %d t->offset %d\n", fso->size, t->offset);
+	/* printc("after read: fso->size %d t->offset %d\n", fso->size, t->offset); */
 done:	
 	UNLOCK();
 	return cb;
@@ -488,12 +498,15 @@ __twmeta(spdid_t spdid, td_t td, const char *key,
 	struct fsobj *fso;
 	char *buf;
 	int left;
-	printc("passed in td for recover data is %d\n", td);
+	printc("twmeta: passed in td for recover %d (1 thd %d)\n", td, cos_get_thd_id());
 	if (tor_isnull(td)) {UNLOCK(); return -EINVAL;}
 	t = tor_lookup(td);
+	printc("twmeta: passed in td for recover %d (2 thd %d)\n", td, cos_get_thd_id());
 	if (!t) {UNLOCK(); return -EINVAL;}
 	assert(t->data);
-	if (!(t->flags & TOR_WRITE)) {UNLOCK(); return -EINVAL;}
+	printc("twmeta: passed in td for recover %d (3 thd %d)\n", td, cos_get_thd_id());
+	// web server only read ??? Jiguo
+	/* if (!(t->flags & TOR_WRITE)) {UNLOCK(); return -EINVAL;} */ 
 	fso = t->data;
 	assert(fso->size <= fso->allocated);
 	assert(t->offset <= fso->size);

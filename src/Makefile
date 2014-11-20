@@ -19,7 +19,7 @@ kern: comps
 
 cp:
 	@echo "clean up transfer files first"
-	@rm /home/songjiguo/transfer/*
+	@rm -f /home/songjiguo/transfer/*
 	$(MAKE) $(MAKEFLAGS) -C platform cp
 	$(MAKE) $(MAKEFLAGS) -C components cp
 

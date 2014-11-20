@@ -118,7 +118,7 @@ twrite(spdid_t spdid, td_t td, int cbid, int sz)
 	assert(nbuf);
 	memcpy(nbuf, buf, sz);
 	ret = parent_twrite(cos_spd_id(), ntd, ncbid, sz);
-	ip_twrite_cnt++;
+	/* ip_twrite_cnt++; */
 	cbuf_free(ncbid);
 done:
 	return ret;
@@ -149,7 +149,7 @@ tread(spdid_t spdid, td_t td, int cbid, int sz)
 	/* printc("tip_tif_tread (thd %d)\n", cos_get_thd_id()); */
 	ret = parent_tread(cos_spd_id(), ntd, ncbid, sz);
 	if (ret < 0) goto free;
-	ip_tread_cnt++;
+	/* ip_tread_cnt++; */
 	memcpy(buf, nbuf, ret);
 free:
 	/* cbufp_deref(ncbid); */  // should keep this cbufp alive in netif for FT purpose?  Jiguo

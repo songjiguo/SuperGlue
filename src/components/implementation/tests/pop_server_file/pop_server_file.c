@@ -3,17 +3,22 @@
 #include <sched.h>
 #include <cbuf.h>
 #include <evt.h>
-#include <torrent.h>
+#include <rtorrent.h>
 
 #include <timed_blk.h>
 
 char buffer[1024];
 
+/* extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid); */
+/* extern void server_trelease(spdid_t spdid, td_t tid); */
+/* extern int server_treadp(spdid_t spdid, td_t td, int len, int *off, int *sz); */
+/* extern int server_twritep(spdid_t spdid, td_t td, int cbid, int sz); */
+
 void pop_cgi(void)
 {
 	td_t t1;
 	long evt1;
-	char *params = "test";
+	char *params = "/test";
 	char *data1 = "hello_world";
 	unsigned int ret1, ret2;
 
@@ -26,9 +31,18 @@ void pop_cgi(void)
 		printc("split failed\n");
 		return;
 	}
+	
+	/* ret1 = twrite_pack(cos_spd_id(), t1, data1, strlen(data1)); */
 
-	ret1 = twrite_pack(cos_spd_id(), t1, data1, strlen(data1));
-	/* ret2 = twrite_pack(cos_spd_id(), t2, data2, strlen(data2)); */
+	cbufp_t cb;
+	char *d;
+	d = cbufp_alloc(strlen(data1), &cb);
+	if (!d) return -1;
+	cbufp_send(cb);
+	memcpy(d, data1, strlen(data1));
+	ret1 = twritep(cos_spd_id() , t1, cb, strlen(data1));
+	cbufp_deref(cb);
+
 	trelease(cos_spd_id(), t1);
 
 	printc("unsigned long long length %d\n", sizeof(unsigned long long));

@@ -31,7 +31,8 @@
 
 #include <evt.h>
 
-#include <torrent.h>
+//#include <torrent.h>
+#include <rtorrent.h>
 #include <torlib.h>
 #include <cbuf.h>
 #include <periodic_wake.h>
@@ -44,7 +45,8 @@ static cos_lock_t h_lock;
 
 extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
 extern void server_trelease(spdid_t spdid, td_t tid);
-extern int server_tread(spdid_t spdid, td_t td, int cbid, int sz);
+extern int server_treadp(spdid_t spdid, td_t td, int len, int *off, int *sz);
+/* extern int server_treadp(spdid_t spdid, td_t td, int cbid, int sz); */
 
 #endif	/* COS_LINUX_ENV */
 
@@ -614,7 +616,7 @@ static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 	while (r) {
 		struct http_request *next;
 		char *local_resp;
-		cbuf_t cb;
+		cbufp_t cb;   // Now use cbufp
 		int consumed, ret, local_resp_sz;
 
 		assert(r->c == c);
@@ -627,27 +629,43 @@ static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 			local_resp = r->resp.resp;
 			local_resp_sz = r->resp.resp_len;
 		} else {
-			int sz;
+			/* int sz; */
+			/* /\* Make the request to the content */
+			/*  * component *\/ */
+			/* sz         = resp_sz - used; */
+			/* local_resp = cbuf_alloc(sz, &cb); */
+			/* if (!local_resp) BUG(); */
+
+			
+			/* ret = server_tread(cos_spd_id(), r->content_id, cb, sz); */
+			/* if (ret < 0) { */
+			/* 	cbuf_free(cb); */
+			/* 	printc("https get reply returning %d.\n", ret); */
+			/* 	return ret; */
+			/* } */
+			/* local_resp_sz = ret; */
+
+			int sz, len, off;
 			/* Make the request to the content
 			 * component */
 			sz         = resp_sz - used;
-			local_resp = cbuf_alloc(sz, &cb);
-			if (!local_resp) BUG();
-
-			
-			/* printc("https reads files\n"); */
-			ret = server_tread(cos_spd_id(), r->content_id, cb, sz);
-			if (ret < 0) {
-				cbuf_free(cb);
-				printc("https get reply returning %d.\n", ret);
-				return ret;
-			}
-			local_resp_sz = ret;
+			/* printc("https reads files (sz %d)\n", sz); */
+			cb = server_treadp(cos_spd_id(), r->content_id, sz, &off, &len);
+			if (!cb < 0) assert(0);
+			/* printc("https reads files 0000 (read bytes off %d len %d)\n",  */
+			/*        off, len); */
+			local_resp = cbufp2buf(cb, sz);
+			/* memcpy(local_resp, d, sz); */
+			/* printc("https reads files 111111\n"); */
+			cbufp_deref(cb);
+			/* printc("https reads files 222222\n"); */
+			local_resp_sz = 11;// hardcode now for test only ->len;
+			/* printc("https reads files done\n"); */
 		}
 		
 		/* no more data */
 		if (local_resp_sz == 0) {
-			cbuf_free(cb);
+			/* cbuf_free(cb); */    // do not free it
 			break;
 		}
 
@@ -663,7 +681,7 @@ static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 				assert(local_resp);
 				memcpy(save, local_resp, local_resp_sz);
 
-				cbuf_free(cb);			
+				/* cbuf_free(cb);			 */
 				local_resp = NULL;
 
 				r->resp.resp = save;
@@ -671,7 +689,7 @@ static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 			}
 			if (0 == used) {
 				printc("https: could not allocate either header or response of sz %d:%s\n", local_resp_sz, local_resp);
-				if (local_resp) cbuf_free(cb);;
+				/* if (local_resp) cbuf_free(cb); */
 				return -ENOMEM;
 			}
 			break;
@@ -680,7 +698,7 @@ static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 		memcpy(resp+used+consumed, local_resp, local_resp_sz);
 		
 		assert(local_resp);
-		cbuf_free(cb);
+		/* cbuf_free(cb); */
 		local_resp = NULL;
 
 		used += local_resp_sz + consumed;

@@ -156,7 +156,7 @@ static char*
 param_save(char *param, int param_len)
 {
 	char *l_param;
-	
+
 	assert(param && param_len > 0);
 
 	l_param = malloc(param_len);
@@ -173,6 +173,9 @@ param_save(char *param, int param_len)
 	       l_param, param, param_len);
 	return l_param;
 }
+
+// this is strange since https call server_tsplit to call ramfs
+extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
 
 /* restore the server state */
 static void
@@ -196,7 +199,7 @@ rd_recover_state(struct rec_data_tor *rd)
 	// tsplit returns the client id !!!!
 	printc("\n recovery process calls tsplit again!!!...\n\n");
 	printc("saved param is %s\n", rd->param);
-	td_t tmp_tid = tsplit(cos_spd_id(), rd->p_tid, 
+	td_t tmp_tid = server_tsplit(cos_spd_id(), rd->p_tid, 
 			      rd->param, rd->param_len, rd->tflags, rd->evtid);
 	if (tmp_tid <= 1) return;
 	printc("\n recovery process tsplit return!!!...(tmp_tid %d)\n\n", tmp_tid);
@@ -442,12 +445,12 @@ CSTUB_FN(int, treadp)(struct usr_inv_cap *uc,
 	long fault = 0;
 
 
-        /* printc("<<< In: call tread (thread %d, spd %ld) >>>\n", cos_get_thd_id(), cos_spd_id()); */
+        printc("<<< In: call tread (thread %d, spd %ld) >>>\n", cos_get_thd_id(), cos_spd_id());
         struct rec_data_tor *rd;
         volatile unsigned long long start, end;
 
 redo:
-        /* printc("tread\n"); */
+        printc("treadp\n");
 	rd = rd_update(td, STATE_TREAD);
 	assert(rd);
 

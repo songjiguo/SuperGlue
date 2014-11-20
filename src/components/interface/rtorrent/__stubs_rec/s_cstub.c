@@ -28,9 +28,10 @@ int
 __sg_treadp(spdid_t spdid, int tid, int len, int __pad0, int *off_len)
 {
 	int ret = 0;
-	printc("spdid %d sz %d len %d\n", spdid, tid, len);
+	/* printc("spdid %d tid %d len %d\n", spdid, tid, len); */
         ret = treadp(spdid, tid, len, &off_len[0], &off_len[1]);
-	printc("rtorrent server interface treadp return\n");
+	/* printc("ramfs ser inter: treadp return ret %d off_len[0] %d off_len[1] %d\n",  */
+	/*        ret, off_len[0], off_len[1]); */
 	return ret;
 }
 

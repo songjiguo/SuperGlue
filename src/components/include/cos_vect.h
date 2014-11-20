@@ -149,6 +149,12 @@ static inline struct cos_vect_intern_struct *__cos_vect_lookup(cos_vect_t *v, lo
 
 	/* make sure the data structure is configured and initialized */
 	assert(v);
+	
+	if (v->depth == 0) {
+		printc("cvect fault occurs in spd %ld by thd %d\n", 
+		       cos_spd_id(), cos_get_thd_id());
+	}
+	
 	assert(v->depth != 0);
 	assert(v->depth <= 2);
 	if (id < 0) return NULL;

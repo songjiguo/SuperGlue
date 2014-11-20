@@ -6,6 +6,7 @@
  */
 
 #include <cos_asm_server_stub.h>
+
 .text
 cos_asm_server_fn_stub_spdid(tsplit, __sg_tsplit)
 cos_asm_server_fn_stub_spdid(tmerge, __sg_tmerge)

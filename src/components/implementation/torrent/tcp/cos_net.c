@@ -594,7 +594,7 @@ static err_t cos_net_lwip_tcp_recv(void *arg, struct tcp_pcb *tp, struct pbuf *p
 
 	/* printc("thd in %ld tcp_recv call trigger evt id %d\n", cos_get_thd_id(), ic->data); */
 	if (-1 != ic->data && evt_trigger(cos_spd_id(), ic->data)) BUG();
-	tcp_recv_cnt++;
+	/* tcp_recv_cnt++; */
 /* 	/\* If the thread blocked waiting for a packet, wake it up *\/ */
 /* 	if (RECVING == ic->thd_status) { */
 /* 		ic->thd_status = ACTIVE; */
@@ -712,7 +712,7 @@ static err_t cos_net_lwip_tcp_accept(void *arg, struct tcp_pcb *new_tp, err_t er
 	/* printc("cos_net_lwip_tcp_accept trigger event (thd %d)\n", cos_get_thd_id()); */
 	/* printc("thd %ld in tcp_accept call trigger evtid %d\n", cos_get_thd_id(), ic->data); */
 	if (evt_trigger(cos_spd_id(), ic->data)) BUG();
-	tcp_accept_cnt++;
+	/* tcp_accept_cnt++; */
 
 	return ERR_OK;
 }
@@ -857,7 +857,7 @@ int net_accept_data(spdid_t spdid, net_connection_t nc, long data)
 	/* printc("thd %ld in net_accept_data call trigger evtid %d\n", cos_get_thd_id(), ic->data); */
 	if (0 < ic->incoming_size && 
 	    evt_trigger(cos_spd_id(), data)) goto err;
-	net_accetp_cnt++;
+	/* net_accetp_cnt++; */
 
 	//NET_LOCK_RELEASE();
 	return 0;	
@@ -1295,7 +1295,7 @@ static int cos_net_evt_loop(void)
 		data = cbuf_alloc(alloc_sz, &cb);
 		assert(data);
 		sz = parent_tread(cos_spd_id(), ip_td, cb, alloc_sz);
-		tcp_tread_cnt++;
+		/* tcp_tread_cnt++; */
 		assert(sz > 0);
 		cos_net_interrupt(data, sz);
 		assert(lock_contested(&net_lock) != cos_get_thd_id());
@@ -1348,7 +1348,7 @@ static err_t cos_net_stack_send(struct netif *ni, struct pbuf *p, struct ip_addr
 	if (sz <= 0) {
 		printc("<<transmit returns %d -> %d>>\n", sz, tot_len);
 	}
-	tcp_twrite_cnt++;
+	/* tcp_twrite_cnt++; */
 	assert(sz > 0);
 	cbuf_free(cb);
 	
