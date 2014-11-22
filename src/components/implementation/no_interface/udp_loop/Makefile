@@ -3,7 +3,7 @@ ASM_OBJS=
 COMPONENT=udp.o
 INTERFACES=
 DEPENDENCIES=cbufp cbuf_c torrent printc lock sched valloc evt name_server mem_mgr_large ll_log
-FN_PREPEND=from_
+FN_PREPEND=from_ server_
 
 include ../../Makefile.subsubdir
 

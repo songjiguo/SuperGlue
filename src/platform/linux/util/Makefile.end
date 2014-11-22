@@ -3,56 +3,25 @@ reset: clean cp build
 init: ready_hw first
 
 ready_hw:
-	ethtool -A eth0 autoneg off rx off tx off
-	mknod /dev/net/cnet c 10 201
-	echo 1 > /proc/sys/net/ipv4/ip_forward
-# bullcrap arbitrary Linux defaults
+#	ethtool -A eth0 autoneg off rx off tx off
 	echo "-1" > /proc/sys/kernel/sched_rt_runtime_us
 	echo "1000000000" > /proc/sys/kernel/sched_rt_period_us
 
 first: cp build
 
 cp:
-	cp $(TRANS_DIR)/* $(TEST_DIR)
-	rm *.o
-	cp $(TRANS_DIR)/* $(TEST_DIR)
-	rm *.o
-	cp $(TRANS_DIR)/* $(TEST_DIR)
 	rm *.o
 	cp $(TRANS_DIR)/* $(TEST_DIR)
 
 clean:
 	rm cos_loader
-#	rmmod trans
-	rmmod cnet
 	rmmod cos
 
 # sync to minimize possible file system corruption on crashes
 build: tar
 	@sync
-#	@sleep 0.1
-#	@rmmod e1000e  
-	@sleep 0.2
+	@sleep 0.1
 	nice -n -20 insmod cos.ko
-	@sleep 0.2
-	insmod cnet.ko
-#	insmod trans.ko
-#	@insmod /lib/modules/2.6.36Composite_NO_KDB/kernel/drivers/net/ethernet/intel/e1000e/e1000e.ko
-#	@sleep 0.1
-#	@ifconfig eth0 192.168.1.10 up
-#	@ifconfig eth0 192.168.1.10 up
-#	@ifconfig eth0 192.168.1.10 up
-#	@ifconfig eth0 192.168.1.10 up
-#	@sleep 0.5
-#	@ifconfig eth0 192.168.1.10 up
-#	@ifconfig eth0 192.168.1.10 up
-#	@ifconfig eth0 192.168.1.10 up
-#	@ifconfig eth0 192.168.1.10 up
-#	@sleep 1
-#	@ifconfig eth0 192.168.1.10 up
-#	@ifconfig eth0 192.168.1.10 up
-#	@sleep 1
-	./cnet_user
 
 tar:
 	@ld -r -b binary -o inittar.o init.tar

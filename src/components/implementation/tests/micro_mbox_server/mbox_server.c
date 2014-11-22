@@ -6,7 +6,7 @@
 #include <sched.h>
 #include <cbuf.h>
 #include <evt.h>
-#include <mbtorrent.h>
+#include <torrent.h>
 #include <periodic_wake.h>
 
 volatile unsigned long long overhead_start, overhead_end;
@@ -80,7 +80,7 @@ void cos_init(void *arg)
 	for (i=0; i<j; i++) {
 		while (1) {
 			// not sure why we need off return? not used when read cbufp2buf
-			cb1 = treadp(cos_spd_id(), cli, &off, &sz);
+			cb1 = treadp(cos_spd_id(), cli, 0, &off, &sz);
 			/* printc("mbox server treadp rdtscll %llu\n", overhead_end); */
 			if ((int)cb1<0) evt_wait(cos_spd_id(), evt2);
 			else            break;
@@ -117,7 +117,7 @@ void cos_init(void *arg)
 	for (i=0; i<ITER; i++) {
 		for (j=0; j<num; j++) {
 			while (1) {
-				cb1 = treadp(cos_spd_id(), cli, &off, &sz);
+				cb1 = treadp(cos_spd_id(), cli, 0, &off, &sz);
 				if((int)cb1<0) evt_wait(cos_spd_id(), evt2);
 				else           break;
 			}

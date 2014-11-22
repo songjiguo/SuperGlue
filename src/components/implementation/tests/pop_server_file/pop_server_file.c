@@ -3,7 +3,7 @@
 #include <sched.h>
 #include <cbuf.h>
 #include <evt.h>
-#include <rtorrent.h>
+#include <torrent.h>
 
 #include <timed_blk.h>
 

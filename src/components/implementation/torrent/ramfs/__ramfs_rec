@@ -6,8 +6,8 @@
  */
 
 #include <cos_component.h>
-#include <rtorrent.h>
-#include <rtorlib.h>
+#include <torrent.h>
+#include <torlib.h>
 
 #include <cbuf.h>
 #include <print.h>
@@ -20,8 +20,6 @@
 
 #include <uniq_map.h>
 #include <pgfault.h>
-
-#include <ramfs_recovery.h>
 
 static cos_lock_t fs_lock;
 struct fsobj root;
@@ -361,31 +359,31 @@ treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 	if (!fso->size) ERR_THROW(0, done);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TREADP)
-	/* printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n",  */
+	/* printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n", */
 	/*        cos_get_thd_id(), cos_spd_id(), spdid); */
 
 	// ubenchmark
-	/* test_control++; */
-	/* if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) { */
-	/* 	printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n",  */
-	/* 	       cos_get_thd_id(), cos_spd_id(), spdid); */
-	/* 	assert(0); */
-	/* } */
-	
-	// web server
 	test_control++;
-	if (spdid == 22 && cos_get_thd_id() == 15 && test_control == 500) {
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
 		printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
+	
+	/* // web server */
+	/* test_control++; */
+	/* if (spdid == 22 && cos_get_thd_id() == 15 && test_control == 500) { */
+	/* 	printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n", */
+	/* 	       cos_get_thd_id(), cos_spd_id(), spdid); */
+	/* 	assert(0); */
+	/* } */
 #endif
 
 	/* printc("before read: fso->size %d t->offset %d\n", fso->size, t->offset); */
 	left = fso->size - t->offset;
 	ret  = left > len ? len : left;
 
-	buf = cbufp_alloc(len, &cb);
+	buf = cbufp_alloc(ret, &cb);  // actual size
 	assert(buf);
 	cbufp_send_deref(cb);    // for tread, we need this to not keep cbufp around
 	assert(fso->data);
@@ -395,6 +393,7 @@ treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 	/* printc("read buf -- %s\n", buf); */
 	t->offset += ret;
 
+	*off = t->offset;
 	*sz = ret;
 	/* printc("after read: fso->size %d t->offset %d\n", fso->size, t->offset); */
 done:	
@@ -440,12 +439,6 @@ tmerge(spdid_t spdid, td_t td, td_t td_into, char *param, int len)
 	if (!fso->child) {
 		fsobj_rem(fso, fso->parent); 
 		fsobj_free(fso);
-		/* if (remove_cbuf_path(td)) BUG(); */
-		/*  At this point, re-tsplit should have a;ready rebuilt the list */
-		int t_fid = fid_lookup(td);
-		/* if (t_fid) { */
-		/* 	if (cbuf_rem_record(t_fid)) BUG(); */
-		/* } */
 	} else {
 		/* fso->zombie = 1; */
 		ERR_THROW(-EINVAL, done);
@@ -585,9 +578,10 @@ int cos_init(void)
 	rdtscll(end);
 	printc("COST (cos_init): %llu\n", end - start);
 
+	printc("spd %d heap pointer %p\n", cos_spd_id(), cos_get_heap_ptr());
+
 	// Jiguo: tracking the mapping between server tid and uniqid
 	cvect_init_static(&idmapping_vect);
-
 	// Jiguo: rdreflection
 	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
 		printc("\n\nneed do reflection now!!!!\n");

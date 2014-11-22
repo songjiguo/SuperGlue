@@ -6,7 +6,7 @@
  */
 
 #include <cos_component.h>
-#include <mbtorrent.h>
+#include <torrent.h>
 #include <torlib.h>
 
 #include <cbuf.h>

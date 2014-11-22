@@ -29,7 +29,7 @@
 #include <cos_map.h>
 #include <errno.h>
 
-#include <rtorrent.h>
+#include <torrent.h>
 #include <torlib.h>
 #include <cbuf.h>
 #include <periodic_wake.h>

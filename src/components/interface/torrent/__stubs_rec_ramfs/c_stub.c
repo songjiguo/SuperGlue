@@ -1,10 +1,8 @@
 /* Jiguo Song: ramfs FT */
-/* Note: 
-  1. Need deal 3 cases with cbufs
-     1) fault while writing, after cbuf2buf -- need save the contents on clients (make it read only?)
-     2) fault while writing, before cbuf2buf -- no need save the contents on clients (for now)
-     3) writing successfully, fault later (for now)
-*/
+/* Need deal 3 cases with cbufs 1) fault while writing, after cbuf2buf
+   -- need save the contents on clients (make it read only?)  2) fault
+   while writing, before cbuf2buf -- no need save the contents on
+   clients (for now) 3) writing successfully, fault later (for now) */
 
 #include <cos_component.h>
 #include <cos_debug.h>
@@ -12,7 +10,7 @@
 #include <cos_map.h>
 #include <cos_list.h>
 
-#include <rtorrent.h>
+#include <torrent.h>
 #include <cstub.h>
 
 #include <stdio.h>
@@ -450,16 +448,22 @@ CSTUB_FN(int, treadp)(struct usr_inv_cap *uc,
         volatile unsigned long long start, end;
 
 redo:
-        printc("treadp\n");
+        printc("treadp (spd %ld thd %d td %d)\n", cos_spd_id(), cos_get_thd_id(), td);
 	rd = rd_update(td, STATE_TREAD);
 	assert(rd);
+
+	printc("treadp cli (before): len %d off %d sz %d\n", len, *off, *sz);
 
 	CSTUB_INVOKE_3RETS(ret, fault, *off, *sz, uc, 3, spdid, rd->s_tid, len);
         if (unlikely(fault)) {
 		printc("treadp found a fault and ready to go to redo\n");
+		printc("treadp cli (in fault): ret %d len %d off %d sz %d\n", 
+		       ret, len, *off, *sz);
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
+
+	printc("treadp cli (after): len %d off %d sz %d\n", len, *off, *sz);
 
 	return ret;
 }

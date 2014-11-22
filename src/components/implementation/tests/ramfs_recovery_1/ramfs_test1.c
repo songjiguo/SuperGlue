@@ -12,7 +12,7 @@
 
 #include <cbuf.h>
 
-#include <rtorrent.h>
+#include <torrent.h>
 
 #define ITER 2000
 #define MAX_SZ 4096
@@ -77,42 +77,59 @@ test0(void)
 		printc("UNIT TEST FAILED: split3 failed %d\n", t2); return;
 	}
 
+#ifdef TEST_RAMFS_C3
+	ret1 = twritep_pack(cos_spd_id(), t1, data1, strlen(data1));
+	ret2 = twritep_pack(cos_spd_id(), t2, data2, strlen(data2));
+#else 
 	ret1 = twrite_pack(cos_spd_id(), t1, data1, strlen(data1));
 	ret2 = twrite_pack(cos_spd_id(), t2, data2, strlen(data2));
+#endif
 	printc("write %d & %d, ret %d & %d\n", strlen(data1), strlen(data2), ret1, ret2);
-
 
 	/* This is important!!!! release in the opposite order */
 	trelease(cos_spd_id(), t2);
 	trelease(cos_spd_id(), t1);
 
-	printc("\n>>>>>>ramfs test phase 3 start .... read\n");
-	t1 = tsplit(cos_spd_id(), td_root, params2, strlen(params2), TOR_ALL, evt1);
-	printc("\n[[[[[[.... 2nd tsplit\n");
-	t2 = tsplit(cos_spd_id(), t1, params1, strlen(params1), TOR_ALL, evt2);
-	if (t1 < 1 || t2 < 1) {
-		printc("UNIT TEST FAILED: later splits failed\n");
-		return;
+	int max_test;
+	
+	// need test for max number of allowed faults (ureboot)
+	for (max_test = 0; max_test < 400; max_test++) {
+		printc("\n>>>>>>ramfs test phase 3 start .... (iter %d)\n", max_test);
+		t1 = tsplit(cos_spd_id(), td_root, params2, strlen(params2), TOR_ALL, evt1);
+		/* printc("\n[[[[[[.... 2nd tsplit\n"); */
+		t2 = tsplit(cos_spd_id(), t1, params1, strlen(params1), TOR_ALL, evt2);
+		if (t1 < 1 || t2 < 1) {
+			printc("UNIT TEST FAILED: later splits failed\n");
+			return;
+		}
+
+		/* printc("\n[[[[[[.... 1st tread\n"); */
+#ifdef TEST_RAMFS_C3
+		ret1 = treadp_pack(cos_spd_id(), t1, buffer, 1023);
+#else
+		ret1 = tread_pack(cos_spd_id(), t1, buffer, 1023);
+#endif
+		if (ret1 > 0) buffer[ret1] = '\0';
+		assert(!strcmp(buffer, data1));
+		// treadp does not return length, instead return cbid
+		/* assert(ret1 == strlen(data1)); */
+		printc("read %d (%d): %s (%s)\n", ret1, strlen(data1), buffer, data1);
+		buffer[0] = '\0';
+
+#ifdef TEST_RAMFS_C3
+		ret1 = treadp_pack(cos_spd_id(), t2, buffer, 1023);
+#else
+		ret1 = tread_pack(cos_spd_id(), t2, buffer, 1023);
+#endif
+		if (ret1 > 0) buffer[ret1] = '\0';
+		assert(!strcmp(buffer, data2));
+		/* assert(ret1 == strlen(data2)); */
+		printc("read %d (%d): %s (%s)\n", ret1, strlen(data2), buffer, data2);
+		buffer[0] = '\0';
+
+		trelease(cos_spd_id(), t2);
+		trelease(cos_spd_id(), t1);
 	}
-
-	printc("\n[[[[[[.... 1st tread\n");
-	ret1 = tread_pack(cos_spd_id(), t1, buffer, 1023);
-	if (ret1 > 0) buffer[ret1] = '\0';
-	assert(!strcmp(buffer, data1));
-	// treadp does not return length, instead return cbid
-	/* assert(ret1 == strlen(data1)); */
-	printc("read %d (%d): %s (%s)\n", ret1, strlen(data1), buffer, data1);
-	buffer[0] = '\0';
-
-	ret1 = tread_pack(cos_spd_id(), t2, buffer, 1023);
-	if (ret1 > 0) buffer[ret1] = '\0';
-	assert(!strcmp(buffer, data2));
- 	/* assert(ret1 == strlen(data2)); */
-	printc("read %d (%d): %s (%s)\n", ret1, strlen(data2), buffer, data2);
-	buffer[0] = '\0';
-
-	trelease(cos_spd_id(), t2);
-	trelease(cos_spd_id(), t1);
 
 	printc("\nRAMFS Testing Done.....\n\n");
 	return;
@@ -142,7 +159,7 @@ cos_init(void)
 /* #include <sched.h> */
 /* #include <cbuf.h> */
 /* #include <evt.h> */
-/* #include <rtorrent.h> */
+/* #include <torrent.h> */
 
 /* #include <periodic_wake.h> */
 /* #include <timed_blk.h> */

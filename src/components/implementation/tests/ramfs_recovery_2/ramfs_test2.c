@@ -4,7 +4,7 @@
 #include <cbuf.h>
 #include <evt.h>
 
-#include <rtorrent.h>
+#include <torrent.h>
 
 char buffer[1024];
 

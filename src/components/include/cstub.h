@@ -49,7 +49,7 @@
  */
 #define CSTUB_ASM_OUT(_ret, _fault) "=a" (_ret), "=c" (_fault)
 #define CSTUB_ASM_OUT_3RETS(_ret0, _fault, _ret1, _ret2) \
-	"=a" (_ret0), "=c" (_fault), "=b" (_ret1), "=D" (_ret2)
+	"=a" (_ret0), "=r" (_fault), "=r" (_ret1), "=r" (_ret2)
 // Jiguo: above 3RETS needs sepcifically not clobber ecx and edi
 /* #define CSTUB_ASM_OUT(_ret, _fault) "=a" (_ret), "=c" (_fault) */
 /* #define CSTUB_ASM_OUT_3RETS(_ret0, _fault, _ret1, _ret2) \ */
@@ -112,13 +112,11 @@
 		CSTUB_ASM_POST_3RETS_##_narg()				\
 		: CSTUB_ASM_OUT_3RETS(_ret0, _fault, _ret1, _ret2)	\
 		: CSTUB_ASM_IN_##_narg(__VA_ARGS__)			\
-		: CSTUB_ASM_CLOBBER_3()					\
+		: CSTUB_ASM_CLOBBER_4()					\
 		)
-/* : CSTUB_ASM_CLOBBER_3()		    \ */
-/* Jiguo: this used to be used for 3RETS, however, the clobber list
- * should not include edi. So it should be CSTUB_ASM_CLOBBER_3(), not
- * CSTUB_ASM_CLOBBER_2()  */
-/* : CSTUB_ASM_CLOBBER_##_narg() \ */  
+/* Jiguo: above last line indicates that the clobber list should not
+ * include any register for treadp. It should be
+ * CSTUB_ASM_CLOBBER_4(), not CSTUB_ASM_CLOBBER_3()  */
 
 /* Use CSTUB_INVOKE() to make a capability invocation with _uc.
  * 	_ret: output return variable

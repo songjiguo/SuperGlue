@@ -8,8 +8,7 @@
 #ifndef TORLIB_H
 #define TORLIB_H
 
-#include <../../interface/torrent/torrent.h>
-//#include <torrent.h>
+#include <torrent.h>
 #include <cos_map.h>
 #include <stdio.h>
 #include <string.h>

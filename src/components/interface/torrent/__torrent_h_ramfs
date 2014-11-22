@@ -15,6 +15,8 @@
 
 /* 2 threads, operate on the different files(T1 writes foo/bar/who, T2 writes foo/boo/who) */
 
+#define TEST_RAMFS_C3  // usefd for client test program only
+
 /* #define TEST_RAMFS_TSPLIT_BEFORE */
 /* #define TEST_RAMFS_TSPLIT_AFTER */
 #define TEST_RAMFS_TREADP
@@ -30,6 +32,7 @@ typedef enum {
 	TOR_READ  = 0x2,
 	TOR_SPLIT = 0x4,
 	TOR_NONPERSIST = 0x8,
+	TOR_WAIT  = 0x10,   // Jiguo: add this to differentiate the evt_wait after tsplit
 	TOR_RW    = TOR_WRITE | TOR_READ, 
 	TOR_ALL   = TOR_RW    | TOR_SPLIT /* 0 is a synonym */
 } tor_flags_t;
@@ -38,33 +41,35 @@ td_t tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, l
 void trelease(spdid_t spdid, td_t tid);
 int tmerge(spdid_t spdid, td_t td, td_t td_into, char *param, int len);
 int tread(spdid_t spdid, td_t td, int cbid, int sz);
+
+/* No idea why do we need off returned? */
 int treadp(spdid_t spdid, td_t td, int len, int *off, int *sz);
+
 int twrite(spdid_t spdid, td_t td, int cbid, int sz);
 int twritep(spdid_t spdid, td_t td, int cbid, int sz);
 int trmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, char *retval, unsigned int max_rval_len);
 int twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen);
 
+/* treadp/twritep version of pack -- using cbufp */
 static inline int
-tread_pack(spdid_t spdid, td_t td, char *data, int len)
+treadp_pack(spdid_t spdid, td_t td, char *data, int len)
 {
 	cbufp_t cb;
 	char *d;
-	int ret = 0;
 	int off, sz;
-	sz = len; // for ramfs, "arbitrary" bytes can be read off
 	
 	cb = treadp(spdid, td, len, &off, &sz);
-	printc("after treadp in tread_pack len %d sz %d\n", len, sz);
+	/* printc("after treadp in tread_pack off %d sz %d\n", off, sz); */
 	if (!cb < 0) return 0;
 	d = cbufp2buf(cb, sz);
-	printc("data %s\n", d);
+	/* printc("data %s\n", d); */
 	memcpy(data, d, sz);
 	cbufp_deref(cb);
 	return sz;
 }
 
 static inline int
-twrite_pack(spdid_t spdid, td_t td, char *data, int len)
+twritep_pack(spdid_t spdid, td_t td, char *data, int len)
 {
 	cbufp_t cb;
 	char *d;
@@ -76,6 +81,45 @@ twrite_pack(spdid_t spdid, td_t td, char *data, int len)
 	memcpy(d, data, len);
 	ret = twritep(spdid, td, cb, len);
 	cbufp_deref(cb);
+	
+	return ret;
+}
+
+/* tread/twrite version of pack -- using cbuf */
+static inline int
+tread_pack(spdid_t spdid, td_t td, char *data, int len)
+{
+	cbuf_t cb;
+	char *d;
+	int ret;
+
+	d = cbuf_alloc(len, &cb);
+	if (!d) return -1;
+
+	ret = tread(spdid, td, cb, len);
+        if (ret < 0) goto free;
+        if (ret > len) {
+                ret = len; /* FIXME: this is broken, and we should figure out a better solution */
+        }
+	memcpy(data, d, ret);
+free:
+	cbuf_free(cb);
+	return ret;
+}
+
+static inline int
+twrite_pack(spdid_t spdid, td_t td, char *data, int len)
+{
+	cbuf_t cb;
+	char *d;
+	int ret;
+
+	d = cbuf_alloc(len, &cb);
+	if (!d) return -1;
+
+	memcpy(d, data, len);
+	ret = twrite(spdid, td, cb, len);
+	cbuf_free(cb);
 	
 	return ret;
 }

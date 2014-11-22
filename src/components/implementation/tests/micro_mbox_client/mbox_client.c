@@ -6,7 +6,7 @@
 #include <sched.h>
 #include <cbuf.h>
 #include <evt.h>
-#include <mbtorrent.h>
+#include <torrent.h>
 #include <periodic_wake.h>
 
 

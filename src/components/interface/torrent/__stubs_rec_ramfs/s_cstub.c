@@ -1,4 +1,4 @@
-#include <mbtorrent.h>
+#include <torrent.h>
 
 struct __sg_tsplit_data {
 	td_t tid;
@@ -19,14 +19,23 @@ td_t __sg_tsplit(spdid_t spdid, cbuf_t cbid, int len)
 	if (unlikely(((int)(d->len[1] + sizeof(struct __sg_tsplit_data))) != len)) return -4;
 	if (unlikely(d->tid == 0)) return -EINVAL;
 
+	printc("tsplit ser: tid %d\n", d->tid);
 	return tsplit(spdid, d->tid, &d->data[0], 
 		      d->len[1] - d->len[0], d->tflags, d->evtid);
 }
 
 int
-__sg_treadp(spdid_t spdid, int sz, int __pad0, int __pad1, int *off_len)
+__sg_treadp(spdid_t spdid, int tid, int len, int __pad0, int *off_len)
 {
-        return treadp(spdid, sz, &off_len[0], &off_len[1]);
+	int ret = 0;
+	/* printc("treadp ser passed in: spdid %d tid %d len %d\n", */
+	/*        spdid, tid, len); */
+	/* printc("treadp ser (before): ret %d off_len[0] %d off_len[1] %d\n", */
+	/*        ret, off_len[0], off_len[1]); */
+        ret = treadp(spdid, tid, len, &off_len[0], &off_len[1]);
+	/* printc("treadp ser (after): ret %d off_len[0] %d off_len[1] %d\n", */
+	/*        ret, off_len[0], off_len[1]); */
+	return ret;
 }
 
 struct __sg_tmerge_data {
@@ -91,3 +100,4 @@ __sg_twmeta(spdid_t spdid, cbuf_t cbid, int len)
         return twmeta(spdid, d->td, &d->data[0], d->klen, 
                         &d->data[d->klen + 1], d->vlen);
 }
+

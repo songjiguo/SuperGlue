@@ -11,7 +11,7 @@ RECOVERY = 0
 ########################################
 # interface
 #######################################
-service_names = ['mem_mgr','rtorrent', 'sched', 'timed_blk', 'periodic_wake', 'cbuf_c', 'llboot', 'lock', 'evt', 'mbtorrent']
+service_names = ['mem_mgr','ramfs', 'sched', 'timed_blk', 'periodic_wake', 'cbuf_c', 'llboot', 'lock', 'evt', 'mbox']
 
 # interface
 interface_path = '/src/components/interface/'
@@ -25,9 +25,10 @@ mm_rec_h = '__mem_mgr_rec.h'
 mm_nor_h = '__mem_mgr.h'
 mm_header = 'mem_mgr.h'
 
-ramfs_rec_h = '__rtorrent_h_rec'
-ramfs_nor_h = '__rtorrent_h'
-ramfs_header = 'rtorrent.h'
+ramfs_rec_h = '__torrent_h_ramfs'
+mbox_rec_h = '__torrent_h_mbox'
+torrent_nor_h = '__torrent_h'
+torrent_header = 'torrent.h'
 
 cbufc_rec_h = '__cbuf_c_h_rec'
 cbufc_nor_h = '__cbuf_c_h'
@@ -208,9 +209,14 @@ def set_reflection_interface(name, par):
 def set_interface(name, par):
 
     global RECOVERY
-    prefix = path + interface_path + name
-    os.chdir(prefix)
 
+    prefix = path + interface_path
+    if (name == 'ramfs') or (name == 'mbox'):
+        prefix = prefix + 'torrent'
+    else:
+        prefix = prefix + name
+
+    os.chdir(prefix)
     if (par == 0):
         ret = query(name, '0')
         if (ret == '0'):
@@ -225,19 +231,22 @@ def set_interface(name, par):
             os.system("ln -s " + p_nor + " " + p_dst)
         elif (ret == 'recovery') or (ret == 'r'):
             RECOVERY = 1
-            os.system("ln -s " + p_rec + " " + p_dst)
+            if (name == 'ramfs') or (name == 'mbox'):
+                os.system("ln -s " + p_rec + "_"+ name + " " + p_dst)
+            else:
+                os.system("ln -s " + p_rec + " " + p_dst)
         elif (ret == 'log') or (ret == 'l'):
             os.system("ln -s " + p_log + " " + p_dst)
         else:
             os.system("ln -s " + p_nor + " " + p_dst)
 
-        if (name == 'mbtorrent') or (name == 'periodic_wake'):
+        if (name == 'mbox') or (name == 'periodic_wake'):
             set_reflection_interface('evt', ret)
 
         if (name == 'lock') or (name == 'evt'):
             set_reflection_interface('sched', ret)
 
-        if (name == 'mbtorrent') or (name == 'evt') or (name == 'rtorrent'):
+        if (name == 'mbox') or (name == 'evt') or (name == 'ramfs'):
             set_reflection_interface('lock', ret)
 
         return ret
@@ -245,7 +254,7 @@ def set_interface(name, par):
 def set_link(name, c_path, dest, nor, rec, par):
 
     global RECOVERY
-    
+
     if (par == 0):
         ret = set_interface(name, par)
         if (ret == '0'):
@@ -266,21 +275,21 @@ def set_link(name, c_path, dest, nor, rec, par):
 
     prefix_ramfs = path + c_path
     os.chdir(prefix_ramfs)
-    
+
     if os.path.exists(dest):
         os.unlink(dest)
-    if (name == "rtorrent" or name == "llboot" or name == "mbtorrent"):  # temp, remove later
+    if (name == "llboot"):
         if os.path.exists("Makefile"):
             os.unlink("Makefile")
     if (ret == 'normal') or (ret == 'n'):
         os.system("ln -s " + nor + " " + dest)
-        if (name == "rtorrent" or name == "llboot" or name == "mbtorrent"):  # temp, remove later
-            os.system("ln -s __Makefile  Makefile")  # temp, remove later
+        if (name == "llboot"):
+            os.system("ln -s __Makefile  Makefile")
     elif (ret == 'recovery') or (ret == 'r'):
         RECOVERY = 1
         os.system("ln -s " + rec + " " + dest)
-        if (name == "rtorrent" or name == "llboot" or name == "mbtorrent"):  # temp, remove later
-            os.system("ln -s __Makefile_rec  Makefile")  # temp, remove later
+        if (name == "llboot"):
+            os.system("ln -s __Makefile_rec  Makefile") 
     else:
         os.system("ln -s " + nor + " " + dest)
 
@@ -314,15 +323,16 @@ def main():
             ret = set_link(service_names[i], sched_component_path, sched_c, sched_nor_c, sched_rec_c, 0)
             print            
         # component FS
-        if (service_names[i] == 'rtorrent'):
+        if (service_names[i] == 'ramfs'):
             print service_names[i]
             ret = set_link(service_names[i], ramfs_component_path, ramfs_c, ramfs_nor_c, ramfs_rec_c, 0)
-            set_link(service_names[i], interface_path+service_names[i], ramfs_header, ramfs_nor_h, ramfs_rec_h, ret)
+            set_link(service_names[i], interface_path +'torrent', torrent_header, torrent_nor_h, ramfs_rec_h, ret)
             print
         # component MBOX
-        if (service_names[i] == 'mbtorrent'):
+        if (service_names[i] == 'mbox'):
             print service_names[i]
             set_link(service_names[i], mbox_component_path, mbox_c, mbox_nor_c, mbox_rec_c, 0)
+            set_link(service_names[i], interface_path+'torrent', torrent_header, torrent_nor_h, mbox_rec_h, ret)
             print
         # component TE
         if (service_names[i] == 'timed_blk'):

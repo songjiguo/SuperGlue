@@ -31,11 +31,11 @@ td_t __sg_tsplit(spdid_t spdid, cbuf_t cbid, int len)
 }
 
 int
-__sg_treadp(spdid_t spdid, int tid, int __pad0, int __pad1, int *off_len)
+__sg_treadp(spdid_t spdid, int tid, int leb, int __pad0, int __pad1, int *off_len)
 {
 	/* printc("server: treadp (thd %d from spd %d)\n", cos_get_thd_id(), spdid); */
 	assert(tid);
-	return treadp(spdid, tid, &off_len[0], &off_len[1]);
+	return treadp(spdid, tid, len, &off_len[0], &off_len[1]);
 }
 
 struct __sg_tmerge_data {

@@ -31,8 +31,7 @@
 
 #include <evt.h>
 
-//#include <torrent.h>
-#include <rtorrent.h>
+#include <torrent.h>
 #include <torlib.h>
 #include <cbuf.h>
 #include <periodic_wake.h>
@@ -41,7 +40,6 @@
 static cos_lock_t h_lock;
 #define LOCK() if (lock_take(&h_lock)) BUG();
 #define UNLOCK() if (lock_release(&h_lock)) BUG();
-
 
 extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
 extern void server_trelease(spdid_t spdid, td_t tid);

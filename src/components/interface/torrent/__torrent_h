@@ -12,20 +12,6 @@
 #include <cbuf.h>
 #include <evt.h>
 
-//#define TSPLIT_FAULT
-//#define TWRITE_FAULT
-//#define TREAD_FAULT
-//#define TRELEASE_FAULT
-
-#define TEST_0	   /* unit test */
-//#define TEST_1   /* single thread fails (T writes to foo/bar/who) */
-//#define TEST_2   /* 2 threads, operate on the same files, one fails, (Both writes to foo/bar/who) */
-//#define TEST_3   /* 2 threads, operate on the different files(T1 writes foo/bar/who, T2 writes foo/boo/who) */
-#ifdef TEST_3
-#define TEST_4     /* two component A and B, A writes and B will fault later */
-#endif
-
-
 /* torrent descriptor */
 typedef int td_t;
 static const td_t td_null = 0, td_root = 1;
@@ -33,6 +19,8 @@ typedef enum {
 	TOR_WRITE = 0x1,
 	TOR_READ  = 0x2,
 	TOR_SPLIT = 0x4,
+	TOR_NONPERSIST = 0x8,
+	TOR_WAIT  = 0x10,   // Jiguo: add this for the evt_wait after tsplit
 	TOR_RW    = TOR_WRITE | TOR_READ, 
 	TOR_ALL   = TOR_RW    | TOR_SPLIT /* 0 is a synonym */
 } tor_flags_t;
@@ -41,11 +29,49 @@ td_t tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, l
 void trelease(spdid_t spdid, td_t tid);
 int tmerge(spdid_t spdid, td_t td, td_t td_into, char *param, int len);
 int tread(spdid_t spdid, td_t td, int cbid, int sz);
-int treadp(spdid_t spdid, td_t td, int *off, int *sz);
+int treadp(spdid_t spdid, td_t td, int len, int *off, int *sz);
 int twrite(spdid_t spdid, td_t td, int cbid, int sz);
+int twritep(spdid_t spdid, td_t td, int cbid, int sz);
 int trmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, char *retval, unsigned int max_rval_len);
 int twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen);
 
+
+/* treadp/twritep version of pack -- using cbufp */
+static inline int
+treadp_pack(spdid_t spdid, td_t td, char *data, int len)
+{
+	cbufp_t cb;
+	char *d;
+	int off, sz;
+	
+	cb = treadp(spdid, td, len, &off, &sz);
+	/* printc("after treadp in tread_pack off %d sz %d\n", off, sz); */
+	if (!cb < 0) return 0;
+	d = cbufp2buf(cb, sz);
+	/* printc("data %s\n", d); */
+	memcpy(data, d, sz);
+	cbufp_deref(cb);
+	return sz;
+}
+
+static inline int
+twritep_pack(spdid_t spdid, td_t td, char *data, int len)
+{
+	cbufp_t cb;
+	char *d;
+	int ret;
+
+	d = cbufp_alloc(len, &cb);
+	if (!d) return -1;
+	cbufp_send(cb);
+	memcpy(d, data, len);
+	ret = twritep(spdid, td, cb, len);
+	cbufp_deref(cb);
+	
+	return ret;
+}
+
+/* tread/twrite version of pack -- using cbuf */
 static inline int
 tread_pack(spdid_t spdid, td_t td, char *data, int len)
 {
@@ -63,7 +89,7 @@ tread_pack(spdid_t spdid, td_t td, char *data, int len)
         }
 	memcpy(data, d, ret);
 free:
-	cbuf_free(d);	
+	cbuf_free(cb);
 	return ret;
 }
 
@@ -79,7 +105,7 @@ twrite_pack(spdid_t spdid, td_t td, char *data, int len)
 
 	memcpy(d, data, len);
 	ret = twrite(spdid, td, cb, len);
-	cbuf_free(d);
+	cbuf_free(cb);
 	
 	return ret;
 }

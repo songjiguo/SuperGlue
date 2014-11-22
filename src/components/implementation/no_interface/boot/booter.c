@@ -205,6 +205,8 @@ boot_spd_map_populate(struct cobj_header *h, spdid_t spdid, vaddr_t comp_info, i
 	start_addr = local_md[spdid].page_start;
 	init_daddr = cobj_sect_get(h, 0)->vaddr;
 
+	/* printc("spdid %d start_addr %p init_daddr %p\n", spdid, start_addr, init_daddr); */
+	
 	for (i = 0 ; i < h->nsect ; i++) {
 		struct cobj_sect *sect;
 		vaddr_t dest_daddr;
