@@ -2,18 +2,13 @@
 #include <print.h>
 #include <sched.h>
 #include <mem_mgr.h>
-
 #include <evt.h>
-
 #include <periodic_wake.h>
 #include <timed_blk.h>
 
+#include <c3_test.h>
 
 // test evt: 10 and 13, 11 and 12
-
-#define EXAMINE_MM
-//#define EXAMINE_LOCK
-//#define EXAMINE_EVT
 
 long passed_evtid;
 
@@ -193,5 +188,20 @@ int ec3_ser2_pass(long id)
 }
 
 #endif
+
+#ifdef EXAMINE_RAMFS
+
+vaddr_t ec3_ser2_test(void)
+{
+	return 0;
+}
+
+int ec3_ser2_pass(long id)
+{
+	return 0;
+}
+
+#endif
+
 
 

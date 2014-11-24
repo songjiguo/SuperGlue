@@ -364,7 +364,7 @@ treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 
 	// ubenchmark
 	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
+	if (spdid == 17 && cos_get_thd_id() == 14 && test_control == 2) {
 		printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);

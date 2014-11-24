@@ -15,7 +15,6 @@
 /* #define BENCHMARK_MEAS_WAIT */
 /* #define BENCHMARK_MEAS_FREE */
 
-
 typedef enum {
 	EVT_NIL   = 0,
 	EVT_READ  = 0x1, 

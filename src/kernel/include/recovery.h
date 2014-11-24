@@ -219,9 +219,15 @@ ipc_fault_detect(struct invocation_cap *cap_entry, struct spd *dest_spd)
 }
 
 static inline int
-pop_fault_detect(struct thd_invocation_frame *prev_frame)
+pop_fault_detect(struct thd_invocation_frame *inv_frame)
 {
-	if (prev_frame->fault.cnt != prev_frame->spd->fault.cnt) return 1;
+	if (spd_get_index(inv_frame->spd) == 6) return 0;  // test pgfault spd
+	if (inv_frame->fault.cnt != inv_frame->spd->fault.cnt) {
+		printk("cos: inv_frame spd %d spd fault cnt %d frame fault cnt %d\n", 
+		       spd_get_index(inv_frame->spd), inv_frame->spd->fault.cnt,
+		       inv_frame->fault.cnt);
+		return 1;
+	}
 	else return 0;
 }
 
@@ -372,22 +378,23 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 	case COS_CAP_FAULT_UPDATE: 		/* Update fault counter for this client */
 		/* Update the fault counter for invocation (e.g.,
 		 * destination spd)*/
-		
 		if (cap_entry->fault.cnt == cap_entry->destination->fault.cnt) {
 			ret = cap_entry->destination->fault.cnt;
+			printk("(1) ret %d\n", ret);
 			break;
 		}
 		
 		for (i = 1; i < d_spd->ncaps ; i++) {
 			struct invocation_cap *cap = &d_spd->caps[i];
-			/* printk("cap->destination %d cap_entry->destination %d\n", */
-			/*        spd_get_index(cap->destination),  */
-			/*        spd_get_index(cap_entry->destination)); */
+			printk("cap->destination %d cap_entry->destination %d\n",
+			       spd_get_index(cap->destination),
+			       spd_get_index(cap_entry->destination));
 			if (cap->destination == cap_entry->destination) {
 				cap->fault.cnt = cap_entry->destination->fault.cnt;
 			}
 		}
 		ret = cap_entry->destination->fault.cnt;
+		printk("(2) ret %d\n", ret);
 		break;
 	case COS_CAP_REFLECT_UPDATE: 		/* Update reflect counter for this client */
 		printk("check if reflection counter\n");

@@ -358,6 +358,7 @@ enum {
 	COS_THD_INVFRM_SP,	/* get the stack pointer in an inv frame  */
 	COS_THD_INVFRM_SET_SP,
 	COS_THD_HOME_SPD,  //Jiguo: used to find home spd
+	COS_SPD_FAULT_UPDATE_FRAME, // Jiguo: update pgfault fault counter from frame
 	/* 
 	 * For SWIFI only
 	 */

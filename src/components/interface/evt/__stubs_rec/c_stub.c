@@ -319,7 +319,6 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
-
 #ifdef BENCHMARK_MEAS_CREATE
 		meas_flag = 1;
 		printc("start measuring.....\n");

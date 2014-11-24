@@ -13,6 +13,7 @@
 #include <sched.h>
 #include <timed_blk.h>
 #include <cos_alloc.h>
+#include <evt.h>
 
 #include <cbuf_c.h>
 #include <stkmgr.h>

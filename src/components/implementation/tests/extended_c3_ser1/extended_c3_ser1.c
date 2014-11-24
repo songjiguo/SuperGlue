@@ -1,24 +1,39 @@
 #include <cos_component.h>
 #include <print.h>
 #include <sched.h>
-#include <mem_mgr.h>
-
 #include <evt.h>
-
 #include <periodic_wake.h>
 #include <timed_blk.h>
+#include <cbuf.h>
+#include <torrent.h>
+
+#include <c3_test.h>
 
 #include <ec3_ser2.h>
 #include <ec3_ser3.h>
 
+/* /\* torrent depends on mem_mgr_large and valloc, so cslab use it as */
+/*  * well *\/ */
+/* #ifdef EXAMINE_RAMFS */
+/* #include <mem_mgr_large.h> */
+/* #include <valloc.h> */
+/* #else */
+/* #include <mem_mgr.h> */
+/* #endif */
+
+#include <mem_mgr_large.h>
+#include <valloc.h>
+
 
 volatile unsigned long long overhead_start, overhead_end;
 
-#define EXAMINE_MM
-//#define EXAMINE_SCHED
-//#define EXAMINE_TE
-//#define EXAMINE_LOCK
-//#define EXAMINE_EVT
+/****************************
+ _            _    
+| | ___   ___| | __
+| |/ _ \ / __| |/ /
+| | (_) | (__|   < 
+|_|\___/ \___|_|\_\
+****************************/
 
 #ifdef EXAMINE_LOCK
 #include <cos_synchronization.h>
@@ -129,6 +144,13 @@ cos_init(void)
 
 #endif
 
+/****************************
+            _   
+  _____   _| |_ 
+ / _ \ \ / / __|
+|  __/\ V /| |_ 
+ \___| \_/  \__|
+****************************/
 
 #ifdef EXAMINE_EVT
 
@@ -174,7 +196,7 @@ static void try_mp(void)
 	return;
 }
 
-vaddr_t ec3_ser1_test(vint low, int mid, int hig)
+vaddr_t ec3_ser1_test(int low, int mid, int hig)
 {
 	if (cos_get_thd_id() == hig) {
 		printc("\n<< Test start in spd %d ... >>>\n\n", cos_get_thd_id());
@@ -189,6 +211,14 @@ vaddr_t ec3_ser1_test(vint low, int mid, int hig)
 }
 
 #endif
+
+/****************************
+ _       
+| |_ ___ 
+| __/ _ \
+| ||  __/
+ \__\___|
+****************************/
 
 
 #ifdef EXAMINE_TE
@@ -247,6 +277,15 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 
 #endif
 
+/****************************
+          _              _ 
+ ___  ___| |__   ___  __| |
+/ __|/ __| '_ \ / _ \/ _` |
+\__ \ (__| | | |  __/ (_| |
+|___/\___|_| |_|\___|\__,_|
+                           
+****************************/
+
 #ifdef EXAMINE_SCHED
 
 #define LOCK()   if (sched_component_take(cos_spd_id())) assert(0);
@@ -282,6 +321,13 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 }
 
 #endif
+
+/****************************
+ _ __ ___  _ __ ___  
+| '_ ` _ \| '_ ` _ \ 
+| | | | | | | | | | |
+|_| |_| |_|_| |_| |_|
+****************************/
 
 #ifdef EXAMINE_MM
 
@@ -353,4 +399,116 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 
 #endif
 
+/****************************
+                      __     
+ _ __ __ _ _ __ ___  / _|___ 
+| '__/ _` | '_ ` _ \| |_/ __|
+| | | (_| | | | | | |  _\__ \
+|_|  \__,_|_| |_| |_|_| |___/
+****************************/
 
+#ifdef EXAMINE_RAMFS
+
+char buffer[1024];
+
+static void
+ramfs_test(void)
+{
+	td_t t1, t2, t3;
+	long evt1, evt2, evt3;
+	char *params1 = "bar";
+	char *params2 = "foo/";
+	char *params3 = "foo/bar";
+	char *data1 = "1234567890", *data2 = "asdf;lkj", *data3 = "asdf;lkj1234567890";
+	unsigned int ret1, ret2;
+
+	evt1 = evt_split(cos_spd_id(), 0, 0);
+	evt2 = evt_split(cos_spd_id(), 0, 0);
+	/* evt3 = evt_create(cos_spd_id()); */
+	assert(evt1 > 0 && evt2 > 0);
+	
+	printc("\nRAMFS Testing Starting (in ser1 %d).....(thd %d)\n\n", 
+	       cos_spd_id(), cos_get_thd_id());
+
+	t1 = tsplit(cos_spd_id(), td_root, params1, strlen(params1), TOR_ALL, evt1);
+	if (t1 < 1) {
+		printc("UNIT TEST FAILED: split failed %d\n", t1);
+		return;
+	}
+	trelease(cos_spd_id(), t1);
+	
+	t1 = tsplit(cos_spd_id(), td_root, params2, strlen(params2), TOR_ALL, evt1);
+	if (t1 < 1) {
+		printc("UNIT TEST FAILED: split2 failed %d\n", t1); return;
+	}
+
+	t2 = tsplit(cos_spd_id(), t1, params1, strlen(params1), TOR_ALL, evt2);
+	if (t2 < 1) {
+		printc("UNIT TEST FAILED: split3 failed %d\n", t2); return;
+	}
+
+#ifdef TEST_RAMFS_C3
+	ret1 = twritep_pack(cos_spd_id(), t1, data1, strlen(data1));
+	ret2 = twritep_pack(cos_spd_id(), t2, data2, strlen(data2));
+#else 
+	ret1 = twrite_pack(cos_spd_id(), t1, data1, strlen(data1));
+	ret2 = twrite_pack(cos_spd_id(), t2, data2, strlen(data2));
+#endif
+	printc("write %d & %d, ret %d & %d\n", strlen(data1), strlen(data2), ret1, ret2);
+
+	/* This is important!!!! release in the opposite order */
+	trelease(cos_spd_id(), t2);
+	trelease(cos_spd_id(), t1);
+
+	int max_test;
+	
+	// need test for max number of allowed faults (ureboot)
+	for (max_test = 0; max_test < 400; max_test++) {
+		printc("\n>>>>>>ramfs test phase 3 start .... (iter %d)\n", max_test);
+		t1 = tsplit(cos_spd_id(), td_root, params2, strlen(params2), TOR_ALL, evt1);
+		/* printc("\n[[[[[[.... 2nd tsplit\n"); */
+		t2 = tsplit(cos_spd_id(), t1, params1, strlen(params1), TOR_ALL, evt2);
+		if (t1 < 1 || t2 < 1) {
+			printc("UNIT TEST FAILED: later splits failed\n");
+			return;
+		}
+
+		/* printc("\n[[[[[[.... 1st tread\n"); */
+#ifdef TEST_RAMFS_C3
+		ret1 = treadp_pack(cos_spd_id(), t1, buffer, 1023);
+#else
+		ret1 = tread_pack(cos_spd_id(), t1, buffer, 1023);
+#endif
+		if (ret1 > 0) buffer[ret1] = '\0';
+		assert(!strcmp(buffer, data1));
+		// treadp does not return length, instead return cbid
+		/* assert(ret1 == strlen(data1)); */
+		printc("read %d (%d): %s (%s)\n", ret1, strlen(data1), buffer, data1);
+		buffer[0] = '\0';
+
+#ifdef TEST_RAMFS_C3
+		ret1 = treadp_pack(cos_spd_id(), t2, buffer, 1023);
+#else
+		ret1 = tread_pack(cos_spd_id(), t2, buffer, 1023);
+#endif
+		if (ret1 > 0) buffer[ret1] = '\0';
+		assert(!strcmp(buffer, data2));
+		/* assert(ret1 == strlen(data2)); */
+		printc("read %d (%d): %s (%s)\n", ret1, strlen(data2), buffer, data2);
+		buffer[0] = '\0';
+
+		trelease(cos_spd_id(), t2);
+		trelease(cos_spd_id(), t1);
+	}
+
+	printc("\nRAMFS Testing Done.....\n\n");
+	return;
+}
+
+vaddr_t ec3_ser1_test(int low, int mid, int hig)
+{
+	if (cos_get_thd_id() == hig) ramfs_test();
+	return 0;
+}
+
+#endif

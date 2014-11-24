@@ -84,7 +84,7 @@ rdblk_addblk(struct rec_data_blk *rd, struct blocked_thd *ptr_blkthd, int dep_th
 
 	INIT_LIST(ptr_blkthd, next, prev);
 	ADD_END_LIST(&rd->blkthd, ptr_blkthd, next, prev);
-	/* printc("\n[[[[sched_block: tracking...ptr_blkthd %p (thd %d  spd %d rd->blkthd addr %p)]]]\n\n", ptr_blkthd, cos_get_thd_id(), rd->spdid, &rd->blkthd); */
+	printc("\n[[[[sched_block: tracking...ptr_blkthd %p (thd %d  spd %d rd->blkthd addr %p)]]]\n\n", ptr_blkthd, cos_get_thd_id(), rd->spdid, &rd->blkthd);
        
 	return;
 }
@@ -126,8 +126,10 @@ int __sg_sched_block(spdid_t spdid, int dependency_thd)
 	cos_sched_lock_release();
 
 	rdtscll(overhead_end);
-	printc("sched_block interface overhead %llu\n", 
-	       overhead_end - overhead_start + tmp_overhead);
+	/* printc("sched_block interface overhead %llu\n",  */
+	/*        overhead_end - overhead_start + tmp_overhead); */
+	printc("thd %d returns from sched_block server interface (back to spd %d)\n", 
+	       cos_get_thd_id(), spdid);
 
 	return 0;
 }

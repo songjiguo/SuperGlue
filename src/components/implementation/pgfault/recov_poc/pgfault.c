@@ -32,15 +32,21 @@ int fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip
 	int tid = cos_get_thd_id();
 	
 	/* if (spdid != cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) { */
+
+	/* assert(!cos_fault_cntl(COS_SPD_FAULT_UPDATE_FRAME, spdid, 0)); */
 	assert(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0));
 	assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));
 	assert(!cos_thd_cntl(COS_THD_INVFRM_SET_IP, tid, 1, r_ip-8));
+
+
 	/* } else { */
 
 	/* if (spdid == cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) { */
 	/* 	printc("set thd %d 's eip (find next)\n", tid); */
 	/* 	sched_block(cos_spd_id(), 0); */
 	/* } */
+
+	/* printc("pgfault notifier returning...: spdid %d (thd %d)\n", spdid, cos_get_thd_id()); */
 
 	return 0;
 }
@@ -58,7 +64,7 @@ int fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *i
 
 	/* remove this for web server test */
 	
-	if (test_num++ > 100) {
+	if (test_num++ > 6) {
 		printc("has failed %d times\n", test_num);
 		assert(0);
 	}

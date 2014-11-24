@@ -250,7 +250,7 @@ __evt_split(spdid_t spdid, long parent, int group, int old_evtid)
 	assert(ret > 0);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_SPLIT)
-	if (spdid == 11 && cos_get_thd_id() == 11 && test_num++ > 2) {
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_num++ > 2) {
 		printc("trigger fault in evt_split: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -283,7 +283,7 @@ void evt_free(spdid_t spdid, long evt_id)
 	lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_FREE)
-	if (spdid == 11 && cos_get_thd_id() == 11 && test_num++ > 2) {
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_num++ > 2) {
 		printc("trigger fault in evt_free: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -310,22 +310,20 @@ long evt_wait(spdid_t spdid, long evt_id)
 		lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_BEFORE)
-		if (spdid == 11 && cos_get_thd_id() == 11 && test_num++ > 3) {
+		if (spdid == 16 && cos_get_thd_id() == 13 && test_num++ > 3) {
 			printc("trigger fault in evt_wait (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
 			assert(0);
 		}
 #endif
-
-
 		ret = __evt_wait(spdid, evt_id);
 		lock_release(&evt_lock);
 		if (!ret && 0 > sched_block(cos_spd_id(), 0)) BUG();
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_AFTER)
-			if (spdid == 11 && cos_get_thd_id() == 11 && test_num++ > 3) {
-				printc("trigger fault in evt_wait (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
-				assert(0);
-			}
+		if (spdid == 16 && cos_get_thd_id() == 13 && test_num++ > 3) {
+			printc("trigger fault in evt_wait (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
+			assert(0);
+		}
 #endif
 
 	} while (!ret);
@@ -339,7 +337,7 @@ evt_trigger(spdid_t spdid, long evt_id)
 	lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_BEFORE)
-	if (spdid == 13 && cos_get_thd_id() == 12 && test_num++ > 2) {
+	if (spdid == 18 && cos_get_thd_id() == 14 && test_num++ > 2) {
 	printc("trigger fault in evt_trigger: thd %d passed spd %d (evt %d)\n",
 	       cos_get_thd_id(), spdid, evt_id);
 		assert(0);
@@ -361,7 +359,7 @@ evt_trigger(spdid_t spdid, long evt_id)
 	if (ret && sched_wakeup(cos_spd_id(), ret)) BUG();
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_AFTER)
-	if (spdid == 13 && cos_get_thd_id() == 12 && test_num++ > 2) {
+	if (spdid == 18 && cos_get_thd_id() == 14 && test_num++ > 2) {
 		printc("trigger fault in evt_trigger: thd %d passed spd %d (evt %d)\n",
 		       cos_get_thd_id(), spdid, evt_id);
 		assert(0);

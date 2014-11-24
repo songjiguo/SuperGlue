@@ -21,11 +21,7 @@
 int high, low;
 char buffer[1024];
 
-/* #define CBUFP_NUM 32 */
-/* cbufp_t p[CBUFP_NUM]; */
-/* char *buf[CBUFP_NUM]; */
-/* cbufp_t p3[CBUFP_NUM]; */
-/* char *buf3[CBUFP_NUM]; */
+#include <c3_test.h>
 
 static void
 test0(void)
@@ -151,8 +147,6 @@ cos_init(void)
 	}
 	return;
 }
-
-
 
 /* #include <cos_component.h> */
 /* #include <print.h> */

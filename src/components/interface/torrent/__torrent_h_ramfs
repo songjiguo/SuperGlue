@@ -15,8 +15,6 @@
 
 /* 2 threads, operate on the different files(T1 writes foo/bar/who, T2 writes foo/boo/who) */
 
-#define TEST_RAMFS_C3  // usefd for client test program only
-
 /* #define TEST_RAMFS_TSPLIT_BEFORE */
 /* #define TEST_RAMFS_TSPLIT_AFTER */
 #define TEST_RAMFS_TREADP
