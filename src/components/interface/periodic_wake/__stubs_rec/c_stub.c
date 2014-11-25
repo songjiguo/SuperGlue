@@ -181,9 +181,9 @@ CSTUB_FN(int, c3_periodic_wake_create)(struct usr_inv_cap *uc,
 	int ret;
 	long fault = 0;
 redo:
-	/* printc("cli: __periodic_wake_create (thd %d ticks %d period %d) for recovery\n", */
+	printc("cli: __periodic_wake_create (thd %d ticks %d period %d) for recovery\n",
 	       cos_get_thd_id(), ticks, period);
-
+	
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, period, ticks);
 	if (unlikely (fault)){
 		

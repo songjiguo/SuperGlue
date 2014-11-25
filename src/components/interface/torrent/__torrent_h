@@ -45,10 +45,10 @@ treadp_pack(spdid_t spdid, td_t td, char *data, int len)
 	int off, sz;
 	
 	cb = treadp(spdid, td, len, &off, &sz);
-	/* printc("after treadp in tread_pack off %d sz %d\n", off, sz); */
+	printc("after treadp in tread_pack off %d sz %d\n", off, sz);
 	if (!cb < 0) return 0;
 	d = cbufp2buf(cb, sz);
-	/* printc("data %s\n", d); */
+	printc("data %s\n", d);
 	memcpy(data, d, sz);
 	cbufp_deref(cb);
 	return sz;

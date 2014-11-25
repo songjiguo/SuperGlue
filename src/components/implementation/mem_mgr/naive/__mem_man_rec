@@ -351,7 +351,7 @@ collision:
 static struct mapping *
 mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, vaddr_t to, int flags)
 {
-	__mapping_crt(p, f, dest, to, flags, 1);
+	return __mapping_crt(p, f, dest, to, flags, 1);
 }
 
 /* Take all decedents, return them in a list. */
@@ -369,7 +369,7 @@ __mapping_linearize_decendents(struct mapping *m)
 		gc = c->c;
 		c->c = NULL;
 		/* add the grand-children onto the end of our list of decedents */
-		if (gc) ADD_LIST(last, gc, _s, s_);
+		if (gc) APPEND_LIST(last, gc, _s, s_);
 		c = FIRST_LIST(c, _s, s_);
 	} while (first != c);
 	
@@ -434,24 +434,14 @@ mapping_del(struct mapping *m)
 /**********************************/
 /*** Public interface functions ***/
 /**********************************/
-/* this function is used only for the fault injection purpose: without
-   delay, it is hard to inject the fault while the thread is running
-   in MM (test purpose only) */
-void some_delay()
-{
-	volatile int ccc = 0;
-	while(ccc++ < 500000) {;};
-}
 
 vaddr_t mman_get_page(spdid_t spd, vaddr_t addr, int flags)
 {
 	struct frame *f;
 	struct mapping *m = NULL;
 	vaddr_t ret = -1;
-
+	
 	LOCK();
-
-	some_delay();    // for fault injection only
 
 	f = frame_alloc();
 	if (!f) goto done; 	/* -ENOMEM */
@@ -459,8 +449,8 @@ vaddr_t mman_get_page(spdid_t spd, vaddr_t addr, int flags)
 	f->c.m   = NULL;
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MM_GET_PAGE)
-	if (spd == 10 && test_control++ == 5) {
-		printc("trigger fault in mman_get_page: thd %d spd %ld passed spd %d\n", 
+	if (spd == 16 && cos_get_thd_id() == 13 && test_control++ == 5) {
+		printc("trigger fault in mman_get_page: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}
@@ -503,7 +493,6 @@ vaddr_t __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vadd
 	
 	/* printc("in alias function\n"); */
 	LOCK();
-	some_delay();
 
 	m = mapping_lookup(s_spd, s_addr);
 	if (unlikely(!m)) {
@@ -519,7 +508,7 @@ vaddr_t __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vadd
 	assert(m && m->f);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MM_ALIAS_PAGE)
-	if (s_spd == 10 && test_control++ == 5) {
+	if (s_spd == 16 && cos_get_thd_id() == 13 && test_control++ == 5) {
 		printc("trigger fault in mman_alias_page: thd %d spd %ld passed s_spd %d dest_spd %d\n", cos_get_thd_id(), cos_spd_id(), s_spd, d_spd);
 		assert(0);
 	}

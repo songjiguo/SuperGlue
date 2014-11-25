@@ -33,8 +33,8 @@ __sg_treadp(spdid_t spdid, int tid, int len, int __pad0, int *off_len)
 	/* printc("treadp ser (before): ret %d off_len[0] %d off_len[1] %d\n", */
 	/*        ret, off_len[0], off_len[1]); */
         ret = treadp(spdid, tid, len, &off_len[0], &off_len[1]);
-	/* printc("treadp ser (after): ret %d off_len[0] %d off_len[1] %d\n", */
-	/*        ret, off_len[0], off_len[1]); */
+	printc("treadp ser (after): ret %d off_len[0] %d off_len[1] %d\n",
+	       ret, off_len[0], off_len[1]);
 	return ret;
 }
 

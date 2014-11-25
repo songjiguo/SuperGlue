@@ -16,8 +16,8 @@
 /* 2 threads, operate on the different files(T1 writes foo/bar/who, T2 writes foo/boo/who) */
 
 /* #define TEST_RAMFS_TSPLIT_BEFORE */
-/* #define TEST_RAMFS_TSPLIT_AFTER */
-#define TEST_RAMFS_TREADP
+#define TEST_RAMFS_TSPLIT_AFTER
+/* #define TEST_RAMFS_TREADP */
 /* #define TEST_RAMFS_TWRITEP_BEFORE */
 /* #define TEST_RAMFS_TWRITEP_AFTER */
 /* #define TEST_RAMFS_TRELEASE */

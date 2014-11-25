@@ -1269,6 +1269,7 @@ done:
 #include <torrent.h>
 #include <torlib.h>
 
+extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
 extern td_t parent_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
 extern int parent_twrite(spdid_t spdid, td_t td, int cbid, int sz);
 extern int parent_tread(spdid_t spdid, td_t td, int cbid, int sz);

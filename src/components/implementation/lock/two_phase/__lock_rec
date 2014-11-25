@@ -215,11 +215,9 @@ int lock_component_pretake(spdid_t spd, unsigned long lock_id, unsigned short in
 	TAKE(spdid);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_PRETAKE)
-	if (spd == 10 && cos_get_thd_id() == 11) {
-		if (test_control++ == 2) {
-			printc("trigger fault in lock pre_take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
-			assert(0);
-		}
+	if (spd == 16 && cos_get_thd_id() == 13 && test_control++ == 2) {
+		printc("trigger fault in lock pre_take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
+		assert(0);
 	}
 #endif
 
@@ -254,13 +252,10 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	TAKE(spdid);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_TAKE_BEFORE)	
-	/* printc("test_control %d\n", test_control); */
-	/* printc("spd %d thd %d\n", spd, cos_get_thd_id()); */
-	if (spd == 10 && cos_get_thd_id() == 11) {
-		if (test_control++ == 2) {
-			printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
-			assert(0);
-		}
+	/* printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
+	if (spd == 16 && cos_get_thd_id() == 13 && test_control++ == 2) {
+		printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
+		assert(0);
 	}
 #endif
 
@@ -298,11 +293,10 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	}
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_TAKE_AFTER)
-	if (spd == 10 && cos_get_thd_id() == 11) {
-		if (test_control++ == 2) {
-			printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
-			assert(0);
-		}
+	if (spd == 16 && cos_get_thd_id() == 13 && test_control++ == 2) 
+	{
+		printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
+		assert(0);
 	}
 #endif
 
@@ -345,12 +339,10 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_RELEASE_BEFORE)
-	if (spd == 10 && cos_get_thd_id() == 13) {
-		if (test_control++ == 2) {
-			printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
-			       cos_get_thd_id(), cos_spd_id(), spd);
-			assert(0);
-		}
+	if (spd == 16 && cos_get_thd_id() == 13 && test_control++ == 2) {
+		printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
+		       cos_get_thd_id(), cos_spd_id(), spd);
+		assert(0);
 	}
 #endif
 
@@ -400,12 +392,10 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 		sched_wakeup(spdid, tid);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_RELEASE_AFTER)
-	if (spd == 10 && cos_get_thd_id() == 13) {
-		if (test_control++ == 2) {
-			printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
-			       cos_get_thd_id(), cos_spd_id(), spd);
-			assert(0);
-		}
+	if (spd == 16 && cos_get_thd_id() == 13 && test_control++ == 2) {
+		printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
+		       cos_get_thd_id(), cos_spd_id(), spd);
+		assert(0);
 	}
 #endif
 
@@ -428,7 +418,7 @@ unsigned long lock_component_alloc(spdid_t spd)
 	l = lock_alloc(spd);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_ALLOC)
-	if (spd == 10) {
+	if (spd == 16) {
 		printc("trigger fault in lock alloc: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}

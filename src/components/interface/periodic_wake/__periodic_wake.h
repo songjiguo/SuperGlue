@@ -3,8 +3,8 @@
 
 
 /* #define TEST_PTE_CREATE_BEFORE  // pte create  -- still has lock */
-/* #define TEST_PTE_CREATE_AFTER   // pte create  -- does not have lock */
-#define TEST_PTE_WAIT_BEFORE  // pte wait  -- before evt_wait
+#define TEST_PTE_CREATE_AFTER   // pte create  -- does not have lock
+/* #define TEST_PTE_WAIT_BEFORE  // pte wait  -- before evt_wait */
 /* #define TEST_PTE_WAIT_AFTER   // pte wait  -- after evt_wait */
 
 /* #define TEST_PTE_TIMER_THD_BEFORE  // timer thread might fail */

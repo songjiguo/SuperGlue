@@ -3,10 +3,9 @@
 
 #include <cos_synchronization.h>
 
-
 /* #define TEST_LOCK_ALLOC */
 /* #define TEST_LOCK_PRETAKE */
-#define TEST_LOCK_TAKE_BEFORE
+/* #define TEST_LOCK_TAKE_BEFORE */
 /* #define TEST_LOCK_TAKE_AFTER */
 /* #define TEST_LOCK_RELEASE_BEFORE */
 /* #define TEST_LOCK_RELEASE_AFTER */

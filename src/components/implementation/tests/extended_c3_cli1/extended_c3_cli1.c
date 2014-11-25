@@ -24,7 +24,7 @@ cos_init(void)
 	int i, j, k;
 
 	printc("c3 cli test (thd %d in spd %ld)\n", cos_get_thd_id(), cos_spd_id());
-	
+
 	if(first == 0){
 		first = 1;
 
@@ -140,9 +140,6 @@ cos_init(void)
 			ec3_ser1_test(low, med, high);
 		}
 #endif
-
-
-
 	}
 
 	return;

@@ -210,6 +210,9 @@ init_invframe_fault_cnt(struct thd_invocation_frame *inv_frame)
 static inline int
 ipc_fault_detect(struct invocation_cap *cap_entry, struct spd *dest_spd)
 {
+	/* // init thread does not need recover when exit */
+	/* if (thd_get_id(core_get_curr_thd_id(get_cpuid_fast())) == 3) return 0; */
+
 	if (cap_entry->fault.cnt != dest_spd->fault.cnt) {
 		printk("cap_entry fault cnt %lu\n", cap_entry->fault.cnt);
 		printk("dest spd %d fault cnt %lu\n", spd_get_index(dest_spd), dest_spd->fault.cnt);
@@ -221,7 +224,8 @@ ipc_fault_detect(struct invocation_cap *cap_entry, struct spd *dest_spd)
 static inline int
 pop_fault_detect(struct thd_invocation_frame *inv_frame)
 {
-	if (spd_get_index(inv_frame->spd) == 6) return 0;  // test pgfault spd
+	if (spd_get_index(inv_frame->spd) == 6 ||
+	    spd_get_index(inv_frame->spd) == 1) return 0;  // test pgfault spd (or deps)
 	if (inv_frame->fault.cnt != inv_frame->spd->fault.cnt) {
 		printk("cos: inv_frame spd %d spd fault cnt %d frame fault cnt %d\n", 
 		       spd_get_index(inv_frame->spd), inv_frame->spd->fault.cnt,

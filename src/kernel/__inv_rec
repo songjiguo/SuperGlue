@@ -480,17 +480,17 @@ __fault_ipc_invoke(struct thread *thd, vaddr_t fault_addr, int flags, struct pt_
 	       thd_get_id(test_thd), spd_get_index(test_spd), 
 	       spd_get_index(test_entry->destination), fault_cap);
 
-	int i;
-	if (fault_num == 8) {
-		for (i = 1; i < dest_spd->ncaps ; i++) {
-			struct invocation_cap *test_entry = &dest_spd->caps[i];
-			printk("curr_thd %d dest_spd %d entry->destination %d for cap %d\n",
-			       thd_get_id(test_thd), spd_get_index(dest_spd), 
-			       spd_get_index(test_entry->destination), i);
-			printk("entry->dest_entry_instruction %p\n",
-			       test_entry->dest_entry_instruction);
-		}
-	}
+	/* int i; */
+	/* if (fault_num == 8) { */
+	/* 	for (i = 1; i < dest_spd->ncaps ; i++) { */
+	/* 		struct invocation_cap *test_entry = &dest_spd->caps[i]; */
+	/* 		printk("curr_thd %d dest_spd %d entry->destination %d for cap %d\n", */
+	/* 		       thd_get_id(test_thd), spd_get_index(dest_spd),  */
+	/* 		       spd_get_index(test_entry->destination), i); */
+	/* 		printk("entry->dest_entry_instruction %p\n", */
+	/* 		       test_entry->dest_entry_instruction); */
+	/* 	} */
+	/* } */
 
 	a = ipc_walk_static_cap(fault_cap<<20, regs->sp, regs->ip, &r);
 
@@ -3628,8 +3628,8 @@ cos_syscall_mmap_cntl(int spdid, long op_flags_dspd, vaddr_t daddr, unsigned lon
 			return -EINVAL;
 		}
 		assert(spdid == 3);  // test only, make sure it is from MM
-		if (dspd_id == 3) printk("daddr %p is added as root page (mem_id %d)\n", 
-					 daddr, mem_id);
+		/* if (dspd_id == 3) printk("daddr %p is added as root page (mem_id %d)\n",  */
+		/* 			 daddr, mem_id); */
 		ret = cos_add_root_info(dspd_id, daddr, mem_id);
 		break;
 	}

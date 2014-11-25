@@ -204,4 +204,50 @@ int ec3_ser2_pass(long id)
 #endif
 
 
+#ifdef EXAMINE_TE
+
+vaddr_t ec3_ser2_test(void)
+{
+	return 0;
+}
+
+int ec3_ser2_pass(long id)
+{
+	return 0;
+}
+
+#endif
+
+
+#ifdef EXAMINE_SCHED
+
+vaddr_t ec3_ser2_test(void)
+{
+	return 0;
+}
+
+int ec3_ser2_pass(long id)
+{
+	return 0;
+}
+
+#endif
+
+
+
+#ifdef NO_EXAMINE
+
+vaddr_t ec3_ser2_test(void)
+{
+	return 0;
+}
+
+int ec3_ser2_pass(long id)
+{
+	return 0;
+}
+
+#endif
+
+
 

@@ -647,18 +647,21 @@ static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 			/* Make the request to the content
 			 * component */
 			sz         = resp_sz - used;
-			/* printc("https reads files (sz %d)\n", sz); */
-			cb = server_treadp(cos_spd_id(), r->content_id, sz, &off, &len);
-			if (!cb < 0) assert(0);
+			printc("https reads files (sz %d)\n", sz);
+			local_resp_sz = treadp_pack(cos_spd_id(), r->content_id, 
+						    local_resp, sz);
+			/* cb = server_treadp(cos_spd_id(), r->content_id, sz, &off, &len); */
+			/* if (!cb < 0) assert(0); */
 			/* printc("https reads files 0000 (read bytes off %d len %d)\n",  */
 			/*        off, len); */
-			local_resp = cbufp2buf(cb, sz);
+			/* local_resp = cbufp2buf(cb, sz); */
 			/* memcpy(local_resp, d, sz); */
 			/* printc("https reads files 111111\n"); */
-			cbufp_deref(cb);
-			/* printc("https reads files 222222\n"); */
-			local_resp_sz = 11;// hardcode now for test only ->len;
-			/* printc("https reads files done\n"); */
+			/* cbufp_deref(cb); */
+			printc("https reads files 222222\n");
+			/* local_resp_sz = 11;// hardcode now for test only ->len; */
+			printc("local_resp %s local_resp_sz %d", local_resp, local_resp_sz);
+			printc("https reads files done\n");
 		}
 		
 		/* no more data */

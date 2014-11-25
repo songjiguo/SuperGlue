@@ -548,7 +548,7 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 	/* printc("in periodic_wake_create: thd %d spd %d\n",  */
 	/*        cos_get_thd_id(), spdinv);		 */
 	test_control++;
-	if (spdinv == 11 && cos_get_thd_id() == 11 && test_control == 1) {
+	if (spdinv == 16 && cos_get_thd_id() == 13 && test_control == 1) {
 		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
@@ -587,7 +587,7 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 	test_control++;
 	/* printc("in periodic_wake_create: thd %d spd %d, test_control %d\n", */
 	/*        cos_get_thd_id(), spdinv, test_control); */
-	if (spdinv == 11 && cos_get_thd_id() == 11 && test_control == 1) {
+	if (spdinv == 16 && cos_get_thd_id() == 13 && test_control == 1) {
 		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
@@ -649,9 +649,9 @@ int periodic_wake_wait(spdid_t spdinv)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_WAIT_BEFORE)
 	test_control++;
-	/* printc("in periodic_wake_wait: thd %d spd %d, test_control %d\n", */
-	/*        cos_get_thd_id(), spdinv, test_control); */
-	if (spdinv == 11 && cos_get_thd_id() == 11 && test_control >= 2) {
+	printc("in periodic_wake_wait: thd %d spd %d, test_control %d\n",
+	       cos_get_thd_id(), spdinv, test_control);
+	if (spdinv == 16 && cos_get_thd_id() == 13 && test_control >= 2) {
 		printc("trigger fault in periodic_wake_wait: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
@@ -698,7 +698,7 @@ int periodic_wake_wait(spdid_t spdinv)
 	test_control++;
 	/* printc("in periodic_wake_wait: thd %d spd %d, test_control %d\n", */
 	/*        cos_get_thd_id(), spdinv, test_control); */
-	if (spdinv == 11 && cos_get_thd_id() == 11 && test_control >= 2) {
+	if (spdinv == 16 && cos_get_thd_id() == 13 && test_control >= 2) {
 		printc("trigger fault in periodic_wake_wait: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);

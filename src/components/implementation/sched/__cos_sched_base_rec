@@ -840,8 +840,10 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	if (!thd) goto error;
 	
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_WAKEUP)
+	printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", 
+	       cos_get_thd_id(), cos_spd_id(), spdid);
 	test_control++;
-	if (spdid == 10 && cos_get_thd_id() == 12 && test_control == 4) {
+	if (spdid == 16 && cos_get_thd_id() == 14 && test_control == 4) {
 		printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -980,7 +982,7 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_BLOCK)
 	test_control++;
-	if (spdid == 10 && cos_get_thd_id() == 11 && test_control == 4) {
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 4) {
 		printc("trigger fault in sched_block: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -1123,9 +1125,9 @@ int sched_component_take(spdid_t spdid)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_COMPONENT_TAKE)
 		test_control++;
-		printc("sched take %d (thd %d test_control %d)\n", 
+		printc("trigger sched_component_take %d (thd %d test_control %d)\n", 
 		       spdid, cos_get_thd_id(), test_control);
-		if (spdid == 10 && cos_get_thd_id() == 11 && test_control == 6) {
+		if (spdid == 16 && cos_get_thd_id() == 13 && test_control > 20) {
 			printc("trigger fault in sched_component_take: thd %d spd %ld passed spd %d\n", 
 			       cos_get_thd_id(), cos_spd_id(), spdid);
 			assert(0);
@@ -1167,9 +1169,9 @@ int sched_component_release(spdid_t spdid)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_COMPONENT_RELEASE)
 	test_control++;
-	printc("sched take %d (thd %d test_control %d)\n", 
-	       spdid, cos_get_thd_id(), test_control);
-	if (spdid == 10 && cos_get_thd_id() == 11 && test_control == 6) {
+	/* printc("sched take %d (thd %d test_control %d)\n",  */
+	/*        spdid, cos_get_thd_id(), test_control); */
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 6) {
 		printc("trigger fault in sched_component_take: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);

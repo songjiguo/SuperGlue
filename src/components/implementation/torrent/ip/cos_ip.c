@@ -26,6 +26,7 @@ static volatile unsigned long ip_tread_cnt = 0;
 static volatile unsigned long ip_twrite_cnt = 0;
 static volatile int debug_thd = 0;
 
+extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
 extern td_t parent_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
 extern void parent_trelease(spdid_t spdid, td_t tid);
 extern int parent_tread(spdid_t spdid, td_t td, int cbid, int sz);

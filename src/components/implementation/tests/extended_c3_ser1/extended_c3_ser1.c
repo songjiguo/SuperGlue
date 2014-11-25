@@ -1,29 +1,23 @@
 #include <cos_component.h>
 #include <print.h>
 #include <sched.h>
-#include <evt.h>
-#include <periodic_wake.h>
-#include <timed_blk.h>
-#include <cbuf.h>
-#include <torrent.h>
+/* #include <evt.h> */
+/* #include <periodic_wake.h> */
+/* #include <timed_blk.h> */
+/* #include <cbuf.h> */
+/* #include <torrent.h> */
 
 #include <c3_test.h>
 
 #include <ec3_ser2.h>
-#include <ec3_ser3.h>
+/* #include <ec3_ser3.h> */
 
-/* /\* torrent depends on mem_mgr_large and valloc, so cslab use it as */
-/*  * well *\/ */
-/* #ifdef EXAMINE_RAMFS */
-/* #include <mem_mgr_large.h> */
-/* #include <valloc.h> */
-/* #else */
-/* #include <mem_mgr.h> */
-/* #endif */
-
+#ifdef EXAMINE_RAMFS
 #include <mem_mgr_large.h>
 #include <valloc.h>
-
+#else
+#include <mem_mgr.h>
+#endif
 
 volatile unsigned long long overhead_start, overhead_end;
 
@@ -220,7 +214,6 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
  \__\___|
 ****************************/
 
-
 #ifdef EXAMINE_TE
 
 static void try_hp(void)
@@ -355,11 +348,10 @@ test_mmpage()
 	return;
 }
 
-
 vaddr_t ec3_ser1_test(int low, int mid, int hig)
 {
 	if (cos_get_thd_id() == hig) {
-		printc("\n<< high thd %d is in MM testing... >>>\n", 
+		printc("\n<< high thd %d is in MM testing... >>>\n",
 		       cos_get_thd_id());
 
 		int i = 0;
@@ -508,6 +500,17 @@ ramfs_test(void)
 vaddr_t ec3_ser1_test(int low, int mid, int hig)
 {
 	if (cos_get_thd_id() == hig) ramfs_test();
+	return 0;
+}
+
+#endif
+
+
+
+#ifdef NO_EXAMINE
+
+vaddr_t ec3_ser1_test(int low, int mid, int hig)
+{
 	return 0;
 }
 

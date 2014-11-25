@@ -390,7 +390,7 @@ redo:
 		goto redo;
 	}
         cbuf_free(cb);
-	
+
         ser_tid = ret;
 	assert(ser_tid >= 1);
 

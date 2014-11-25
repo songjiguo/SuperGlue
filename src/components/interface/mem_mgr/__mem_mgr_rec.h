@@ -10,12 +10,9 @@
 #ifndef   	MEM_MGR_H
 #define   	MEM_MGR_H
 
-/* this enables alias_replay in each client interface */
-//#define MM_C3 
-
 /* #define TEST_MM_GET_PAGE */
-/* #define TEST_MM_ALIAS_PAGE */
-#define TEST_MM_REVOKE_PAGE
+#define TEST_MM_ALIAS_PAGE
+/* #define TEST_MM_REVOKE_PAGE */
 
 /* Map a physical frame into a component. */
 vaddr_t mman_get_page(spdid_t spd, vaddr_t addr, int flags);
