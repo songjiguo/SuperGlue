@@ -215,6 +215,7 @@ int lock_component_pretake(spdid_t spd, unsigned long lock_id, unsigned short in
 	TAKE(spdid);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_PRETAKE)
+	printc("trigger fault in lock pre_take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 	if (spd == 16 && cos_get_thd_id() == 13 && test_control++ == 2) {
 		printc("trigger fault in lock pre_take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
@@ -252,8 +253,8 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	TAKE(spdid);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_TAKE_BEFORE)	
-	/* printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
-	if (spd == 16 && cos_get_thd_id() == 13 && test_control++ == 2) {
+	printc("trigger fault in lock take before: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
+	if (spd == 17 && cos_get_thd_id() == 10 && test_control++ == 2) {
 		printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}
@@ -283,7 +284,7 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 
 	RELEASE(spdid);
 
-	/* printc("cpu %ld: thd %d going to blk waiting for lock %d\n", cos_cpuid(), cos_get_thd_id(), (int)lock_id); */
+	printc("cpu %ld: thd %d going to blk waiting for lock %d\n", cos_cpuid(), cos_get_thd_id(), (int)lock_id);
 	if (-1 == sched_block(spdid, thd_id)) {
 		printc("Deadlock including thdids %d -> %d in spd %d, lock id %d.\n", 
 		       cos_get_thd_id(), thd_id, spd, (int)lock_id);
@@ -293,14 +294,23 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	}
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_TAKE_AFTER)
-	if (spd == 16 && cos_get_thd_id() == 13 && test_control++ == 2) 
+	printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
+		
+	if (spd == 17 && cos_get_thd_id() == 10 && test_control++ >= 0) 
 	{
 		printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}
 #endif
 
-	if (!EMPTY_LIST(&blocked_desc, next, prev)) BUG();
+	/* what if net thread is blocked, and another thread is woken
+	 * up back to here? Will see a non-empty list? -- Jiguo */
+
+	/* if (!EMPTY_LIST(&blocked_desc, next, prev)) { */
+	/* 	printc("lock_component_take thd %d found not empty blocked list\n", */
+	/* 	       spd, cos_get_thd_id()); */
+	/* 	BUG(); */
+	/* } */
 	/* 
 	 * OK, this seems ridiculous but here is the rational: Assume
 	 * we are a middle-prio thread, and were just woken by a low
@@ -339,6 +349,8 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_RELEASE_BEFORE)
+	printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
+	       cos_get_thd_id(), cos_spd_id(), spd);
 	if (spd == 16 && cos_get_thd_id() == 13 && test_control++ == 2) {
 		printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spd);
@@ -392,11 +404,14 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 		sched_wakeup(spdid, tid);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_RELEASE_AFTER)
-	if (spd == 16 && cos_get_thd_id() == 13 && test_control++ == 2) {
 		printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spd);
-		assert(0);
-	}
+		
+		if (spd == 16 && cos_get_thd_id() == 13 && test_control++ == 2) {
+			printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
+			       cos_get_thd_id(), cos_spd_id(), spd);
+			assert(0);
+		}
 #endif
 
 		if (bt == next) break;
@@ -418,6 +433,7 @@ unsigned long lock_component_alloc(spdid_t spd)
 	l = lock_alloc(spd);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_ALLOC)
+	printc("trigger fault in lock alloc: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 	if (spd == 16) {
 		printc("trigger fault in lock alloc: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
@@ -518,3 +534,5 @@ rd_reflection()
 
 	return;
 }
+
+int lock_trigger_all(spdid_t spdid, int dest) {return 0;}

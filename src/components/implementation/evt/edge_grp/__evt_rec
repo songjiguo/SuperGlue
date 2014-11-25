@@ -250,7 +250,8 @@ __evt_split(spdid_t spdid, long parent, int group, int old_evtid)
 	assert(ret > 0);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_SPLIT)
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_num++ > 2) {
+	/* printc("trigger fault in evt_split: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid); */
+	if (spdid == 16 && cos_get_thd_id() == 12 && test_num++ > 5) {
 		printc("trigger fault in evt_split: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -283,7 +284,7 @@ void evt_free(spdid_t spdid, long evt_id)
 	lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_FREE)
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_num++ > 2) {
+	if (spdid == 16 && cos_get_thd_id() == 12 && test_num++ > 5) {
 		printc("trigger fault in evt_free: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -310,7 +311,8 @@ long evt_wait(spdid_t spdid, long evt_id)
 		lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_BEFORE)
-		if (spdid == 16 && cos_get_thd_id() == 13 && test_num++ > 3) {
+		/* printc("trigger fault in evt_wait before (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
+		if (spdid == 20 && cos_get_thd_id() == 15 && test_num++ > 50) {
 			printc("trigger fault in evt_wait (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
 			assert(0);
 		}
@@ -320,7 +322,8 @@ long evt_wait(spdid_t spdid, long evt_id)
 		if (!ret && 0 > sched_block(cos_spd_id(), 0)) BUG();
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_AFTER)
-		if (spdid == 16 && cos_get_thd_id() == 13 && test_num++ > 3) {
+		/* printc("trigger fault in evt_wait after (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
+		if (spdid == 20 && cos_get_thd_id() == 15 && test_num++ > 50) {
 			printc("trigger fault in evt_wait (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
 			assert(0);
 		}
@@ -337,13 +340,15 @@ evt_trigger(spdid_t spdid, long evt_id)
 	lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_BEFORE)
-	if (spdid == 18 && cos_get_thd_id() == 14 && test_num++ > 2) {
-	printc("trigger fault in evt_trigger: thd %d passed spd %d (evt %d)\n",
-	       cos_get_thd_id(), spdid, evt_id);
+	/* printc("trigger fault in evt_trigger before: thd %d passed spd %d (evt %d)\n", */
+	/*        cos_get_thd_id(), spdid, evt_id); */
+	if (spdid == 17 && cos_get_thd_id() == 15 && test_num++ > 200) {
+		printc("trigger fault in evt_trigger: thd %d passed spd %d (evt %d)\n",
+		       cos_get_thd_id(), spdid, evt_id);
 		assert(0);
 	}
 #endif
-
+	
 	/* Jiguo: evt_trigger can be called from a different spd where
 	 * the id mapping is not tracked. We add this additional
 	 * invocation to the name server here to get the actual server
@@ -359,7 +364,7 @@ evt_trigger(spdid_t spdid, long evt_id)
 	if (ret && sched_wakeup(cos_spd_id(), ret)) BUG();
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_AFTER)
-	if (spdid == 18 && cos_get_thd_id() == 14 && test_num++ > 2) {
+	if (spdid == 17 && cos_get_thd_id() == 15 && test_num++ > 200) {
 		printc("trigger fault in evt_trigger: thd %d passed spd %d (evt %d)\n",
 		       cos_get_thd_id(), spdid, evt_id);
 		assert(0);

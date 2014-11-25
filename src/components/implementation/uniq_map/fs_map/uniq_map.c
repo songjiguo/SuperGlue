@@ -195,12 +195,12 @@ uniq_map_lookup(spdid_t spdid, cbuf_t cb, int sz)
 	parent_tid = d->parent_tid;
 	server_tid = d->server_tid;
 	str = d->data;	
-	printc("str passed in uniqmap %s\n", str);
+	/* printc("str passed in uniqmap %s\n", str); */
 	*(str+sz) = '\0';  	/* previous cbuf might still contain data */
 
-	printc("str passed in uniqmap %s\n", str);
+	/* printc("str passed in uniqmap %s\n", str); */
 	/* printc("ser_tid passed in uniqmap %d\n", server_tid); */
-	printc("sz passed in uniqmap %d\n", sz);
+	/* printc("sz passed in uniqmap %d\n", sz); */
 
 	/* assert(0); */
 	
@@ -210,7 +210,7 @@ uniq_map_lookup(spdid_t spdid, cbuf_t cb, int sz)
 		assert(ret);
 	}
 	
-	printc("uniq_map_lookup  %d\n", ret);
+	/* printc("uniq_map_lookup  %d\n", ret); */
 
 	UNLOCK();
 

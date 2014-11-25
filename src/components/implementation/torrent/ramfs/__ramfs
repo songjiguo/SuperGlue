@@ -109,7 +109,7 @@ tread(spdid_t spdid, td_t td, int cbid, int sz)
 	struct fsobj *fso;
 	char *buf;
 
-	/* printc("to read files\n"); */
+	printc("to read files\n");
 	if (tor_isnull(td)) return -EINVAL;
 
 	LOCK();
@@ -131,7 +131,7 @@ tread(spdid_t spdid, td_t td, int cbid, int sz)
 
 	assert(fso->data);
 	memcpy(buf, fso->data + t->offset, ret);
-	/* printc("read buf -- %s\n", buf); */
+	printc("read buf -- %s\n", buf);
 	t->offset += ret;
 done:	
 	UNLOCK();

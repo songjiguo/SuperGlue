@@ -61,6 +61,8 @@ tsplit(spdid_t spdid, td_t tid, char *param, int len,
 	td_t ret = -ENOMEM, ntd;
 	struct torrent *t;
 
+	printc("3 tsplit cos_ip\n");
+
 	if (tid != td_root) return -EINVAL;
 	ntd = server_tsplit(cos_spd_id(), tid, param, len, tflags, evtid);
 	if (ntd <= 0) ERR_THROW(ntd, err);

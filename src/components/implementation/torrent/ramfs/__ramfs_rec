@@ -93,7 +93,7 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	struct fsobj *fso, *fsc, *parent; /* obj, child, and parent */
 	char *subpath;
 
-	printc("ramfs tsplit from td %d (evtid %ld), \n", td, evtid);
+	/* printc("ramfs tsplit from td %d (evtid %ld), \n", td, evtid); */
 
 	LOCK();
 	t = tor_lookup(td);
@@ -138,7 +138,7 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	struct uniqmap_data *dm = NULL;
 	cbuf_t cb;
 	int uniq_id;
-	printc("full path to this file is %s\n", fsc->unique_path);
+	/* printc("full path to this file is %s\n", fsc->unique_path); */
 	int tmp_sz = strlen(fsc->unique_path);   // TODO: change this to be parent+its path
 	assert(tmp_sz > 0);
 	dm = cbuf_alloc(tmp_sz, &cb);
@@ -150,14 +150,14 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	/* if does not exist, create it in uniqmap. Use the
 	 * most recent server tid to find uniq_id in uniqmap
 	 * when twrite/tread. So we do not track here. */
-	printc("tsplit: tmp_sz %d \n", tmp_sz);
-	printc("tsplit: size of struct unqmao_data %d \n", sizeof(struct uniqmap_data));
+	/* printc("tsplit: tmp_sz %d \n", tmp_sz); */
+	/* printc("tsplit: size of struct unqmao_data %d \n", sizeof(struct uniqmap_data)); */
 	uniq_id = uniq_map_lookup(cos_spd_id(), cb,
 				  (tmp_sz + sizeof(struct uniqmap_data)));
 	assert(uniq_id);
 	struct tid_uniqid_data *idmapping;
 	if (!(idmapping = tiduniq_lookup(ret))) {
-		printc("can not find a uniq mapping. Now create a new one\n");
+		/* printc("can not find a uniq mapping. Now create a new one\n"); */
 		idmapping = tiduniq_alloc(ret);
 	}
 	assert(idmapping);
@@ -169,14 +169,14 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	cbuf_free(cb);
 
 	if (!fsc->data) {
-		printc("there is no data in the file\n");
+		/* printc("there is no data in the file\n"); */
 		int num_cbids = cbufp_reflect(uniq_id, 0, 0);
 		if (unlikely(num_cbids > 0)) {
-			printc("however, we see some cbufps tracked for this fid\n");
+			/* printc("however, we see some cbufps tracked for this fid\n"); */
 			/* A fault has corrupted a file */
 			int tmp = -1;
 			char *val = "recovery";
-			printc("val %s val_len %d (td %d)\n", val, strlen(val), ret);
+			/* printc("val %s val_len %d (td %d)\n", val, strlen(val), ret); */
 			tmp = __twmeta(cos_spd_id(), ret, "data", strlen("data"),
 				       val, strlen(val));
 			assert(!tmp);
@@ -196,7 +196,7 @@ tsplit(spdid_t spdid, td_t td, char *param,
 
 	evt_trigger(cos_spd_id(), evtid);
 
-	printc("ramfs split succesffuly and return tid %d\n\n", ret);
+	/* printc("ramfs split succesffuly and return tid %d\n\n", ret); */
 done:
 	UNLOCK();
 	return ret;
@@ -362,21 +362,21 @@ treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 	/* printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n", */
 	/*        cos_get_thd_id(), cos_spd_id(), spdid); */
 
-	// ubenchmark
-	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
-		printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n",
-		       cos_get_thd_id(), cos_spd_id(), spdid);
-		assert(0);
-	}
-	
-	/* // web server */
+	/* // ubenchmark */
 	/* test_control++; */
-	/* if (spdid == 22 && cos_get_thd_id() == 15 && test_control == 500) { */
+	/* if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) { */
 	/* 	printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n", */
 	/* 	       cos_get_thd_id(), cos_spd_id(), spdid); */
 	/* 	assert(0); */
 	/* } */
+	
+	// web server
+	test_control++;
+	if (spdid == 22 && cos_get_thd_id() == 15 && test_control == 1000) {
+		printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n",
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
 #endif
 
 	/* printc("before read: fso->size %d t->offset %d\n", fso->size, t->offset); */

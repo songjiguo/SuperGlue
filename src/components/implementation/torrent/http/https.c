@@ -44,7 +44,6 @@ static cos_lock_t h_lock;
 extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
 extern void server_trelease(spdid_t spdid, td_t tid);
 extern int server_treadp(spdid_t spdid, td_t td, int len, int *off, int *sz);
-/* extern int server_treadp(spdid_t spdid, td_t td, int cbid, int sz); */
 
 #endif	/* COS_LINUX_ENV */
 
@@ -598,11 +597,32 @@ static int http_get_header(char *dest, int max_len, int content_len, int *resp_l
 	return 0;
 }
 
+#define TEST_C3_WEBSERVER
+
+#ifdef TEST_C3_WEBSERVER
+/* treadp/twritep version of pack -- using cbufp and server_treadp */
+static inline int
+http_treadp_pack(spdid_t spdid, td_t td, char *data, int len)
+{
+	cbufp_t cb;
+	char *d;
+	int off, sz;
+	
+	cb = server_treadp(spdid, td, len, &off, &sz);
+	/* printc("after treadp in treadp_pack off %d sz %d\n", off, sz); */
+	if (!cb < 0) return 0;
+	d = cbufp2buf(cb, sz);
+	/* printc("data %s\n", d); */
+	memcpy(data, d, sz);
+	cbufp_deref(cb);
+	return sz;
+}
+
 static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 {
 	struct http_request *r;
 	int used = 0;
-
+	char buffer[4096];	
 	/* 
 	 * Currently, this doesn't do anything interesting.  In the
 	 * future it will call the content provider and get the
@@ -627,46 +647,23 @@ static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 			local_resp = r->resp.resp;
 			local_resp_sz = r->resp.resp_len;
 		} else {
-			/* int sz; */
-			/* /\* Make the request to the content */
-			/*  * component *\/ */
-			/* sz         = resp_sz - used; */
-			/* local_resp = cbuf_alloc(sz, &cb); */
-			/* if (!local_resp) BUG(); */
-
-			
-			/* ret = server_tread(cos_spd_id(), r->content_id, cb, sz); */
-			/* if (ret < 0) { */
-			/* 	cbuf_free(cb); */
-			/* 	printc("https get reply returning %d.\n", ret); */
-			/* 	return ret; */
-			/* } */
-			/* local_resp_sz = ret; */
-
 			int sz, len, off;
 			/* Make the request to the content
 			 * component */
 			sz         = resp_sz - used;
-			printc("https reads files (sz %d)\n", sz);
-			local_resp_sz = treadp_pack(cos_spd_id(), r->content_id, 
-						    local_resp, sz);
-			/* cb = server_treadp(cos_spd_id(), r->content_id, sz, &off, &len); */
-			/* if (!cb < 0) assert(0); */
-			/* printc("https reads files 0000 (read bytes off %d len %d)\n",  */
-			/*        off, len); */
-			/* local_resp = cbufp2buf(cb, sz); */
-			/* memcpy(local_resp, d, sz); */
-			/* printc("https reads files 111111\n"); */
-			/* cbufp_deref(cb); */
-			printc("https reads files 222222\n");
-			/* local_resp_sz = 11;// hardcode now for test only ->len; */
-			printc("local_resp %s local_resp_sz %d", local_resp, local_resp_sz);
-			printc("https reads files done\n");
+			local_resp = cbuf_alloc(sz, &cb);
+			if (!local_resp) BUG();
+
+			/* printc("https reads files (sz %d)\n", sz); */
+			local_resp_sz = http_treadp_pack(cos_spd_id(), r->content_id,
+							 local_resp, sz);
+			/* printc("local_resp %s local_resp_sz %d", local_resp, local_resp_sz); */
+			/* printc("https reads files done\n"); */
 		}
 		
 		/* no more data */
 		if (local_resp_sz == 0) {
-			/* cbuf_free(cb); */    // do not free it
+			cbuf_free(cb);
 			break;
 		}
 
@@ -681,8 +678,7 @@ static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 				assert(save);
 				assert(local_resp);
 				memcpy(save, local_resp, local_resp_sz);
-
-				/* cbuf_free(cb);			 */
+				cbuf_free(cb);
 				local_resp = NULL;
 
 				r->resp.resp = save;
@@ -690,7 +686,6 @@ static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 			}
 			if (0 == used) {
 				printc("https: could not allocate either header or response of sz %d:%s\n", local_resp_sz, local_resp);
-				/* if (local_resp) cbuf_free(cb); */
 				return -ENOMEM;
 			}
 			break;
@@ -699,7 +694,7 @@ static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 		memcpy(resp+used+consumed, local_resp, local_resp_sz);
 		
 		assert(local_resp);
-		/* cbuf_free(cb); */
+		cbuf_free(cb);
 		local_resp = NULL;
 
 		used += local_resp_sz + consumed;
@@ -714,6 +709,102 @@ static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 
 	return used;
 }
+#else
+static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
+{
+	struct http_request *r;
+	int used = 0;
+
+	/* 
+	 * Currently, this doesn't do anything interesting.  In the
+	 * future it will call the content provider and get the
+	 * (ready) response.
+	 */
+	r = c->pending_reqs;
+	if (NULL == r) return 0;
+	while (r) {
+		struct http_request *next;
+		char *local_resp;
+		cbuf_t cb;
+		int consumed, ret, local_resp_sz;
+
+		assert(r->c == c);
+		if (r->flags & HTTP_REQ_PENDING) break;
+		assert(r->flags & HTTP_REQ_PROCESSED);
+		assert(r->content_id >= 0);
+
+		/* Previously saved response? */
+		if (NULL != r->resp.resp) {
+			local_resp = r->resp.resp;
+			local_resp_sz = r->resp.resp_len;
+		} else {
+			int sz;
+			/* Make the request to the content
+			 * component */
+			sz         = resp_sz - used;
+			local_resp = cbuf_alloc(sz, &cb);
+			if (!local_resp) BUG();
+
+			ret = server_tread(cos_spd_id(), r->content_id, cb, sz);
+			if (ret < 0) {
+				cbuf_free(cb);
+				printc("https get reply returning %d.\n", ret);
+				return ret;
+			}
+			local_resp_sz = ret;
+		}
+
+		/* no more data */
+		if (local_resp_sz == 0) {
+			cbuf_free(cb);
+			break;
+		}
+
+		/* If the header and data couldn't fit into the
+		 * provided buffer, then we need to save the response,
+		 * so that we can send it out later... */
+		if (http_get_header(resp+used, resp_sz-used, local_resp_sz, &consumed)) {
+			if (NULL == r->resp.resp) {
+				char *save;
+			
+				save = malloc(local_resp_sz);
+				assert(save);
+				assert(local_resp);
+				memcpy(save, local_resp, local_resp_sz);
+				cbuf_free(cb);
+				local_resp = NULL;
+
+				r->resp.resp = save;
+				r->resp.resp_len = local_resp_sz;
+			}
+			if (0 == used) {
+				printc("https: could not allocate either header or response of sz %d:%s\n", local_resp_sz, local_resp);
+				if (local_resp) cbuf_free(cb);
+				return -ENOMEM;
+			}
+			break;
+		}
+
+		memcpy(resp+used+consumed, local_resp, local_resp_sz);
+		
+		assert(local_resp);
+		cbuf_free(cb);
+		local_resp = NULL;
+
+		used += local_resp_sz + consumed;
+		next = r->next;
+		/* bookkeeping */
+		http_req_cnt++;
+
+		http_free_request(r);
+		r = c->pending_reqs;
+		assert(r == next || NULL == r);
+	}
+
+	return used;
+}
+#endif
+
 
 
 // ~/research/others_software/httperf-0.9.0/src/httperf --port=200 --wsess=10000,20,0 

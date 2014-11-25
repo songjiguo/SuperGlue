@@ -64,7 +64,7 @@ int fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *i
 
 	/* remove this for web server test */
 	
-	if (test_num++ > 6) {
+	if (test_num++ > 2) {
 		printc("has failed %d times\n", test_num);
 		assert(0);
 	}

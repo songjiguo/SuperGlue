@@ -445,7 +445,7 @@ static int sched_switch_thread_target(int flags, report_evt_t evt, struct sched_
 		assert(!sched_thd_blocked(next));
 		report_event(SWITCH_THD);
 		timer_end(&t);
-		printc("sched: call cos_switch_thread_release(next %d)\n", next->id);
+		/* printc("sched: call cos_switch_thread_release(next %d)\n", next->id); */
 		ret = cos_switch_thread_release(next->id, flags);
 		assert(ret != COS_SCHED_RET_ERROR);
 		if (COS_SCHED_RET_CEVT == ret) { report_event(CEVT_RESCHED); }
@@ -530,8 +530,8 @@ static void sched_timer_tick(void)
 			//cos_stats();
 		}
 		/* are we done running? */
-		printc("PERCPU_GET(sched_base_state)->ticks %llu\n",
-		       PERCPU_GET(sched_base_state)->ticks);
+		/* printc("PERCPU_GET(sched_base_state)->ticks %llu\n", */
+		/*        PERCPU_GET(sched_base_state)->ticks); */
 		if (unlikely(PERCPU_GET(sched_base_state)->ticks >= RUNTIME_SEC*TIMER_FREQ+1)) {
 			sched_exit();
 			while (COS_SCHED_RET_SUCCESS !=
@@ -840,10 +840,10 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	if (!thd) goto error;
 	
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_WAKEUP)
-	printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", 
-	       cos_get_thd_id(), cos_spd_id(), spdid);
+	/* printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n",  */
+	/*        cos_get_thd_id(), cos_spd_id(), spdid); */
 	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 14 && test_control == 4) {
+	if (spdid == 18 && cos_get_thd_id() == 10 && test_control == 500) {
 		printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -853,7 +853,6 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	/* only increase the count once */
 	fp_pre_wakeup(thd);
 	
-	printc("1\n");
 	if (thd->dependency_thd) {
 		assert(sched_thd_dependent(thd));
 		assert(thd->ncs_held == 0 || thd->id == cos_get_thd_id());
@@ -866,7 +865,6 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 		 * before it could complete the call to block), no reason to
 		 * wake it via scheduling.
 		 */
-		printc("1.45\n");
 		if (!sched_thd_blocked(thd)) goto cleanup;
 		/* 
 		 * We are waking up a thread, which means that if we
@@ -886,13 +884,11 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 		assert(!sched_thd_dependent(thd));
 	}
 
-	printc("2\n");
 	assert(!sched_thd_dependent(thd));
 	sched_switch_thread(0, WAKE_LOOP);
 done:
 	return 0;
 cleanup:
-	printc("3\n");
 	cos_sched_lock_release();
 	goto done;
 error:
@@ -974,16 +970,24 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 	}
 
 	/* we shouldn't block while holding a component lock */
-	if (unlikely(0 != thd->ncs_held)) goto warn;
+	if (unlikely(0 != thd->ncs_held)) {
+		printc("sched warn 1\n");
+		goto warn;
+	}
 	if (unlikely(!(thd->blocking_component == 0 || 
-		       thd->blocking_component == spdid))) goto warn;
+		       thd->blocking_component == spdid))) {
+		printc("sched warn 2\n");
+		goto warn;
+	}
 	assert(!sched_thd_free(thd));
 	assert(!sched_thd_blocked(thd));
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_BLOCK)
+	/* printc("trigger fault in sched_block: thd %d spd %ld passed spd %d\n",  */
+	/*        cos_get_thd_id(), cos_spd_id(), spdid); */
 	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 4) {
-		printc("trigger fault in sched_block: thd %d spd %ld passed spd %d\n", 
+	if (spdid == 18 && cos_get_thd_id() == 15 && test_control == 500) {
+		printc("trigger fault in sched_block: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -1125,10 +1129,10 @@ int sched_component_take(spdid_t spdid)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_COMPONENT_TAKE)
 		test_control++;
-		printc("trigger sched_component_take %d (thd %d test_control %d)\n", 
-		       spdid, cos_get_thd_id(), test_control);
-		if (spdid == 16 && cos_get_thd_id() == 13 && test_control > 20) {
-			printc("trigger fault in sched_component_take: thd %d spd %ld passed spd %d\n", 
+		/* printc("trigger sched_component_take %d (thd %d test_control %d)\n",  */
+		/*        spdid, cos_get_thd_id(), test_control); */
+		if (spdid == 15 && cos_get_thd_id() == 11 && test_control  == 400) {
+			printc("trigger fault in sched_component_take: thd %d spd %ld passed spd %d\n",
 			       cos_get_thd_id(), cos_spd_id(), spdid);
 			assert(0);
 		}
@@ -1169,9 +1173,7 @@ int sched_component_release(spdid_t spdid)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_COMPONENT_RELEASE)
 	test_control++;
-	/* printc("sched take %d (thd %d test_control %d)\n",  */
-	/*        spdid, cos_get_thd_id(), test_control); */
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 6) {
+	if (spdid == 15 && cos_get_thd_id() == 11 && test_control  == 400) {
 		printc("trigger fault in sched_component_take: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -2339,8 +2341,8 @@ sched_reboot(int arg)
 
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
-	printc("upcall type %d, core %ld, thd %d, args %p %p %p\n",
-	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
+	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p\n", */
+	/*        t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3); */
 	switch (t) {
 	case COS_UPCALL_THD_CREATE:
 		/* cos_upcall and cos_create_thread syscall pass this type. */

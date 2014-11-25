@@ -9,20 +9,37 @@
 #define TORRENT_H
 
 #include <cos_component.h>
-#include <cbuf_c.h>
 #include <cbuf.h>
 #include <evt.h>
 
-/* 2 threads, operate on the different files(T1 writes foo/bar/who, T2 writes foo/boo/who) */
+/* Note: when we test, we comment out the following in stkmgr.c
+   assert(stk_item->stk->thdid_owner != cos_get_thd_id()); */
 
-/* #define TEST_RAMFS_TSPLIT_BEFORE */
-/* #define TEST_RAMFS_TSPLIT_AFTER */
-/* #define TEST_RAMFS_TREADP */
-/* #define TEST_RAMFS_TWRITEP_BEFORE */
-/* #define TEST_RAMFS_TWRITEP_AFTER */
-/* #define TEST_RAMFS_TRELEASE */
-/* #define TEST_RAMFS_TMERGE */
+/* #define TEST_MBOX_TSPLIT_SERVER_BEFORE  // server side create */
+/* #define TEST_MBOX_TSPLIT_SERVER_AFTER  // server side create */
+/* #define TEST_MBOX_TSPLIT_CLIENT_BEFORE  // client side create */
+/* #define TEST_MBOX_TSPLIT_CLIENT_AFTER  // client side create */
+/* #define TEST_MBOX_TSPLIT_READY_BEFORE */
+/* #define TEST_MBOX_TSPLIT_READY_AFTER */
 
+#define TEST_MBOX_TREADP
+/* #define TEST_MBOX_TWRITEP_BEFORE */
+/* #define TEST_MBOX_TWRITEP_AFTER */
+
+/* #define TEST_MBOX_TRELEASE_SERVER_BEFORE  // server side trelease */
+/* #define TEST_MBOX_TRELEASE_SERVER_AFTER  // server side trelease */
+/* #define TEST_MBOX_TRELEASE_CLIENT_BEFORE  // client side trelease */
+/* #define TEST_MBOX_TRELEASE_CLIENT_AFTER  // client side trelease */
+/* #define TEST_MBOX_TRELEASE_READY_BEFORE */
+/* #define TEST_MBOX_TRELEASE_READY_AFTER */
+
+
+/* #define BENCHMARK_MEAS_TSPLIT */
+/* #define BENCHMARK_MEAS_TREADP */
+/* #define BENCHMARK_MEAS_TWRITEP */
+/* #define BENCHMARK_MEAS_TRELEASE */
+
+/* torrent descriptor */
 typedef int td_t;
 static const td_t td_null = 0, td_root = 1;
 typedef enum {
@@ -39,51 +56,12 @@ td_t tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, l
 void trelease(spdid_t spdid, td_t tid);
 int tmerge(spdid_t spdid, td_t td, td_t td_into, char *param, int len);
 int tread(spdid_t spdid, td_t td, int cbid, int sz);
-
-/* No idea why do we need off returned? */
-int treadp(spdid_t spdid, td_t td, int len, int *off, int *sz);
-
+int treadp(spdid_t spdid, td_t td, int *off, int *sz);
 int twrite(spdid_t spdid, td_t td, int cbid, int sz);
 int twritep(spdid_t spdid, td_t td, int cbid, int sz);
 int trmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, char *retval, unsigned int max_rval_len);
 int twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen);
 
-/* treadp/twritep version of pack -- using cbufp */
-static inline int
-treadp_pack(spdid_t spdid, td_t td, char *data, int len)
-{
-	cbufp_t cb;
-	char *d;
-	int off, sz;
-	
-	cb = treadp(spdid, td, len, &off, &sz);
-	/* printc("after treadp in tread_pack off %d sz %d\n", off, sz); */
-	if (!cb < 0) return 0;
-	d = cbufp2buf(cb, sz);
-	/* printc("data %s\n", d); */
-	memcpy(data, d, sz);
-	cbufp_deref(cb);
-	return sz;
-}
-
-static inline int
-twritep_pack(spdid_t spdid, td_t td, char *data, int len)
-{
-	cbufp_t cb;
-	char *d;
-	int ret;
-
-	d = cbufp_alloc(len, &cb);
-	if (!d) return -1;
-	cbufp_send(cb);
-	memcpy(d, data, len);
-	ret = twritep(spdid, td, cb, len);
-	cbufp_deref(cb);
-	
-	return ret;
-}
-
-/* tread/twrite version of pack -- using cbuf */
 static inline int
 tread_pack(spdid_t spdid, td_t td, char *data, int len)
 {

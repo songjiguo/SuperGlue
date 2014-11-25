@@ -28,6 +28,7 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	struct torrent *t, *nt;
 	int channel, direction;
 
+	printc("8 tsplit cos_net\n");
 	LOCK();
 	if (tor_isnull(td)) ERR_THROW(-EINVAL, done);
 	t = tor_lookup(td);

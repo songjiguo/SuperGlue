@@ -31,14 +31,7 @@ void pop_cgi(void)
 	
 	/* ret1 = twrite_pack(cos_spd_id(), t1, data1, strlen(data1)); */
 
-	cbufp_t cb;
-	char *d;
-	d = cbufp_alloc(strlen(data1), &cb);
-	if (!d) return -1;
-	cbufp_send(cb);
-	memcpy(d, data1, strlen(data1));
-	ret1 = twritep(cos_spd_id() , t1, cb, strlen(data1));
-	cbufp_deref(cb);
+	ret1 = twritep_pack(cos_spd_id(), t1, data1, strlen(data1));
 
 	trelease(cos_spd_id(), t1);
 

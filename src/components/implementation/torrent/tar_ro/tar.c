@@ -32,6 +32,7 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	struct fsobj *fso, *fsc, *parent; /* obj, child, and parent */
 	char *subpath;
 
+	printc("6 tsplit tar\n");
 	if (tor_isnull(td)) return -EINVAL;
 	LOCK();
 	t = tor_lookup(td);

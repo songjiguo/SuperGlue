@@ -251,6 +251,8 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	struct fsobj *fsc, *parent = NULL; /* child, and parent */
 	char *subpath;
 
+	printc("1 tsplit as_conn\n");
+
 	LOCK();
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);

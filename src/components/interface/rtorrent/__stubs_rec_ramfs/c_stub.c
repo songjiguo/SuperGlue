@@ -167,8 +167,8 @@ param_save(char *param, int param_len)
 
 	l_param[param_len] = '\0';   // zero out any thing left after the end
 
-	printc("in param save: l_param %s param %s param_len %d\n", 
-	       l_param, param, param_len);
+	/* printc("in param save: l_param %s param %s param_len %d\n",  */
+	/*        l_param, param, param_len); */
 	return l_param;
 }
 
@@ -346,7 +346,7 @@ CSTUB_FN(td_t, tsplit)(struct usr_inv_cap *uc,
         td_t		cli_tid	   = 0;
         td_t		ser_tid	   = 0;
 
-	printc("cli: tsplit passed in param %s\n", param);
+	/* printc("cli: tsplit passed in param %s\n", param); */
 	assert(parent_tid >= 1);
         assert(param && len >= 0);
         assert(param[len] == '\0'); 
@@ -357,8 +357,8 @@ CSTUB_FN(td_t, tsplit)(struct usr_inv_cap *uc,
 	}
 
 redo:
-	printc("<<< In: call tsplit  (thread %d, spd %ld and parent tid %d) >>>\n", 
-	       cos_get_thd_id(), cos_spd_id(), parent_tid);
+	/* printc("<<< In: call tsplit  (thread %d, spd %ld and parent tid %d) >>>\n",  */
+	/*        cos_get_thd_id(), cos_spd_id(), parent_tid); */
 
 	rd = rd_update(parent_tid, STATE_TSPLIT_PARENT);
 	if (rd) {
@@ -366,8 +366,8 @@ redo:
 	} else {
 		curr_ptid  = parent_tid;
 	}
-	printc("<<< In: call tsplit (thread %d, , spd %ld and curr_parent tid %d) >>>\n", 
-	       cos_get_thd_id(), cos_spd_id(), curr_ptid);
+	/* printc("<<< In: call tsplit (thread %d, , spd %ld and curr_parent tid %d) >>>\n",  */
+	/*        cos_get_thd_id(), cos_spd_id(), curr_ptid); */
 
         d = cbuf_alloc(sz, &cb);
 	assert(d);
@@ -391,7 +391,7 @@ redo:
         cbuf_free(cb);
 
         ser_tid = ret;
-	printc("passed in param %s (ser_tid %d)\n", param, ser_tid);
+	/* printc("passed in param %s (ser_tid %d)\n", param, ser_tid); */
 	assert(ser_tid >= 1);
 
 	char *l_param = "";
@@ -408,7 +408,7 @@ redo:
 
         rd_cons(rd, curr_ptid, cli_tid, ser_tid, l_param, len, tflags, evtid);
 
-	printc("tsplit done!!! return new client tid %d\n\n", cli_tid);
+	/* printc("tsplit done!!! return new client tid %d\n\n", cli_tid); */
         return cli_tid;
 }
 
@@ -443,16 +443,16 @@ CSTUB_FN(int, treadp)(struct usr_inv_cap *uc,
 	long fault = 0;
 
 
-        printc("<<< In: call tread (thread %d, spd %ld) >>>\n", cos_get_thd_id(), cos_spd_id());
+        /* printc("<<< In: call tread (thread %d, spd %ld) >>>\n", cos_get_thd_id(), cos_spd_id()); */
         struct rec_data_tor *rd;
         volatile unsigned long long start, end;
 
 redo:
-        printc("treadp (spd %ld thd %d td %d)\n", cos_spd_id(), cos_get_thd_id(), td);
+        /* printc("treadp (spd %ld thd %d td %d)\n", cos_spd_id(), cos_get_thd_id(), td); */
 	rd = rd_update(td, STATE_TREAD);
 	assert(rd);
 
-	printc("treadp cli (before): len %d off %d sz %d\n", len, *off, *sz);
+	/* printc("treadp cli (before): len %d off %d sz %d\n", len, *off, *sz); */
 
 	CSTUB_INVOKE_3RETS(ret, fault, *off, *sz, uc, 3, spdid, rd->s_tid, len);
         if (unlikely(fault)) {
@@ -463,7 +463,7 @@ redo:
 		goto redo;
 	}
 
-	printc("treadp cli (after): len %d off %d sz %d\n", len, *off, *sz);
+	/* printc("treadp cli (after): len %d off %d sz %d\n", len, *off, *sz); */
 
 	return ret;
 }
@@ -492,7 +492,7 @@ CSTUB_FN(int, tmerge)(struct usr_inv_cap *uc, spdid_t spdid, td_t td,
 	assert(param[len] == '\0');
 	
 redo:
-        printc("<<< In: call tmerge (thread %d) >>>\n", cos_get_thd_id());
+        /* printc("<<< In: call tmerge (thread %d) >>>\n", cos_get_thd_id()); */
 	rd = rd_update(td, STATE_TMERGE);
 	assert(rd);
 
@@ -532,7 +532,7 @@ CSTUB_FN(void, trelease)(struct usr_inv_cap *uc,
         struct rec_data_tor *rd;
 
 redo:
-        printc("<<< In: call trelease (thread %d) >>>\n", cos_get_thd_id());
+        /* printc("<<< In: call trelease (thread %d) >>>\n", cos_get_thd_id()); */
 	rd = rd_update(tid, STATE_TRELEASE);
 	assert(rd);
 

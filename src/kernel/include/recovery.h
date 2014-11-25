@@ -224,7 +224,7 @@ ipc_fault_detect(struct invocation_cap *cap_entry, struct spd *dest_spd)
 static inline int
 pop_fault_detect(struct thd_invocation_frame *inv_frame)
 {
-	if (spd_get_index(inv_frame->spd) == 6 ||
+	if (spd_get_index(inv_frame->spd) == 21 ||
 	    spd_get_index(inv_frame->spd) == 1) return 0;  // test pgfault spd (or deps)
 	if (inv_frame->fault.cnt != inv_frame->spd->fault.cnt) {
 		printk("cos: inv_frame spd %d spd fault cnt %d frame fault cnt %d\n", 

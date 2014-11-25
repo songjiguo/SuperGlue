@@ -261,7 +261,7 @@ redo:
 	rd = rd_update(cos_get_thd_id(), dep_thd, THD_STATE_WAKEUP);
 	assert(rd);
 	
-	printc("thread %d calls << sched_wakeup thd %d>>\n",cos_get_thd_id(),dep_thd);
+	/* printc("thread %d calls << sched_wakeup thd %d>>\n",cos_get_thd_id(),dep_thd); */
 #ifdef MEASU_SCHED_INTERFACE_WAKEUP
 	rdtscll(start);
 #endif
@@ -296,7 +296,7 @@ redo:
         rd = rd_update(cos_get_thd_id(), thd_id, THD_STATE_BLOCK);
 	assert(rd);
 
-	printc("thread %d calls << sched_block thd %d>>\n",cos_get_thd_id(),thd_id);
+	/* printc("thread %d calls << sched_block thd %d>>\n",cos_get_thd_id(),thd_id); */
 	
 #ifdef MEASU_SCHED_INTERFACE_BLOCK
 	rdtscll(start);
@@ -332,7 +332,7 @@ redo:
         rd = rd_update(cos_get_thd_id(), 0, THD_STATE_LOCK_TAKE);
 	assert(rd);
 
-	printc("thread %d calls << sched_component_take >>\n",cos_get_thd_id());
+	/* printc("thread %d calls << sched_component_take >>\n",cos_get_thd_id()); */
 
 #ifdef MEASU_SCHED_INTERFACE_COM_TAKE
 	rdtscll(start);
@@ -370,7 +370,7 @@ redo:
         rd = rd_update(cos_get_thd_id(), 0, THD_STATE_LOCK_RELEASE);
 	assert(rd);
 
-	printc("thread %d calls << sched_component_release >>\n",cos_get_thd_id());
+	/* printc("thread %d calls << sched_component_release >>\n",cos_get_thd_id()); */
 #ifdef MEASU_SCHED_INTERFACE_COM_RELEASE
 	rdtscll(start);
 #endif
@@ -401,7 +401,7 @@ CSTUB_FN(int, sched_timeout_thd) (struct usr_inv_cap *uc,
 	long ret;
 
 redo:
-	printc("<< cli: sched_timeout_thd >>>\n");
+	/* printc("<< cli: sched_timeout_thd >>>\n"); */
 
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
@@ -418,7 +418,7 @@ CSTUB_FN(int, sched_timeout) (struct usr_inv_cap *uc,
 	long fault = 0;
 	long ret;
 redo:
-	printc("<< cli: sched_timeout >>>\n");
+	/* printc("<< cli: sched_timeout >>>\n"); */
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, amnt);
 	if (unlikely (fault)){
@@ -436,7 +436,7 @@ CSTUB_FN(int, sched_timestamp) (struct usr_inv_cap *uc)
 	long ret;
 
 redo:
-	printc("<< cli: sched_timestamp >>>\n");
+	/* printc("<< cli: sched_timestamp >>>\n"); */
 
 	CSTUB_INVOKE_NULL(ret, fault, uc);
 	if (unlikely (fault)){
