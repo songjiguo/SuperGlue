@@ -1270,9 +1270,8 @@ done:
 #include <torlib.h>
 
 extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
-extern td_t parent_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
-extern int parent_twrite(spdid_t spdid, td_t td, int cbid, int sz);
-extern int parent_tread(spdid_t spdid, td_t td, int cbid, int sz);
+extern int server_twrite(spdid_t spdid, td_t td, int cbid, int sz);
+extern int server_tread(spdid_t spdid, td_t td, int cbid, int sz);
 
 static volatile int debug_thd = 0;
 
@@ -1286,7 +1285,7 @@ static int cos_net_evt_loop(void)
 	cbuf_t cb;
 
 	assert(event_thd > 0);
-	ip_td = parent_tsplit(cos_spd_id(), td_root, "", 0, TOR_ALL, -1);
+	ip_td = server_tsplit(cos_spd_id(), td_root, "", 0, TOR_ALL, -1);
 	assert(ip_td > 0);
 	printc("network uc %d starting...\n", cos_get_thd_id());
 	alloc_sz = sizeof(struct cos_array) + MTU;
@@ -1295,7 +1294,7 @@ static int cos_net_evt_loop(void)
 
 		data = cbuf_alloc(alloc_sz, &cb);
 		assert(data);
-		sz = parent_tread(cos_spd_id(), ip_td, cb, alloc_sz);
+		sz = server_tread(cos_spd_id(), ip_td, cb, alloc_sz);
 		/* tcp_tread_cnt++; */
 		assert(sz > 0);
 		cos_net_interrupt(data, sz);
@@ -1345,7 +1344,7 @@ static err_t cos_net_stack_send(struct netif *ni, struct pbuf *p, struct ip_addr
 	}
 
 	
-	sz = parent_twrite(cos_spd_id(), ip_td, cb, tot_len);
+	sz = server_twrite(cos_spd_id(), ip_td, cb, tot_len);
 	if (sz <= 0) {
 		printc("<<transmit returns %d -> %d>>\n", sz, tot_len);
 	}

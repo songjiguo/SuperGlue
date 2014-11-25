@@ -9,10 +9,7 @@
 
 char buffer[1024];
 
-/* extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid); */
-/* extern void server_trelease(spdid_t spdid, td_t tid); */
-/* extern int server_treadp(spdid_t spdid, td_t td, int len, int *off, int *sz); */
-/* extern int server_twritep(spdid_t spdid, td_t td, int cbid, int sz); */
+extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
 
 void pop_cgi(void)
 {

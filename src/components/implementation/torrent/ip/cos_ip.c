@@ -27,10 +27,9 @@ static volatile unsigned long ip_twrite_cnt = 0;
 static volatile int debug_thd = 0;
 
 extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
-extern td_t parent_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
-extern void parent_trelease(spdid_t spdid, td_t tid);
-extern int parent_tread(spdid_t spdid, td_t td, int cbid, int sz);
-extern int parent_twrite(spdid_t spdid, td_t td, int cbid, int sz);
+extern void server_trelease(spdid_t spdid, td_t tid);
+extern int server_tread(spdid_t spdid, td_t td, int cbid, int sz);
+extern int server_twrite(spdid_t spdid, td_t td, int cbid, int sz);
 
 /* required so that we can have a rodata section */
 const char *name = "cos_ip";
@@ -63,7 +62,7 @@ tsplit(spdid_t spdid, td_t tid, char *param, int len,
 	struct torrent *t;
 
 	if (tid != td_root) return -EINVAL;
-	ntd = parent_tsplit(cos_spd_id(), tid, param, len, tflags, evtid);
+	ntd = server_tsplit(cos_spd_id(), tid, param, len, tflags, evtid);
 	if (ntd <= 0) ERR_THROW(ntd, err);
 
 	t = tor_alloc((void*)ntd, tflags);
@@ -83,7 +82,7 @@ trelease(spdid_t spdid, td_t td)
 	t = tor_lookup(td);
 	if (!t) goto done;
 	ntd = (td_t)t->data;
-	parent_trelease(cos_spd_id(), ntd);
+	server_trelease(cos_spd_id(), ntd);
 	tor_free(t);
 done:
 	return;
@@ -118,7 +117,7 @@ twrite(spdid_t spdid, td_t td, int cbid, int sz)
 	nbuf = cbuf_alloc(sz, &ncbid);
 	assert(nbuf);
 	memcpy(nbuf, buf, sz);
-	ret = parent_twrite(cos_spd_id(), ntd, ncbid, sz);
+	ret = server_twrite(cos_spd_id(), ntd, ncbid, sz);
 	/* ip_twrite_cnt++; */
 	cbuf_free(ncbid);
 done:
@@ -148,7 +147,7 @@ tread(spdid_t spdid, td_t td, int cbid, int sz)
 	nbuf = cbuf_alloc(sz, &ncbid);
 	assert(nbuf);
 	/* printc("tip_tif_tread (thd %d)\n", cos_get_thd_id()); */
-	ret = parent_tread(cos_spd_id(), ntd, ncbid, sz);
+	ret = server_tread(cos_spd_id(), ntd, ncbid, sz);
 	if (ret < 0) goto free;
 	/* ip_tread_cnt++; */
 	memcpy(buf, nbuf, ret);

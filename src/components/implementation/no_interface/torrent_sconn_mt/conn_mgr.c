@@ -21,10 +21,11 @@
 #include <sys/socket.h>
 #include <stdio.h>
 #include <torrent.h>
-extern td_t from_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
-extern void from_trelease(spdid_t spdid, td_t tid);
-extern int from_tread(spdid_t spdid, td_t td, int cbid, int sz);
-extern int from_twrite(spdid_t spdid, td_t td, int cbid, int sz);
+
+extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
+extern void server_trelease(spdid_t spdid, td_t tid);
+extern int server_tread(spdid_t spdid, td_t td, int cbid, int sz);
+extern int server_twrite(spdid_t spdid, td_t td, int cbid, int sz);
 #include <sched.h>
 
 
@@ -195,7 +196,7 @@ accept_new(int accept_fd)
 		evt_put(debug_teid);
 		feid = evt_get();
 		assert(feid > 0);
-		from = from_tsplit(cos_spd_id(), accept_fd, "", 0, TOR_RW, feid);
+		from = server_tsplit(cos_spd_id(), accept_fd, "", 0, TOR_RW, feid);
 		mapping_add(from, debug_to, feid, debug_teid);
 		return;
 	}
@@ -204,7 +205,7 @@ accept_new(int accept_fd)
 	while (1) {
 		feid = evt_get();
 		assert(feid > 0);
-		from = from_tsplit(cos_spd_id(), accept_fd, "", 0, TOR_RW, feid);
+		from = server_tsplit(cos_spd_id(), accept_fd, "", 0, TOR_RW, feid);
 		connmgr_from_tsplit_cnt++;
 		num_connection++;
 		if (!print_once && num_connection > 2) {
@@ -263,7 +264,7 @@ from_data_new(struct tor_conn *tc)
 		buf = cbuf_alloc(BUFF_SZ, &cb);
 		assert(buf);
 		/* printc("connmgr reads net (thd %d)\n", cos_get_thd_id()); */
-		amnt = from_tread(cos_spd_id(), from, cb, BUFF_SZ-1);
+		amnt = server_tread(cos_spd_id(), from, cb, BUFF_SZ-1);
 		connmgr_from_tread_cnt++;
 		/* printc("connmgr reads net amnt %d\n", amnt); */
 		if (0 == amnt) {
@@ -308,7 +309,7 @@ done:
 	return;
 close:
 	mapping_remove(from, to, tc->feid, tc->teid);
-	from_trelease(cos_spd_id(), from);
+	server_trelease(cos_spd_id(), from);
 	num_connection--;
 	trelease(cos_spd_id(), to);
 	assert(tc->feid && tc->teid);
@@ -342,7 +343,7 @@ to_data_new(struct tor_conn *tc)
 	/* printc("debug_first %d debug_buf %d debug_amnt %d\n", debug_first, debug_buf, debug_amnt); */
 	if (debug_first_to == 1 && debug_buf_to && debug_amnt_to > 0) {
 		/* printc("use cached one cbuf\n"); */
-		if (debug_amnt_to != (debug_ret_to = from_twrite(cos_spd_id(), from, debug_cb_to, debug_amnt_to))) {
+		if (debug_amnt_to != (debug_ret_to = server_twrite(cos_spd_id(), from, debug_cb_to, debug_amnt_to))) {
 			printc("debug_mnt %d debug_ret %d\n", debug_amnt_to, debug_ret_to);
 			assert(0);
 		}
@@ -374,7 +375,7 @@ to_data_new(struct tor_conn *tc)
 		if (debug_first_to == 0) debug_amnt_to = amnt;
 #endif
 		/* printc("connmgr writes to net\n"); */
-		if (amnt != (ret = from_twrite(cos_spd_id(), from, cb, amnt))) {
+		if (amnt != (ret = server_twrite(cos_spd_id(), from, cb, amnt))) {
 			printc("conn_mgr: write failed w/ %d of %d on fd %d\n", 
 			       ret, amnt, to);
 			goto close;
@@ -398,7 +399,7 @@ done:
 	return;
 close:
 	mapping_remove(from, to, tc->feid, tc->teid);
-	from_trelease(cos_spd_id(), from);
+	server_trelease(cos_spd_id(), from);
 	num_connection--;
 	trelease(cos_spd_id(), to);
 	assert(tc->feid && tc->teid);
@@ -508,7 +509,7 @@ cos_init(void *arg)
 	eid = evt_get();
 	printc("evt id init : %ld\n", eid);
 	if (snprintf(__create_str, 128, create_str, port) < 0) BUG();
-	ret = c = from_tsplit(cos_spd_id(), td_root, __create_str, strlen(__create_str), TOR_ALL, eid);
+	ret = c = server_tsplit(cos_spd_id(), td_root, __create_str, strlen(__create_str), TOR_ALL, eid);
 	if (ret <= td_root) BUG();
 	accept_fd = c;
 	evt_add(c, eid);

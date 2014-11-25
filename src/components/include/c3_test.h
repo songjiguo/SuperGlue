@@ -1,6 +1,6 @@
-//#define NO_EXAMINE
+#define NO_EXAMINE
 //#define EXAMINE_SCHED
-#define EXAMINE_MM
+//#define EXAMINE_MM
 //#define EXAMINE_RAMFS
 //#define EXAMINE_TE
 //#define EXAMINE_LOCK

@@ -172,7 +172,6 @@ param_save(char *param, int param_len)
 	return l_param;
 }
 
-// this is strange since https call server_tsplit to call ramfs
 extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
 
 /* restore the server state */
