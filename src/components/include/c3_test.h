@@ -1,5 +1,5 @@
-#define NO_EXAMINE
-//#define EXAMINE_SCHED
+//#define NO_EXAMINE
+#define EXAMINE_SCHED
 //#define EXAMINE_MM
 //#define EXAMINE_RAMFS
 //#define EXAMINE_TE

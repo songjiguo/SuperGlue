@@ -85,7 +85,7 @@ rdblk_addblk(struct rec_data_blk *rd, struct blocked_thd *ptr_blkthd, int dep_th
 	INIT_LIST(ptr_blkthd, next, prev);
 	ADD_END_LIST(&rd->blkthd, ptr_blkthd, next, prev);
 	/* printc("\n[[[[sched_block: tracking...ptr_blkthd %p (thd %d  spd %d rd->blkthd addr %p)]]]\n\n", ptr_blkthd, cos_get_thd_id(), rd->spdid, &rd->blkthd); */
-       
+	
 	return;
 }
 
@@ -106,6 +106,11 @@ int __sg_sched_block(spdid_t spdid, int dependency_thd)
 		assert(rd);
 		INIT_LIST(&rd->blkthd, next, prev);
 		rd->spdid = spdid;
+	}
+
+	if (rd->spdid != spdid) {
+		printc("rd->spdid %d spdid %d (thd %d)\n",
+		       rd->spdid, spdid, cos_get_thd_id());
 	}
 
 	assert(rd && rd->spdid == spdid);

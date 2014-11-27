@@ -39,6 +39,8 @@ static int meas_flag = 0;
 /* global fault counter, only increase, never decrease */
 static unsigned long fcounter;
 
+static unsigned int timer_thread;
+
 /* recovery data structure for threads */
 struct rec_data_thd {
 	unsigned int thd;
@@ -134,8 +136,10 @@ rd_update(int thd, int target_thd, int state)
 	}
 	if (likely(rd->fcnt == fcounter)) goto done;
 	rd->fcnt = fcounter;
+	
+	if (cos_get_thd_id() == timer_thread) sched_timeout_thd(cos_spd_id());
 
-	printc("State Machine thd %d -- ", cos_get_thd_id());
+	printc("State Machine thd %d in spd %ld -- ", cos_get_thd_id(), cos_spd_id());
 	/* STATE MACHINE */
 	switch (state) {
 	case THD_STATE_CREATE:
@@ -150,7 +154,7 @@ rd_update(int thd, int target_thd, int state)
 		break;
 	case THD_STATE_WAKEUP:
 		printc("rd_update: THD_STATE_WAKEUP (thd %d)\n", rd->dep_thd);
-		cos_sched_cntl(COS_SCHED_BREAK_PREEMPTION_CHAIN, 0, 0);
+		/* cos_sched_cntl(COS_SCHED_BREAK_PREEMPTION_CHAIN, 0, 0); */
 		break;
 	case THD_STATE_BLOCK:
 		printc("rd_update: THD_STATE_BLOCK\n");
@@ -268,6 +272,8 @@ redo:
 	
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, dep_thd);
 	if (unlikely (fault)){
+		printc("see a fault during sched_wakeup (thd %d in spd %ld dep thd %d)\n",
+		       cos_get_thd_id(), cos_spd_id(), dep_thd);
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
@@ -303,6 +309,8 @@ redo:
 #endif
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, thd_id);
 	if (unlikely (fault)){
+		printc("see a fault during sched_block (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
@@ -340,7 +348,8 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
-		printc("see a fault during sched_component_take\n");
+		printc("see a fault during sched_component_take (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
@@ -377,6 +386,8 @@ redo:
       
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
+		printc("see a fault during sched_component_release (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
@@ -405,9 +416,13 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
+		printc("see a fault during sched_timeout_thd (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
+
+	timer_thread = cos_get_thd_id();
 
 	return ret;
 }
@@ -422,13 +437,14 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, amnt);
 	if (unlikely (fault)){
+		printc("see a fault during sched_timeout (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
 	
 	return ret;
 }
-
 
 CSTUB_FN(int, sched_timestamp) (struct usr_inv_cap *uc)
 {
@@ -440,10 +456,12 @@ redo:
 
 	CSTUB_INVOKE_NULL(ret, fault, uc);
 	if (unlikely (fault)){
+		printc("see a fault during sched_timestamp (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
-
+	
 	return ret;
 }
 

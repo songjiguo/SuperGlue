@@ -227,7 +227,8 @@ static void __event_expiration(event_time_t time, struct thread_event *events)
 		 * threads. */
 		
 		// Jiguo: wake up the thread through evt
-		/* printc("timed_evt trying to wake up a thread\n"); */
+		/* printc("timed_evt trying to wake up a thread (passed in ticks %llu)\n", */
+		/*        time); */
 		if (b) evt_trigger(spdid, tmp->evt);
 
 	}
@@ -626,6 +627,9 @@ static void start_timer_thread(void)
 	spdid_t spdid = cos_spd_id();
 	unsigned int tick_freq;
 
+	static unsigned long cnt = 0;
+	static unsigned long cnt2 = 0;
+
 	sched_timeout_thd(spdid);
 	tick_freq = sched_tick_freq();
 	assert(tick_freq == 100);
@@ -639,6 +643,7 @@ static void start_timer_thread(void)
 	assert(EMPTY_LIST(&events, next, prev));
 	sched_block(spdid, 0);
 	/* Wait for events, then act on expired events.  Loop. */
+	printc("timer thread %d is starting now....\n", cos_get_thd_id());
 	while (1) {
 		event_time_t next_wakeup;
 
@@ -647,13 +652,17 @@ static void start_timer_thread(void)
 				   * (no dependency if we are in the
 				   * same protection domain as the
 				   * scheduler) */
-		/* printc("timer thread is starting now and get ticks now....\n"); */
 		ticks = sched_timestamp();
 		/* printc("timer thread sched_component_take now....\n"); */
 		if (sched_component_take(spdid)) {
 			prints("fprr: scheduler lock failed!!!");
 			BUG();
 		}
+
+
+		/* printc("normal te: thd %d  sched_timeout, next_wakeup %llu ticks %llu\n", */
+		/*        cos_get_thd_id(), next_wakeup, ticks); */
+
 		event_expiration(ticks);
 		next_wakeup = next_event_time();
 
@@ -664,7 +673,7 @@ static void start_timer_thread(void)
 				prints("fprr: scheduler lock release failed!!!");
 				BUG();
 			}
-			/* printc("timer thread is starting now and blocking now....\n"); */
+			printc("timer thread is starting now and blocking now....\n");
 			sched_block(spdid, 0);
 		} else {
 			unsigned int wakeup;
@@ -673,10 +682,12 @@ static void start_timer_thread(void)
 #endif
 			assert(next_wakeup > ticks);
 			wakeup = (unsigned int)(next_wakeup - ticks);
+
 			if (sched_component_release(spdid)) {
 				prints("fprr: scheduler lock release failed!!!");
 				BUG();
 			}
+
 			sched_timeout(spdid, wakeup);
 		}
 	}

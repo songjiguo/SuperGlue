@@ -524,7 +524,7 @@ cos_init(void *arg)
 		memset(&tc, 0, sizeof(struct tor_conn));
 		rdtscll(end);
 		meas_record(end-start);
-		/* printc("calling evt_wait all\n"); */
+		/* printc("thd %d calling evt_wait all\n", cos_get_thd_id()); */
 		evt = evt_wait_all();
 		/* printc("conn: thd %d event comes\n", cos_get_thd_id()); */
 		rdtscll(start);

@@ -735,14 +735,17 @@ void sched_timeout(spdid_t spdid, unsigned long amnt)
 
 	thd = sched_get_mapping(cos_get_thd_id());
 	assert(thd);
-
+	
 	abs_timeout = PERCPU_GET(sched_base_state)->ticks + amnt;
-
+	
 	if (0 == PERCPU_GET(sched_base_state)->wakeup_time || abs_timeout < PERCPU_GET(sched_base_state)->wakeup_time) {
 		PERCPU_GET(sched_base_state)->wakeup_time = abs_timeout;
 	}
+
 	/* If we're the timer thread, lets block, otherwise return */
 	if (thd != PERCPU_GET(sched_base_state)->wakeup_thd) {
+		/* printc("curre thd %d PERCPU_GET(sched_base_state)->wakeup_thd %d\n", */
+		/*        thd->id, PERCPU_GET(sched_base_state)->wakeup_thd->id); */
 		cos_sched_lock_release();
 		return;
 	}
@@ -754,6 +757,7 @@ void sched_timeout(spdid_t spdid, unsigned long amnt)
 		cos_sched_lock_release();
 		return;
 	}
+
 	fp_block(thd, cos_spd_id());
 	sched_switch_thread(0, TIMEOUT_LOOP);	
 
@@ -840,11 +844,18 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	if (!thd) goto error;
 	
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_WAKEUP)
-	/* printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n",  */
+	/* printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", */
 	/*        cos_get_thd_id(), cos_spd_id(), spdid); */
 	test_control++;
-	if (spdid == 18 && cos_get_thd_id() == 10 && test_control == 500) {
-		printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", 
+
+	/* if (spdid == 12 && cos_get_thd_id() == 14 && test_control == 4) { */
+	/* 	printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", */
+	/* 	       cos_get_thd_id(), cos_spd_id(), spdid); */
+	/* 	assert(0); */
+	/* } */
+
+	if (spdid == 18 && cos_get_thd_id() == 10 && test_control == 5000) {
+		printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -885,6 +896,7 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	}
 
 	assert(!sched_thd_dependent(thd));
+	/* printc("thread %d about to call sched_switch_thread\n", cos_get_thd_id()); */
 	sched_switch_thread(0, WAKE_LOOP);
 done:
 	return 0;
@@ -969,14 +981,23 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		}
 	}
 
-	/* we shouldn't block while holding a component lock */
-	if (unlikely(0 != thd->ncs_held)) {
-		printc("sched warn 1\n");
-		goto warn;
-	}
+	/* Jiguo: here is the issue -- the timer thread now use call
+	 * evt_trigger and might still hold the critical section, say
+	 * from scheduler. So this check can break. TODO: check the
+	 * ncs_held's owner and decide to return or continue. For web
+	 * server testing, simply comment this temporarily */
+
+	/* /\* we shouldn't block while holding a component lock *\/ */
+	/* if (unlikely(0 != thd->ncs_held)) { */
+	/* 	printc("sched warn 1 (thd %d from spd %d)\n", thd->id, spdid); */
+	/* 	printc("thd->blocking_component %d\n", thd->blocking_component); */
+	/* 	printc("thd->contended_component %d\n", thd->contended_component); */
+	/* 	goto warn; */
+	/* } */
+
 	if (unlikely(!(thd->blocking_component == 0 || 
 		       thd->blocking_component == spdid))) {
-		printc("sched warn 2\n");
+		printc("sched warn 2 (thd %d from spd %d)\n", cos_get_thd_id(), spdid);
 		goto warn;
 	}
 	assert(!sched_thd_free(thd));
@@ -1037,7 +1058,7 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		/* printc("...no dependency problem, going to depend on %d\n",dependency_thd); */
 		thd->dependency_thd = dep;
 		thd->flags |= THD_DEPENDENCY;
-		assert(thd->ncs_held == 0);
+		/* assert(thd->ncs_held == 0); */    // Jiguo: see above explanation
 	} else {
 		fp_block(thd, spdid);
 	}
@@ -1093,7 +1114,7 @@ done:
 	cos_sched_lock_release();
 	return ret; 
 warn:
-	printc("Blocking while holding lock!!!\n");
+	printc("Blocking while holding lock (thd %d)!!!\n", cos_get_thd_id());
 	ret = -1;
 	goto done;
 unblock:
@@ -2205,12 +2226,28 @@ sched_init()
 	return 0;
 }
 
+extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
+extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
+
 /* C3: sched_reboot is the function to rebuild scheduler state */
 static int
 sched_reboot(int arg)
 {
 	int ret = 0;
 	int llboot_init_thd, fault_thd;
+
+	// remove the mapped page for evt spd
+	int count_obj = 0; // reflected objects
+	int dest_spd = cos_spd_id();
+	vaddr_t addr;
+	count_obj = mman_reflect(cos_spd_id(), dest_spd, 1);
+	/* printc("evt relfects on mmgr: %d objs\n", count_obj); */
+	while (count_obj--) {
+		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
+		/* printc("evt mman_release: %p addr\n", (void *)addr); */
+		mman_release_page(cos_spd_id(), addr, dest_spd);
+	}
+
 
 	llboot_init_thd = arg & 0xFFFF;
 	fault_thd       = (arg >> 16) & 0xFFFF;

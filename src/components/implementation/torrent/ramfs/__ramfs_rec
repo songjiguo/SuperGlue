@@ -607,7 +607,8 @@ rd_reflection()
 {
 	int count_obj = 0; // reflected objects
 	int dest_spd = cos_spd_id();
-	
+
+	// what about shared memory??
 	/* // remove the mapped page for mailbox spd */
 	/* vaddr_t addr; */
 	/* count_obj = mman_reflect(cos_spd_id(), dest_spd, 1); */

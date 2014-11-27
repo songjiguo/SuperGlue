@@ -416,7 +416,6 @@ int evt_stats_len(spdid_t spdid) { return 0; }
 long evt_reflection(spdid_t spdid, long extern_evt) { return 0;}
 int evt_trigger_all(spdid_t spdid) {return 0;}
 
-
 extern int sched_reflect(spdid_t spdid, int src_spd, int cnt);
 extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
 extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);

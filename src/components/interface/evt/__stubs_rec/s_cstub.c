@@ -1,19 +1,28 @@
 /*
-  Jiguo: an event can be triggered from a different component. This
-  interface will track the mapping of client and server id between
-  faults. The purpose is to trigger/pass the correct server side id,
-  even from a different client. 
+  Jiguo: reflection interface for event component. This interface will
+  be used with any component that have threads blocked via
+  evt_wait. So when that component has fault, the blocked threads can
+  be woken up via here by triggering all events
 
-  This is not needed for sched/mm/fs/lock since in most cases, the
-  object state is updated from the same client. So tracking over the
-  client interface is enough in these cases.
+  Note: this interface should be set by set_symbol_link together with
+  other interface in recovery mode.
 
-  Issue: cvect needs to be initialized every time after a fault in evt_wait
-
-*/
+  Note: for now, just assume all threads are tracked. TODO: per
+  component track */
 
 #include <cos_component.h>
 #include <evt.h>
+#include <print.h>
+
+volatile unsigned long long overhead_start, overhead_end;
+
+#include <cos_synchronization.h>
+cos_lock_t evt_interface_lock;
+
+extern int sched_component_take(spdid_t spdid);
+extern int sched_component_release(spdid_t spdid);
+#define C_TAKE(spdid) 	do { if (sched_component_take(spdid))    return 0; } while (0)
+#define C_RELEASE(spdid)	do { if (sched_component_release(spdid)) return 0; } while (0)
 
 extern void *alloc_page(void);
 extern void free_page(void *ptr);
@@ -26,116 +35,119 @@ extern void free_page(void *ptr);
 #define CVECT_FREE(x) free_page(x)
 #include <cvect.h>
 
-struct csmapping_evt {
-	unsigned long cid;
-	unsigned long sid;
+// the list of all event ids that be waited through this interface
+struct trigger_evt {
+	long		 evtid;
+	struct trigger_evt *next, *prev;
 };
+struct trigger_evt *evts_head = NULL;
+CSLAB_CREATE(te, sizeof(struct trigger_evt));
 
-/**********************************************/
-/* slab allocaevt and cvect for tracking evts */
-/**********************************************/
-
-static int first = 0;
-CSLAB_CREATE(csmapping, sizeof(struct csmapping_evt));
-CVECT_CREATE_STATIC(csmapping_vect);
-
-static struct csmapping_evt *
-csmapping_lookup(int id)
-{ 
-	return cvect_lookup(&csmapping_vect, id); 
-}
-
-static struct csmapping_evt *
-csmapping_alloc(int evtid)
+static struct trigger_evt *
+te_alloc(int eid)
 {
-	struct csmapping_evt *csmap;
+	struct trigger_evt *te;
 
-	csmap = cslab_alloc_csmapping();
-	if (!csmap) return NULL;
-	printc("(evt %d)adding into csmapping cvect 1!!!!!!\n", evtid);
-	cvect_add(&csmapping_vect, csmap, evtid);
-	printc("(evt %d)adding into csmapping cvect 2!!!!!!\n", evtid);
-	return csmap;
+	te = cslab_alloc_te();
+	assert(te);
+	te->evtid = eid;
+	INIT_LIST(te, next, prev);
+
+	return te;
 }
 
 static void
-csmapping_dealloc(struct csmapping_evt *csmap)
+te_dealloc(struct trigger_evt *te)
 {
-	assert(csmap);
-	cslab_free_csmapping(csmap);
+	assert(te);
+	cslab_free_te(te);
+	return;
 }
 
-long __sg_evt_split(spdid_t spdid, long parent_evt, int grp)
-{
-	return evt_split(spdid, parent_evt, grp);
-}
-
-long __sg_evt_create(spdid_t spdid)
-{
-	return evt_create(spdid);
-}
-
-int __sg_evt_free(spdid_t spdid, long extern_evt)
-{
-	/* struct csmapping_evt *csmap; */
-	assert(extern_evt);	
-
-	/* // mapping might be already gone due to fault */
-	/* csmap = csmapping_lookup(extern_evt); */
-	/* if (csmap) { */
-	/* 	evt_free(spdid, csmap->sid); */
-	/* 	csmapping_dealloc(csmap); */
-	/* } */
-	evt_free(spdid, extern_evt);
-	return 0;
-}
+static int first_interface_lock = 0;
 
 long __sg_evt_wait(spdid_t spdid, long extern_evt)
 {
-	/* long cid, sid; */
-	/* struct csmapping_evt *csmap; */
-	
-	assert(extern_evt);
-	/* printc("\n\nevt ser: evt_wait %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
-	/* printc("from spd %d\n", spdid); */
-	
-	/* csmap = csmapping_lookup(cid); */
-	/* if (!csmap) { */
-	/* 	csmap = csmapping_alloc(cid); */
-	/* 	assert(csmap); */
-	/* 	csmap->cid = cid; */
-	/* 	csmap->sid = sid; */
-	/* 	printc("evt ser: create... track for cid %ld (ser sid %ld)\n", cid, sid); */
-	/* 	printc("csmap@%p\n", csmap); */
-	/* 	printc("csmapping_vect@%p\n", &csmapping_vect); */
+	long ret = 0;
+	struct trigger_evt te;
+	assert(spdid && extern_evt);
 
-	/* 	int i; */
-	/* 	if (!first) { */
-	/* 		printc("first time init csmapping vect\n"); */
-	/* 		first = 1; */
-	/* 		for (i = 0 ; i < (int)CVECT_BASE ; i++) { */
-	/* 			if (i != cid)  */
-	/* 				__cvect_set(&csmapping_vect, i, (void*)CVECT_INIT_VAL); */
-	/* 		} */
-	/* 	} */
-	/* } else { */
-	/* 	printc("evt ser: update... track for cid %ld (ser sid %ld)\n", cid, sid); */
-	/* 	printc("csmap@%p\n", csmap); */
-	/* 	printc("csmapping_vect@%p\n", &csmapping_vect); */
-	/* 	csmap->cid = cid; */
-	/* 	assert(csmap->sid = sid); */
-	/* } */
+	if (unlikely(!first_interface_lock)) {
+		first_interface_lock = 1;
+		lock_static_init(&evt_interface_lock);
+	}
 
-	return evt_wait(spdid, extern_evt);
+	rdtscll(overhead_start);
+
+	/* C_TAKE(cos_spd_id()); */
+	lock_take(&evt_interface_lock);
+	/* printc("thd %d is going to evt_wait\n", cos_get_thd_id()); */
+
+	if (unlikely(!evts_head)) {
+		/* printc("Init evts_head\n"); */
+		evts_head = te_alloc(0);
+		assert(evts_head);
+	}
+	
+	/* te = te_alloc(extern_evt); */
+	/* assert(te); */
+	te.evtid = extern_evt;
+	/* printc("add to the list\n"); */
+	ADD_LIST(evts_head, &te, next, prev);
+	/* printc("add to the list done %p \n", (void *)evts_head->next->evtid); */
+	lock_release(&evt_interface_lock);
+	/* C_RELEASE(cos_spd_id()); */
+	
+	rdtscll(overhead_end);
+	unsigned long long  tmp_overhead = overhead_end - overhead_start;
+
+	ret = evt_wait(spdid, extern_evt);
+
+	rdtscll(overhead_start);
+	/* C_TAKE(cos_spd_id()); */
+	lock_take(&evt_interface_lock);
+	/* printc("return from evt_wait....(thd %d)\n", cos_get_thd_id()); */
+        /* te is still on stack and will be popped off when return */
+	REM_LIST(&te, next, prev);  	
+	lock_release(&evt_interface_lock);
+	/* C_RELEASE(cos_spd_id()); */
+	rdtscll(overhead_end);
+	/* printc("evt_wait interface overhead %llu\n",  */
+	/*        overhead_end - overhead_start + tmp_overhead); */
+
+	return ret;
 }
 
-int __sg_evt_trigger(spdid_t spdid, long extern_evt)
-{
-	/* struct csmapping_evt *csmap; */
 
-	assert(extern_evt);	
-	/* csmap = csmapping_lookup(extern_evt); */
-	/* assert(csmap); */
+int __sg_evt_trigger_all(spdid_t spdid)
+{
+	long ret = 0;
 	
-	return evt_trigger(spdid, extern_evt);
+	/* printc("thread %d is going to trigger all events\n", cos_get_thd_id()); */
+
+	if (unlikely(!first_interface_lock)) {
+		first_interface_lock = 1;
+		lock_static_init(&evt_interface_lock);
+	}
+	
+	/* C_TAKE(cos_spd_id()); */
+	lock_take(&evt_interface_lock);
+
+	/* evt_trigger evt_ids tracked for all thd block waited
+	 * through this interface */
+	if (!evts_head) goto done;
+	/* printc("mbox triggers all evts in spd %ld\n", cos_spd_id()); */
+	struct trigger_evt *evt_t, *evt_next;
+	for (evt_t = FIRST_LIST(evts_head, next, prev);
+	     evt_t != evts_head;
+	     evt_t = FIRST_LIST(evt_t, next, prev)){
+		/* printc("found evt id %ld to trigger\n", evt_t->evtid); */
+		evt_trigger(cos_spd_id(), evt_t->evtid);
+	}
+	/* printc("trigger all events done (thd %d)\n\n", cos_get_thd_id()); */
+
+done:
+	/* C_RELEASE(cos_spd_id()); */
+	lock_release(&evt_interface_lock);
+	return ret;
 }

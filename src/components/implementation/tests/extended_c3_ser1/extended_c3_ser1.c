@@ -310,6 +310,15 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 		}
 	}
 
+	if (cos_get_thd_id() == low) {
+		int j = 0;
+		if (periodic_wake_create(cos_spd_id(), 100)) BUG();
+		while (1) {
+			periodic_wake_wait(cos_spd_id());
+			printc("thd periodic wakeup %d\n", cos_get_thd_id());
+		}
+	}
+
 	return 0;
 }
 

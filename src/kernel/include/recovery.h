@@ -46,7 +46,7 @@ sched_thread_lookup(struct spd *spd, int thd_id, int operation, int hrt)
 	}
 
 	if (spd_is_scheduler(spd) && !spd_is_root_sched(spd)){
-		printk("cos: look up thread %d info\n", thd_id);
+		/* printk("cos: look up thread %d info\n", thd_id); */
 		switch (operation) {
 		case COS_SCHED_INTRO_THD_DEST:
 			return thd->sched_info[cur_spd->sched_depth].thread_dest;
@@ -390,15 +390,15 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 		
 		for (i = 1; i < d_spd->ncaps ; i++) {
 			struct invocation_cap *cap = &d_spd->caps[i];
-			printk("cap->destination %d cap_entry->destination %d\n",
-			       spd_get_index(cap->destination),
-			       spd_get_index(cap_entry->destination));
 			if (cap->destination == cap_entry->destination) {
+				printk("d_spd %d -> spd %d (dest on fault detect: %d)\n",
+				       d_spdid, spd_get_index(cap->destination),
+				       spd_get_index(cap_entry->destination));
 				cap->fault.cnt = cap_entry->destination->fault.cnt;
 			}
 		}
 		ret = cap_entry->destination->fault.cnt;
-		printk("(2) ret %d\n", ret);
+		printk("(2) ret\n", ret);
 		break;
 	case COS_CAP_REFLECT_UPDATE: 		/* Update reflect counter for this client */
 		printk("check if reflection counter\n");

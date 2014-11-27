@@ -90,9 +90,9 @@ int __sg_lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short 
 	REM_LIST(&tl, next, prev);
 	C_RELEASE(cos_spd_id());
 
-	rdtscll(overhead_end);
-	printc("lock_component_take interface overhead %llu\n", 
-	       overhead_end - overhead_start + tmp_overhead);
+	/* rdtscll(overhead_end); */
+	/* printc("lock_component_take interface overhead %llu\n",  */
+	/*        overhead_end - overhead_start + tmp_overhead); */
 
 	return ret;
 }

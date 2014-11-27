@@ -810,8 +810,8 @@ cos_syscall_thd_cntl(int spd_id, int op_thdid, long arg1, long arg2)
 	{
 		int frame_offset = arg1;
 
-		printk("I am in frame_rem....thd %d curr %d frame offset %d\n",thd_get_id(thd), thd_get_id(curr), frame_offset);
-		printk("cos: spd %d\n", spd_id);
+		printk("cos: remove frame....thd %d curr %d frame offset %d ",thd_get_id(thd), thd_get_id(curr), frame_offset);
+		printk("spd %d\n", spd_id);
 
 		if (thd == curr && frame_offset < 1)       return -1;
 		if (thd_invstk_rem_nth(thd, frame_offset)) return -1;
@@ -1175,7 +1175,7 @@ switch_thread_get_target(unsigned short int tid, struct thread *curr,
 	
 	/* we cannot schedule to run an upcall thread that is not running */
 	if (unlikely(thd->flags & THD_STATE_READY_UPCALL)) {
-		printk("args: tid %u, curr thd %d, curr spd %d, \n thd id %d is upcall thd...", tid, thd_get_id(curr), spd_get_index(curr_spd), thd_get_id(thd));
+		/* printk("args: tid %u, curr thd %d, curr spd %d, \n thd id %d is upcall thd...", tid, thd_get_id(curr), spd_get_index(curr_spd), thd_get_id(thd)); */
 		cos_meas_event(COS_MEAS_UPCALL_INACTIVE);
 		*ret_code = COS_SCHED_RET_INVAL;
 		goto ret_err;
@@ -1319,7 +1319,7 @@ cos_syscall_switch_thread_cont(int spd_id, unsigned short int rthd_id,
 		/* printk("cos: da info -- evt timer %d\n", da->cos_evt_notif.timer); */
 
 		if (unlikely(NULL == thd)) {
-			printk("err: get target\n");
+			/* printk("err: get target\n"); */
 			goto_err(ret_err, "get target");
 		}
 	}
@@ -2788,7 +2788,7 @@ cos_syscall_sched_introspect(int spd_id, int operation, int arg, int thd_id)
 	case COS_SCHED_INTRO_THD_D:
 	case COS_SCHED_INTRO_THD_PARAM:
 	{
-		printk("looking for....\n");
+		/* printk("looking for....\n"); */
 		assert(spd_is_scheduler(spd));
 		ret = sched_thread_lookup(spd, thd_id, operation, 1);  // 1 for hrt
 		break;
