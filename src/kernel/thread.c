@@ -46,6 +46,7 @@ thd_init_all(struct thread *thds)
                 /* adjust the thread id to avoid using thread 0 clear */
                 thds[i].thread_id = i+1;
                 thds[i].freelist_next = (i == (MAX_NUM_THREADS-1)) ? NULL : &thds[i+1];
+		thds[i].clear_pending_upcall = 0;  // Jiguo
         }
 
         thread_freelist_head = thds;

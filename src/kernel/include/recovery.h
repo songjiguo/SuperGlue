@@ -113,8 +113,8 @@ sched_thread_add(struct spd *spd, int thd_id, int option, int operation, int hrt
 	}
 
 	if (spd_is_scheduler(spd) && !spd_is_root_sched(spd)){
-		printk("cos: add thread %d onto spd %d list (operation %d, val %d)\n", 
-		       thd_id, spd_get_index(spd), operation, option);
+		/* printk("cos: add thread %d onto spd %d list (operation %d, val %d)\n",  */
+		/*        thd_id, spd_get_index(spd), operation, option); */
 		switch (operation) {
 		case COS_SCHED_THD_DEST:
 			thd->sched_info[spd->sched_depth].thread_dest = option;
@@ -213,23 +213,35 @@ ipc_fault_detect(struct invocation_cap *cap_entry, struct spd *dest_spd)
 	/* // init thread does not need recover when exit */
 	/* if (thd_get_id(core_get_curr_thd_id(get_cpuid_fast())) == 3) return 0; */
 
-	if (cap_entry->fault.cnt != dest_spd->fault.cnt) {
+	if (cap_entry->fault.cnt < dest_spd->fault.cnt) {
 		printk("cap_entry fault cnt %lu\n", cap_entry->fault.cnt);
 		printk("dest spd %d fault cnt %lu\n", spd_get_index(dest_spd), dest_spd->fault.cnt);
+		/* inv_frame->fault.cnt = spd->fault.cnt; */   // we update cap
 		return 1;
 	}
 	else return 0;
 }
 
+extern void print_regs(struct pt_regs *regs);
+
 static inline int
-pop_fault_detect(struct thd_invocation_frame *inv_frame)
+pop_fault_detect(struct thd_invocation_frame *frame)
 {
-	if (spd_get_index(inv_frame->spd) == 21 ||
-	    spd_get_index(inv_frame->spd) == 1) return 0;  // test pgfault spd (or deps)
-	if (inv_frame->fault.cnt != inv_frame->spd->fault.cnt) {
-		printk("cos: inv_frame spd %d spd fault cnt %d frame fault cnt %d\n", 
-		       spd_get_index(inv_frame->spd), inv_frame->spd->fault.cnt,
-		       inv_frame->fault.cnt);
+	if (spd_get_index(frame->spd) == 21 ||
+	    spd_get_index(frame->spd) == 1) return 0;  // test pgfault spd (or deps)
+
+	/* if (spd_get_index(frame->spd) == 18) { */
+	/* 	struct thread *curr = core_get_curr_thd_id(get_cpuid_fast()); */
+	/* 	printk("cos:pop_frame spd %d spd fault cnt %d frame fault cnt %d (thd %d)\n",  */
+	/* 	       spd_get_index(frame->spd), frame->spd->fault.cnt, */
+	/* 	       frame->fault.cnt, thd_get_id(curr)); */
+	/* 	/\* print_regs(&curr->regs); *\/ */
+	/* } */
+	if (frame->fault.cnt < frame->spd->fault.cnt) {
+		printk("cos: pop_frame spd %d spd fault cnt %d frame fault cnt %d\n", 
+		       spd_get_index(frame->spd), frame->spd->fault.cnt,
+		       frame->fault.cnt);
+		frame->fault.cnt = frame->spd->fault.cnt;
 		return 1;
 	}
 	else return 0;
@@ -245,31 +257,37 @@ switch_thd_fault_detect(struct thread *next)
 	assert(tif);
 	n_spd  = tif->spd;
 	
-	if (tif->fault.cnt != n_spd->fault.cnt) 
+	/* if (thd_get_id(next) == 10) return 0;  // network thread has no sched interface */
+	
+	if (tif->fault.cnt < n_spd->fault.cnt) 
 	{
 		printk("thread %d fault cnt %d\n", thd_get_id(next), tif->fault.cnt);
 		printk("spd %d fault cnt %d\n", spd_get_index(n_spd), n_spd->fault.cnt);
 		/* struct thd_invocation_frame *tmp = thd_invstk_base(next); */
 		/* printk("home spd %d\n", spd_get_index(tmp->spd)); */
 		/* if (tmp == tif) return 0;  // home spd */
+		tif->fault.cnt = n_spd->fault.cnt;
 		return 1;
 	}
 	else return 0;
 }
 
 static inline int
-interrupt_fault_detect(struct thread *next) /* for now, this is the timer thread */
+interrupt_fault_detect(struct thread *next)
 {
 	struct spd *n_spd;
 	struct thd_invocation_frame *tif;
 
 	tif    = thd_invstk_top(next);
+	assert(tif);
 	n_spd  = tif->spd;
+	assert(n_spd);
 	
-	if (tif->fault.cnt != n_spd->fault.cnt) 
+	if (tif->fault.cnt < n_spd->fault.cnt) 
 	{
-		/* printk("thread %d fault cnt %d\n", thd_get_id(next), tif->fault.cnt); */
-		/* printk("spd %d fault cnt %d\n", spd_get_index(n_spd), n_spd->fault.cnt); */
+		printk("int: thread %d fault cnt %d\n", thd_get_id(next), tif->fault.cnt);
+		printk("spd %d fault cnt %d\n", spd_get_index(n_spd), n_spd->fault.cnt);
+		tif->fault.cnt = n_spd->fault.cnt;
 		return 1;
 	}
 	else return 0;
@@ -311,7 +329,7 @@ switch_thd_fault_update(struct thread *thd)
 }
 
 static inline int
-interrupt_fault_update(struct thread *next) /* for now, this is the timer thread */
+interrupt_fault_update(struct thread *next) /* timer or network thread */
 {
 	struct spd *n_spd;
 	struct thd_invocation_frame *tif;
@@ -319,8 +337,7 @@ interrupt_fault_update(struct thread *next) /* for now, this is the timer thread
 	tif    = thd_invstk_top(next);
 	n_spd  = tif->spd;
 	
-        // TODO: update this
-	/* tif->curr_fault.cnt = n_spd->fault.cnt; */
+	tif->fault.cnt = n_spd->fault.cnt;
 	return 0;
 }
 
@@ -362,11 +379,11 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 
 	cap_entry = &d_spd->caps[cap_no];
 
-	printk("cos: cap_no is %d\n", cap_no);
-	printk("cos: cap_entry %p\n", (void *)cap_entry);
-	printk("cap_entry fcn %d and its destination fcn %d\n", cap_entry->fault.cnt,
-	       cap_entry->destination->fault.cnt);
-	printk("dest_spd is %d\n", spd_get_index(cap_entry->destination));
+	/* printk("cos: cap_no is %d\n", cap_no); */
+	/* printk("cos: cap_entry %p\n", (void *)cap_entry); */
+	/* printk("cap_entry fcn %d and its destination fcn %d\n", cap_entry->fault.cnt, */
+	/*        cap_entry->destination->fault.cnt); */
+	/* printk("dest_spd is %d\n", spd_get_index(cap_entry->destination)); */
 
 	/* for (i = 1; i < d_spd->ncaps ; i++) { */
 	/* 	printk("cap_entry->destination %d\n", spd_get_index(d_spd->caps[i].destination)); */
@@ -384,24 +401,24 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 		 * destination spd)*/
 		if (cap_entry->fault.cnt == cap_entry->destination->fault.cnt) {
 			ret = cap_entry->destination->fault.cnt;
-			printk("(1) ret %d\n", ret);
+			printk("(fault update 1) ret %d\n", ret);
 			break;
 		}
 		
 		for (i = 1; i < d_spd->ncaps ; i++) {
 			struct invocation_cap *cap = &d_spd->caps[i];
 			if (cap->destination == cap_entry->destination) {
-				printk("d_spd %d -> spd %d (dest on fault detect: %d)\n",
+				printk("update fcnt: d_spd %d -> spd %d (dest on fault detect: %d)\n",
 				       d_spdid, spd_get_index(cap->destination),
 				       spd_get_index(cap_entry->destination));
 				cap->fault.cnt = cap_entry->destination->fault.cnt;
 			}
 		}
 		ret = cap_entry->destination->fault.cnt;
-		printk("(2) ret\n", ret);
+		printk("(fault update 2) ret\n", ret);
 		break;
 	case COS_CAP_REFLECT_UPDATE: 		/* Update reflect counter for this client */
-		printk("check if reflection counter\n");
+		/* printk("check if reflection counter\n"); */
 		if (d_spd->fault.cnt == 0) return 0; // no fault ever
 		if (d_spd->reflection.cnt 
 		    == d_spd->fault.cnt) {

@@ -310,8 +310,8 @@ boot_spd_thd(spdid_t spdid, int failed)
 	sp_coreid.c.value = 0;
 
 	/* Create a thread IF the component requested one */
-	printc("booter(%ld): created default thread (by thd %d)\n", 
-	       cos_spd_id(), cos_get_thd_id());
+	/* printc("booter(%ld): created default thread (by thd %d)\n",  */
+	/*        cos_spd_id(), cos_get_thd_id()); */
 	if ((sched_create_thread_default(spdid, sp.v, sp_coreid.v, 0)) < 0) {
 		printc("booter(%ld): created default thread (by thd %d) failed!!!!\n", 
 		       cos_spd_id(), cos_get_thd_id());
@@ -369,7 +369,7 @@ boot_create_system(void)
 		
 		h = hs[i];
 		if ((spdid = cos_spd_cntl(COS_SPD_CREATE, 0, 0, 0)) == 0) BUG();
-		printc("booter:spdid %d, h->id %d\n", spdid, h->id);
+		/* printc("booter:spdid %d, h->id %d\n", spdid, h->id); */
 		assert(spdid == h->id);
 
 		sect = cobj_sect_get(h, 0);

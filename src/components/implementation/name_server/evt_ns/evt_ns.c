@@ -27,6 +27,8 @@ typedef int uid;
 struct evt_node {
 	long id;      // client side id
 	long next_id; // current actual id
+
+	int spdid;    // where the event is created/split
 };
 
 #define CSLAB_ALLOC(sz)   alloc_page()
@@ -56,7 +58,7 @@ static void mapping_free(long id)
 
 
 long
-ns_alloc(spdid_t spdid)
+ns_alloc(spdid_t server_spd, spdid_t cli_spdid)
 {
 	int ret = -1;
 	struct evt_node *en;
@@ -69,7 +71,9 @@ ns_alloc(spdid_t spdid)
 	assert(ret >= 1);
 	en->id       = ret;
 	en->next_id  = ret;
-	/* printc("evt name server getting id %d\n", ret); */
+
+	en->spdid    = cli_spdid;
+	/* printc("evt name server getting id %d (from spd %d)\n", ret, cli_spdid); */
 
 	UNLOCK();
 

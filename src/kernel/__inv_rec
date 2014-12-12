@@ -229,6 +229,12 @@ ipc_walk_static_cap(unsigned int capability, vaddr_t sp,
 	/* add a new stack frame for the spd we are invoking (we're committed) */
 	/* be sure that the fault state of destination has been checked above, not fault if we get here */
 	thd_invocation_push(thd, cap_entry->destination, sp, ip);
+
+	struct thd_invocation_frame *test_frame;
+	int test = thd->stack_ptr - 1;
+	test_frame = &thd->stack_base[test];
+	test_frame->fault.cnt = curr_spd->fault.cnt;
+
 	cap_entry->invocation_cnt++;
 	
 	/* Jiguo: fault detection on invocation */
@@ -244,9 +250,9 @@ ipc_walk_static_cap(unsigned int capability, vaddr_t sp,
 	/* if (dest_spd->fault.cnt) { */
 	/* 	printk("----cap %d cap flt %d dest_flt %d---\n",capability, cap_entry->fault.cnt, dest_spd->fault.cnt); */
 	/* } */
-	inv_frame_fault_cnt_update(curr_frame, curr_spd);
+	/* inv_frame_fault_cnt_update(curr_frame, curr_spd); */
 	if (unlikely(fault_ret = ipc_fault_detect(cap_entry, dest_spd))){
-		inv_frame_fault_cnt_update(thd_invstk_top(thd), dest_spd);
+		/* inv_frame_fault_cnt_update(thd_invstk_top(thd), dest_spd); */
 		printk("thd %d invocation....from %d to %d\n", thd_get_id(thd), spd_get_index(curr_spd), spd_get_index(dest_spd));
 		/* s = virtual_namespace_query(cap_entry->dest_entry_instruction); */
 		/* printk("cos: s spd %d\n", spd_get_index(s)); */
@@ -269,7 +275,7 @@ ipc_walk_static_cap(unsigned int capability, vaddr_t sp,
 		/* print_regs((struct pt_regs *)&thd->regs); */
 		return addr;
 	}
-	inv_frame_fault_cnt_update(thd_invstk_top(thd), dest_spd);
+	/* inv_frame_fault_cnt_update(thd_invstk_top(thd), dest_spd); */
 	addr = cap_entry->dest_entry_instruction;
 	return addr;
 }
@@ -291,20 +297,6 @@ pop(struct pt_regs **regs_restore)
 	fs_reg_setup(__KERNEL_PERCPU);  // Jiguo: for per_cpu purpose
 
 	struct thread *curr = core_get_curr_thd_id(get_cpuid_fast());
-	int fault_ret;
-
-	/*  For the fault detection on pop, we detect the fault before
-	 *  actually pop the stack. */
-	struct thd_invocation_frame *test_frame = thd_invstk_top(curr);
-	/* pop_fault_update(curr_frame);  // this is not used at all */
-	if (unlikely(fault_ret = pop_fault_detect(test_frame))){
-		/* printk("curr thd %d\n", thd_get_id(curr)); */
-		pop_fault_update(test_frame);
-		/* KEVIN fill *regs_restore */
-		/* printk("top_frame's spd %d\n", spd_get_index(test_frame->spd)); */
-		*regs_restore = thd_pop_fault_notif(curr, test_frame->spd);
-		return NULL;
-	}
 
 	inv_frame = thd_invocation_pop(curr);
 
@@ -345,6 +337,38 @@ pop(struct pt_regs **regs_restore)
 	unsigned long long start, end;
 	rdtscll(start);
 #endif
+	
+	
+	int fault_ret;
+	/*  For the fault detection on pop, we detect the fault before
+	 *  actually pop the stack. */
+	/* pop_fault_update(curr_frame);  // this is not used at all */
+	if (unlikely(fault_ret = pop_fault_detect(curr_frame))){
+		/* printk("curr thd %d\n", thd_get_id(curr)); */
+		/* pop_fault_update(test_frame); */
+		/* KEVIN fill *regs_restore */
+		/* printk("top_frame's spd %d\n", spd_get_index(test_frame->spd)); */
+		*regs_restore = thd_pop_fault_notif(curr, curr_frame->spd);
+		return NULL;
+	}
+	
+
+
+	/* int fault_ret; */
+	/* /\*  For the fault detection on pop, we detect the fault before */
+	/*  *  actually pop the stack. *\/ */
+	/* struct thd_invocation_frame *test_frame = thd_invstk_top(curr); */
+	/* /\* pop_fault_update(curr_frame);  // this is not used at all *\/ */
+	/* if (unlikely(fault_ret = pop_fault_detect(test_frame))){ */
+	/* 	/\* printk("curr thd %d\n", thd_get_id(curr)); *\/ */
+	/* 	pop_fault_update(test_frame); */
+	/* 	/\* KEVIN fill *regs_restore *\/ */
+	/* 	/\* printk("top_frame's spd %d\n", spd_get_index(test_frame->spd)); *\/ */
+	/* 	*regs_restore = thd_pop_fault_notif(curr, test_frame->spd); */
+	/* 	return NULL; */
+	/* } */
+
+
 /* 	/\* pop_fault_update(curr_frame);  // this is not used at all *\/ */
 /* 	if (unlikely(fault_ret = pop_fault_detect(inv_frame))){ */
 /* 		printk("curr thd %d\n", thd_get_id(curr)); */
@@ -361,7 +385,7 @@ pop(struct pt_regs **regs_restore)
 /* 		printk("pop detection is returning...\n"); */
 /* 		return NULL; */
 /* 	} */
-	pop_fault_update(inv_frame);
+	/* pop_fault_update(inv_frame); */
 	return inv_frame;	
 }
 
@@ -538,7 +562,7 @@ cos_syscall_fault_cntl(int spdid, int option, spdid_t d_spdid, unsigned int cap_
 static vaddr_t
 thd_ipc_fault_notif(struct thread *thd, struct spd *dest_spd)
 {
-	printk("[[[[[[ cos: Fault is detected on INVOCATION ]]]]]]\n");
+	printk("\n[[[[[[ cos: Fault is detected on INVOCATION ]]]]]]\n\n");
 
 	return __fault_ipc_invoke(thd, 0, 0, &thd->regs, COS_FLT_FLT_NOTIF, dest_spd);
 }
@@ -546,7 +570,7 @@ thd_ipc_fault_notif(struct thread *thd, struct spd *dest_spd)
 static struct pt_regs *
 thd_pop_fault_notif(struct thread *thd, struct spd *dest_spd)
 {
-	printk("[[[[[[ cos: Fault is detected on POP ]]]]]]\n");
+	printk("\n[[[[[[ cos: Fault is detected on POP ]]]]]]\n\n");
 	__fault_ipc_invoke(thd, 0, 0, &thd->regs, COS_FLT_FLT_NOTIF, dest_spd);
 	return &thd->regs;
 }
@@ -555,7 +579,7 @@ static void
 thd_switch_fault_notif(struct thread *thd)
 {
 	struct thd_invocation_frame *thd_frame;
-	printk("[[[[[[ cos: Fault is detected on CONTEXT SWITCH to thread %d]]]]]]\n", thd_get_id(thd));
+	printk("\n[[[[[[ cos: Fault is detected on CONTEXT SWITCH to thread %d]]]]]]\n\n", thd_get_id(thd));
 	thd_frame = thd_invstk_top(thd);
 
 	__fault_ipc_invoke(thd, 0, 0, &thd->regs, COS_FLT_FLT_NOTIF, NULL);
@@ -564,24 +588,10 @@ thd_switch_fault_notif(struct thread *thd)
 }
 
 void
-fault_int_notif(struct thread *thd, struct spd *notif_spd, unsigned int cap_num, struct pt_regs *regs, int fault_num)
+fault_int_notif(struct thread *thd)
 {
-	struct inv_ret_struct r;
-	vaddr_t addr;
-	printk("[[[ cos: Fault is detected on Interrupt/brand ]]]\n");
-	assert(fault_num < COS_FLT_MAX);
-
-	addr = ipc_walk_static_cap(cap_num<<20, regs->sp, regs->ip, &r);
-
-	/* setup the registers for the interrupt fault notification  */
-	regs->ax = r.thd_id;
-	regs->bx = regs->cx = r.spd_id;
-	regs->sp = 0;
-	regs->si = 0;
-	regs->di = 0;
-	regs->bp = regs->ip;
-	regs->dx = regs->ip = addr;
-
+	printk("\n[[[[[[ cos: Fault is detected on INTERRUPT thread %d]]]]]]\n\n", thd_get_id(thd));
+	__fault_ipc_invoke(thd, 0, 0, &thd->regs, COS_FLT_FLT_NOTIF, NULL);
 	return;
 }
 
@@ -742,9 +752,9 @@ cos_syscall_create_thread(int spd_id, int dest_spd_id, int a, int b)
 	 * requests to create threads will be saved somewhere, i.e. a
 	 * separate spd so that they can be replay later*/
 	
-	/* printk("thread %d is created\n", thd_get_id(thd)); */
+	/* printk("cos: thread %d is created\n", thd_get_id(thd)); */
 	/* printk("fn %d\n", a); */
-	/* printk("dest spd %d\n", b); */
+	/* printk("cos: dest spd %d\n", b); */
 
 	/* for now, just save all threads for simplicity (Jiguo) */
 	//thd->sched_info[curr_spd->sched_depth].thread_fn = (void *)a;
@@ -813,7 +823,11 @@ cos_syscall_thd_cntl(int spd_id, int op_thdid, long arg1, long arg2)
 		printk("cos: remove frame....thd %d curr %d frame offset %d ",thd_get_id(thd), thd_get_id(curr), frame_offset);
 		printk("spd %d\n", spd_id);
 
-		if (thd == curr && frame_offset < 1)       return -1;
+		if (frame_offset < 1) return -1;
+		/* if (thd == curr)       { */
+		/* 	printk("it is ourself, can not remove frame\n"); */
+		/* 	return -1; */
+		/* } */
 		if (thd_invstk_rem_nth(thd, frame_offset)) return -1;
 
 		return 0;
@@ -837,6 +851,11 @@ cos_syscall_thd_cntl(int spd_id, int op_thdid, long arg1, long arg2)
 		if (NULL == tif) return 0;
 		i_spd = tif->spd;
 		return spd_get_index(i_spd);
+	}
+	case COS_THD_CLEAR_PENDING_UPCALL:   // Jiguo:
+	{
+		curr->clear_pending_upcall = arg2;
+		return 0;
 	}
 	case COS_THD_FIND_SPD_TO_FLIP:  // Jiguo: SWFI
 	{
@@ -1359,9 +1378,8 @@ cos_syscall_switch_thread_cont(int spd_id, unsigned short int rthd_id,
 	rdtscll(start);
 #endif
         /* ANDY detect fault when switch thread */
-	switch_thd_fault_update(curr);
+	/* switch_thd_fault_update(curr); */
 	if(unlikely(fault_ret = switch_thd_fault_detect(thd))){
-		switch_thd_fault_update(thd);
 		printk("cos switch fault: current thread %d\n", thd_get_id(curr));
 		printk("cos switch fault: next thread %d\n", thd_get_id(thd));
 		thd_switch_fault_notif(thd);
@@ -1370,7 +1388,7 @@ cos_syscall_switch_thread_cont(int spd_id, unsigned short int rthd_id,
 		printk("cos : switch notification cost 1: %llu\n", (end-start));
 #endif
 	}
-	switch_thd_fault_update(thd);
+	/* switch_thd_fault_update(thd); */
 
 	return &thd->regs;
 ret_err:
@@ -1621,7 +1639,7 @@ thd_ret_upcall_type(struct thread *curr, upcall_type_t t)
 	
 	tsi = scheduler_find_leaf(curr);
 	dest = tsi->scheduler;
-	printk("cos: ret_upcall_type before upcall_setup (dest %d type %d)\n", spd_get_index(dest), t);
+	/* printk("cos: ret_upcall_type before upcall_setup (dest %d type %d)\n", spd_get_index(dest), t); */
 	upcall_setup(curr, dest, t, 0, 0, 0);
 	upcall_execute_compat(curr, NULL, cspd);
 	printk("");
@@ -1844,6 +1862,7 @@ int cos_net_try_acap(struct cos_net_acap_info *net_acap, void *data, int len)
 	 */
 	if (rb_retrieve_buff(net_acap, len + sizeof(unsigned int), &buff, &l)) {
 		cos_meas_event(COS_MEAS_PACKET_ACAP_FAIL);
+		printk("cos:no room for the network buffer\n");
 		return -1;
 	}
 	cos_meas_event(COS_MEAS_PACKET_ACAP_SUCC);
@@ -2587,7 +2606,7 @@ ainv_next_thread(struct async_cap *acap, struct thread *preempted, int preempt)
 		/* 	rb_track->packets[tail].meas_mode = MEAS_ARRIVAL_ADDPENDING; */
 		/* 	/\* printk("after update meas_mode: %d\n", rb_track->packets[tail].meas_mode); *\/ */
 		/* 	/\* printk("pending ++ both active (requests %d)\n", brand->pending_upcall_requests); *\/ */
-		/* 	/\* printk("return to %d \n", thd_get_id(preempted)); *\/ */
+		/* printk("return to preempted thd %d \n", thd_get_id(preempted)); */
 		/* } */
 		/* ////////////////////////// */
 
@@ -2698,7 +2717,8 @@ ainv_next_thread(struct async_cap *acap, struct thread *preempted, int preempt)
 		/* 	/\* printk("before update meas_mode: %d\n", rb_track->packets[tail].meas_mode); *\/ */
 		/* 	rb_track->packets[tail].meas_mode = MEAS_ARRIVAL_IMMEDIATE_UPCALL; */
 		/* 	/\* printk("after update meas_mode: %d\n", rb_track->packets[tail].meas_mode); *\/ */
-		/* 	/\* printk("preempted %d  -- brand upcall %d \n", thd_get_id(preempted), thd_get_id(upcall)); *\/ */
+		/* if (thd_get_id(upcall) == 10) */
+		/* 	printk("preempted %d  -- brand upcall %d \n", thd_get_id(preempted), thd_get_id(upcall)); */
 		/* 	printk("higher urgency!!!\n"); */
 		/* } */
 		/* ////////////////////////// */
@@ -2731,7 +2751,7 @@ ainv_next_thread(struct async_cap *acap, struct thread *preempted, int preempt)
 	/* 	/\* printk("before update meas_mode: %d\n", rb_track->packets[tail].meas_mode); *\/ */
 	/* 	rb_track->packets[tail].meas_mode = MEAS_ARRIVAL_CONTINUE_PREV; */
 	/* 	/\* printk("after update meas_mode: %d\n", rb_track->packets[tail].meas_mode); *\/ */
-	/* 	/\* printk(" upcall not immediate -- goto preempted %d \n", thd_get_id(preempted)); *\/ */
+	printk(" upcall not immediate -- goto preempted %d \n", thd_get_id(preempted));
 	/* } */
 	/* ////////////////////////// */
 		
@@ -4145,14 +4165,22 @@ static struct pt_regs *ainv_execution_completion(struct thread *curr, int *preem
 	cos_meas_stats_end(COS_MEAS_STATS_UC_TERM_DELAY, 1);
 	cos_meas_stats_end(COS_MEAS_STATS_UC_PEND_DELAY, 0);
 	*preempt = 0;
+	
+	/* /\* // Jiguo: clear all pending events *\/ */
+	/* if (curr->clear_pending_upcall) { */
+	/* 	curr->clear_pending_upcall = 0; */
+	/* 	acap_entry->pending_upcall = 0; */
+	/* } */
 
 	/* Immediately execute a pending upcall */
+	/* if (acap_entry->pending_upcall && !curr->clear_pending_upcall) { */
 	if (acap_entry->pending_upcall) {
 		event_record("ainv complete, self pending upcall executed", thd_get_id(curr), 0);
 		report_upcall("c", curr);
+		/* printk("there is pending upcall (thd % spd %d)\n", */
+		/*        thd_get_id(curr), spd_get_index(cspd)); */
 		return sched_tailcall_pending_upcall(curr, cspd);
 	}
-
 	/*
 	 * Has the thread we preempted had scheduling activity since?
 	 * If so, upcall into the root scheduler and ask it what to

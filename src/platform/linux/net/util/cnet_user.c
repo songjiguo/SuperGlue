@@ -14,7 +14,7 @@
 #define DEVCNET "/dev/net/cnet"
 #define ETHCNET "cnet0"
 /* ip address of host */
-#define IPADDR  "192.168.1.22"    // home
+#define IPADDR  "100.100.1.22"    // home
 //#define IPADDR  "10.0.2.9"   // lab (must be an unused one)
 #define P2PPEER "10.0.2.8"
 

@@ -118,6 +118,9 @@ __cvect_init(cvect_t *v)
 	int i;
 
 	assert(v);
+	
+	memset((void *)v, 0, PAGE_SIZE);   // Jiguo: clear the page content
+
 	/* should be optimized away by the compiler: */
 	assert(__cvect_power_2(CVECT_BASE));
 	for (i = 0 ; i < (int)CVECT_BASE ; i++) v->vect[i].c.next = NULL;
@@ -146,6 +149,8 @@ cvect_alloc(void)
 	
 	v = CVECT_ALLOC();
 	if (NULL == v) return NULL;
+	memset((void *)v, 0, PAGE_SIZE);   // Jiguo: clear the page content
+
 	cvect_init(v);
 
 	return v;
@@ -242,10 +247,11 @@ __cvect_expand_rec(struct cvect_intern *vi, const long id, const int depth)
 	if (depth > 1) {
 		long n = id >> (CVECT_SHIFT * (depth-1));
 		if (vi[n & CVECT_MASK].c.next == NULL) {
-			printc("cvect is expanded (spd %ld by thd %d)\n",
-			       cos_spd_id(), cos_get_thd_id());
+			/* printc("cvect is expanded (spd %ld by thd %d)\n", */
+			/*        cos_spd_id(), cos_get_thd_id()); */
 			struct cvect_intern *new = CVECT_ALLOC();
 			if (!new) return -1;
+			memset((void *)new, 0, PAGE_SIZE);   // Jiguo: clear the page content
 			vi[n & CVECT_MASK].c.next = new;
 		}
 		return __cvect_expand_rec(vi[n & CVECT_MASK].c.next, id, depth-1);

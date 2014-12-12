@@ -357,13 +357,13 @@ thread_param_set(struct sched_thd *t, struct sched_param_s *ps)
 	struct sched_thd *c = sched_get_current();  
 
 	struct sched_param_s *t_ps = ps;
-	printc("ps->type %d\n", ps->type);
+	/* printc("ps->type %d\n", ps->type); */
 	assert(t);
 	while (ps->type != SCHEDP_NOOP) {
 		switch (ps->type) {
 		case SCHEDP_RPRIO:
 		case SCHEDP_RLPRIO:
-			printc("CCCCCC ps->value %d\n", ps->value);
+			/* printc("CCCCCC ps->value %d\n", ps->value); */
 			/* The relative priority has been converted to absolute priority in relative_prio_convert(). */
 			prio = ps->value;
 			/* FIXME: When the IPI handling thread is
@@ -386,6 +386,7 @@ thread_param_set(struct sched_thd *t, struct sched_param_s *ps)
 			break;
 		case SCHEDP_PRIO:
 			/* absolute priority */
+			printc("SCHEDP_PRIO ps->value %d\n", ps->value);
 			prio = ps->value;
 			break;
 		case SCHEDP_IDLE:
@@ -430,9 +431,9 @@ thread_param_set(struct sched_thd *t, struct sched_param_s *ps)
 		}
 		ps++;
 	}
-	printc("ps->type %d\n", ps->type);
-	printc("fprr: cpu %d has new thd %d @ prio %d (type %d)\n", 
-	       cos_cpuid(), t->id, prio, t_ps->type);
+	/* printc("ps->type %d\n", ps->type); */
+	/* printc("fprr: cpu %d has new thd %d @ prio %d (type %d)\n",  */
+	/*        cos_cpuid(), t->id, prio, t_ps->type); */
 	if (sched_thd_ready(t)) fp_rem_thd(t);
 	
 	fp_add_thd(t, prio);

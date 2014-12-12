@@ -327,14 +327,30 @@ int timed_event_block(spdid_t spdinv, unsigned int amnt)
 
 	if (t != next_event_time()) sched_timeout(spdid, amnt);
 
-	// Jiguo: change to use event	
-	evt_wait(cos_spd_id(), te->evt);
+	// Jiguo: change to use event 
+	printc("thd %d is going to call evt_wait in spd %ld\n", 
+	       cos_get_thd_id(), cos_spd_id());
+	long tmp = evt_wait(cos_spd_id(), te->evt);
+	printc("thd %d after evt_wait in spd %ld\n", 
+	       cos_get_thd_id(), cos_spd_id());
+
 	/* if (-1 == sched_block(spdid, 0)) { */
 	/* 	prints("fprr: sched block failed in timed_event_block."); */
 	/* } */
+	
+         /* Jiguo: if we are woken up from reflection after a fault, we
+	 * are still on the list */
+	struct thread_event *tmp_evt;
+	if (tmp == -22) {
+		tmp_evt = find_remove_event(cos_get_thd_id());
+		/* assert(tmp_evt); */   // ??? Jiguo
+		/* assert(tmp_evt->thread_id == cos_get_thd_id()); */
+	} else {
+		/* we better have been taking off the list! */
+		assert(EMPTY_LIST(te, next, prev));
+	}
 
-	/* we better have been taking off the list! */
-	assert(EMPTY_LIST(te, next, prev));
+
 	if (te->flags & TE_TIMED_OUT) return TIMER_EXPIRED;
 
 	/* 
@@ -529,7 +545,7 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 	spdid_t spdid = cos_spd_id();
 	event_time_t n, t;
 	long evt;
-	int ret;
+	int ret = 0;
 
 	if (period < 1) return -1;
 

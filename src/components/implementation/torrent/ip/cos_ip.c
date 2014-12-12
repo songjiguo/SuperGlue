@@ -172,26 +172,8 @@ void cos_init(void)
 	
 	union sched_param sp;
 
-#ifdef DEBUG_PERIOD
-	if (cos_get_thd_id() == debug_thd) {
-		if (periodic_wake_create(cos_spd_id(), 100)) BUG();
-		while(1) {
-			periodic_wake_wait(cos_spd_id());
-			printc("ip_tread_cnt %ld ip_twrite_cnt %ld\n", ip_tread_cnt, ip_twrite_cnt);
-			ip_tread_cnt = 0;
-			ip_twrite_cnt = 0;
-		}
-	}
-#endif
 	if (first) {
 		first = 0;
-
-#ifdef DEBUG_PERIOD		
-		sp.c.type = SCHEDP_PRIO;
-		sp.c.value = 10;
-		debug_thd = sched_create_thd(cos_spd_id(), sp.v, 0, 0);
-#endif
-
 		torlib_init();
 	}
 }

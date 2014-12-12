@@ -197,7 +197,7 @@ redo:
 	rd = rd_update(cos_get_thd_id(), 0, THD_STATE_CREATE);
 	assert(rd);
 
-	printc("thread %d calls << sched_create_thd >>\n", cos_get_thd_id());
+	/* printc("thread %d calls << sched_create_thd >>\n", cos_get_thd_id()); */
 
 #ifdef MEASU_SCHED_INTERFACE_CREATE
 	rdtscll(start);
@@ -210,7 +210,7 @@ redo:
 	}
 
 	assert(ret > 0);
-	printc("sched_create_thd done!!! ... new thread %d is created\n\n", ret);
+	/* printc("sched_create_thd done!!! ... new thread %d is created\n\n", ret); */
 
 	assert(rd);
 	rd->state = THD_STATE_RUNNING;
@@ -233,7 +233,7 @@ redo:
 	rd = rd_update(cos_get_thd_id(), 0, THD_STATE_CREATE_DEFAULT);
 	assert(rd);
 
-	printc("thread %d calls << sched_create_thd_default >>\n", cos_get_thd_id());
+	/* printc("thread %d calls << sched_create_thd_default >>\n", cos_get_thd_id()); */
 
 	CSTUB_INVOKE(ret, fault, uc, 4, spdid, sched_param0, sched_param1, sched_param2);
         if (unlikely (fault)){
@@ -241,10 +241,10 @@ redo:
 		goto redo;
 	}
 
-	printc("sched_create_thread_default ret %d\n", ret);
+	/* printc("sched_create_thread_default ret %d\n", ret); */
 	assert(ret > 0);
 
-	printc("sched_create_thd_default done!!! ... new thread %d is created\n\n", ret);
+	/* printc("sched_create_thd_default done!!! ... new thread %d is created\n\n", ret); */
 
 	assert(rd);
 	rd->state = THD_STATE_RUNNING;

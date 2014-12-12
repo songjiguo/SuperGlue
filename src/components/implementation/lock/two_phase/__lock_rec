@@ -518,6 +518,8 @@ rd_reflection()
 	while (count_obj--) {
 		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
 		printc("lock mman_release: %p addr\n", (void *)addr);
+		assert(addr);
+		memset((void *)addr, 0, PAGE_SIZE);  // zero out anything on this page before release
 		mman_release_page(cos_spd_id(), addr, dest_spd);
 	}
 

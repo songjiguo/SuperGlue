@@ -68,14 +68,20 @@ struct rec_data_evt {
 	long          p_evtid;  // parent event id (eg needs this)
 	int           grp;      // same as above
 
+	struct rec_data_evt *next, *prev;  // track all init events in a group
+
 	unsigned int  state;
 	unsigned long fcnt;
 };
+/* Assumption: a component has at most one group, all init events are
+ * splited from the same component */
+struct rec_data_evt *evts_grp_list_head;
 
 /* the state of an event object (each operation expects to change) */
 enum {
 	EVT_STATE_CREATE,
-	EVT_STATE_SPLIT,   // same as create, except it is for event group
+	EVT_STATE_SPLIT,           // same as create, except it is for event group
+	EVT_STATE_SPLIT_PARENT,    // split from a parent event id
 	EVT_STATE_WAITING,
 	EVT_STATE_TRIGGER,
 	EVT_STATE_FREE
@@ -105,6 +111,8 @@ rdevt_alloc(int id)
 	assert(rd);	
 	cvect_add(&rec_evt_map, rd, id);   // this must be greater than 1
 
+	INIT_LIST(rd, next, prev);
+
 	return rd;
 }
 
@@ -113,6 +121,9 @@ rdevt_dealloc(struct rec_data_evt *rd)
 {
 	assert(rd);
 	if (cvect_del(&rec_evt_map, rd->c_evtid)) BUG();
+
+	REM_LIST(rd, next, prev);  // not tracked in a group any more
+
 	cslab_free_rdevt(rd);
 	return;
 }
@@ -132,44 +143,101 @@ rd_cons(struct rec_data_evt *rd, spdid_t spdid, long c_evtid,
 	rd->state	 = state;
 	rd->fcnt	 = fcounter;
 
+	/* If there is parent and group, track here */
+	if (parent == 0 && grp == 1) {   // parent
+		evts_grp_list_head = rd;
+	}
+	if (parent > 0 && grp == 2) {     // child init evt
+		assert(evts_grp_list_head->next);
+		ADD_LIST(evts_grp_list_head, rd, next, prev);
+	}
+
 	return;
 }
 
-/* static int */
-/* cap_to_dest(int cap) */
-/* { */
-/* 	int dest = 0; */
-/* 	assert(cap > MAX_NUM_SPDS); */
-/* 	if ((dest = cos_cap_cntl(COS_CAP_GET_SER_SPD, 0, 0, cap)) <= 0) assert(0); */
-/* 	return dest; */
-/* } */
 
+/* Not recursively!!!! It does not matter which thread is re-splitting
+ * the new server side evt in a group */
 static void
 rd_recover_state(struct rec_data_evt *rd)
 {
 	struct rec_data_evt *prd = NULL, *tmp = NULL;
-	
+	long tmp_evtid;
+
 	assert(rd && rd->c_evtid >= 1);
 	
-	/* printc("calling recover!!!!!!\n"); */
-	/* printc("thd %d restoring mbox for torrent id %d (parent id %d evt id %ld) \n", */
-	/*        cos_get_thd_id(), rd->c_tid, rd->p_tid, rd->evtid); */
+	printc("calling recover (thd %d)!!!!!!\n", cos_get_thd_id());
 	
-	/* If this is the server side final trelease, it is ok to just
-	 * restore the "final" tid since only it is needed by the
-	 * client to tsplit successfully */
-	if (rd->p_evtid) {
-		assert((prd = rdevt_lookup(rd->p_evtid)));
-		prd->fcnt = fcounter;
-		rd_recover_state(prd);
-	}
-	
-	long tmp_evtid = c3_evt_split(cos_spd_id(), rd->p_evtid, 
-				      rd->grp, rd->c_evtid);
+	tmp_evtid = c3_evt_split(cos_spd_id(), rd->p_evtid, 
+				 rd->grp, rd->c_evtid);
 	assert(tmp_evtid >= 1);
 	rd->s_evtid = tmp_evtid;
-	/* printc("got the new client side %d and its new server id %d\n",  */
-	/*        tmp_tid, tmp->s_tid); */
+	/* printc("re-split an s_evt %d\n", rd->s_evtid); */
+	/* printc("re-split an c_evt %d\n", rd->c_evtid); */
+	/* printc("its parent evt %d\n", rd->p_evtid); */
+	
+        /* This is ugly: the recovery of init events in a group (e.g.,
+	 * connection manager) */
+	if (!rd->p_evtid && rd->grp == 1) {
+		assert(rd == evts_grp_list_head);
+		/* tmp_evtid = c3_evt_split(cos_spd_id(), rd->p_evtid,  */
+		/* 			 rd->grp, rd->c_evtid); */
+		/* assert(tmp_evtid >= 1); */
+		/* rd->s_evtid = tmp_evtid; */
+		/* printc("got the new client side %d and its new server id %d\n", */
+		/*        rd->c_evtid, rd->s_evtid); */
+
+		for (tmp = FIRST_LIST(rd, next, prev) ;
+		     tmp != rd;
+		     tmp = FIRST_LIST(tmp, next, prev)) {
+			if (tmp) {
+				assert(tmp->grp == 2);
+				tmp->p_evtid = rd->s_evtid; // update parent id
+				/* printc("found an evt %d\n", tmp->c_evtid); */
+				/* printc("its parent evt %d\n", tmp->p_evtid); */
+				tmp_evtid = c3_evt_split(cos_spd_id(), tmp->p_evtid,
+							 tmp->grp, tmp->c_evtid);
+				assert(tmp_evtid >= 1);
+				tmp->s_evtid = tmp_evtid;
+			}
+		}
+	}
+	
+	/* /\* This is ugly: the recovery of events in a group (connection manager) *\/ */
+	/* if (!rd->p_evtid && rd->grp == 1) { */
+	/* 	assert(rd == evts_grp_list_head); */
+	/* 	/\* tmp_evtid = c3_evt_split(cos_spd_id(), rd->p_evtid,  *\/ */
+	/* 	/\* 			 rd->grp, rd->c_evtid); *\/ */
+	/* 	/\* assert(tmp_evtid >= 1); *\/ */
+	/* 	/\* rd->s_evtid = tmp_evtid; *\/ */
+	/* 	/\* printc("got the new client side %d and its new server id %d\n", *\/ */
+	/* 	/\*        rd->c_evtid, rd->s_evtid); *\/ */
+
+	/* 	for (tmp = FIRST_LIST(rd, next, prev) ; */
+	/* 	     tmp != rd; */
+	/* 	     tmp = FIRST_LIST(tmp, next, prev)) { */
+	/* 		if (tmp) { */
+	/* 			tmp->p_evtid = rd->s_evtid; // update parent id */
+	/* 			printc("found an evt %d\n", tmp->c_evtid); */
+	/* 			printc("its parent evt %d\n", tmp->p_evtid); */
+	/* 			tmp_evtid = c3_evt_split(cos_spd_id(), tmp->p_evtid,  */
+	/* 						 tmp->grp, tmp->c_evtid); */
+	/* 			assert(tmp_evtid >= 1); */
+	/* 			tmp->s_evtid = tmp_evtid; */
+	/* 		} */
+	/* 	} */
+	/* } */
+	
+	/* /\* If this is the server side final trelease, it is ok to just */
+	/*  * restore the "final" tid since only it is needed by the */
+	/*  * client to tsplit successfully *\/ */
+	/* if (rd->p_evtid) { */
+	/* 	printc("found a parent evtid rd->p_evtid %d\n", rd->p_evtid); */
+	/* 	assert((prd = rdevt_lookup(rd->p_evtid))); */
+	/* 	prd->fcnt = fcounter; */
+	/* 	rd_recover_state(prd); */
+	/* } */
+	
 	return;
 }
 
@@ -207,6 +275,7 @@ rd_update(int evtid, int state)
                 /* for create, if failed, just redo, should not be here */
 		assert(0);  
 		break;
+	case EVT_STATE_SPLIT_PARENT:
 	case EVT_STATE_SPLIT:
                 /* for split, if failed, need restore any parent */
 	case EVT_STATE_FREE:
@@ -231,6 +300,7 @@ rd_update(int evtid, int state)
 		 * name server look up will only see the last added
 		 * entry, so it does not matter. Do we still need lock
 		 * here???? Maybe not....*/
+		printc("rd_recovery is in state %d\n", state);
 		rd_recover_state(rd);
 		break;
 	case EVT_STATE_TRIGGER:
@@ -319,6 +389,8 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
+		printc("see a fault during evt_create (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 #ifdef BENCHMARK_MEAS_CREATE
 		meas_flag = 1;
 		printc("start measuring.....\n");
@@ -351,6 +423,9 @@ redo:
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
+
+	/* printc("evt cli: c3_evt_split returns a new evtid %d for old evtid %d\n",  */
+	/*        ret, old_evtid); */
 	return ret;
 }
 
@@ -364,7 +439,9 @@ CSTUB_FN(long, evt_split) (struct usr_inv_cap *uc,
 	long ret;
 
         struct rec_data_evt *rd = NULL;
+        struct rec_data_evt *rd_parent = NULL;
         long ser_eid, cli_eid;
+	long p_evt = parent_evt;
 
         if (first == 0) {
 		cvect_init_static(&rec_evt_map);
@@ -372,6 +449,12 @@ CSTUB_FN(long, evt_split) (struct usr_inv_cap *uc,
 	}
 redo:
         /* printc("evt cli: evt_split %d\n", cos_get_thd_id()); */
+	if (parent_evt && !grp) {
+		/* printc("evt cli: evt_split found parent evt %d\n", p_evt); */
+		rd_parent = rd_update(parent_evt, EVT_STATE_SPLIT_PARENT);
+		assert(rd_parent);
+		p_evt = rd_parent->s_evtid;
+	}
 
 #ifdef BENCHMARK_MEAS_SPLIT
 	rdtscll(meas_end);
@@ -381,9 +464,10 @@ redo:
 		printc("recovery an event cost: %llu\n", meas_end - meas_start);
 	}
 #endif		
-	CSTUB_INVOKE(ret, fault, uc, 3, spdid, parent_evt, grp);
+	CSTUB_INVOKE(ret, fault, uc, 3, spdid, p_evt, grp);
 	if (unlikely (fault)){
-
+		printc("see a fault during evt_split (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 #ifdef BENCHMARK_MEAS_SPLIT
 		meas_flag = 1;
 		printc("start measuring.....\n");
@@ -393,17 +477,15 @@ redo:
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
-
 	assert(ret > 0);
 	/* printc("cli: evt_create create a new rd in spd %ld (server id %d)\n",  */
 	/*        cos_spd_id(), ret); */
 	rd = rdevt_alloc(ret);
 	assert(rd);
-	rd_cons(rd, cos_spd_id(), ret, ret, parent_evt, grp, EVT_STATE_CREATE);
+	rd_cons(rd, cos_spd_id(), ret, ret, p_evt, grp, EVT_STATE_CREATE);
 
 	return ret;
 }
-
 
 CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
 			  spdid_t spdid, long extern_evt)
@@ -413,10 +495,11 @@ CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
 
         struct rec_data_evt *rd = NULL;
 redo:
-	/* printc("evt cli: evt_wait %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
         // must be in the same component
         rd = rd_update(extern_evt, EVT_STATE_WAITING);
 	assert(rd);   
+	/* printc("evt cli: evt_wait thd %d (extern_evt %d rd->evt id %ld)\n",  */
+	/*        cos_get_thd_id(), extern_evt, rd->s_evtid); */
 
 #ifdef BENCHMARK_MEAS_WAIT
 	rdtscll(meas_end);
@@ -429,16 +512,49 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid);
         if (unlikely (fault)){
-
+		printc("(ret %d)see a fault during evt_wait (thd %d in spd %ld)\n",
+		       ret, cos_get_thd_id(), cos_spd_id());
 #ifdef BENCHMARK_MEAS_WAIT
 		meas_flag = 1;
 		printc("start measuring.....\n");
 		rdtscll(meas_start);
 #endif		
 		CSTUB_FAULT_UPDATE();
+
+		/* If we are TCP timer, we need return and call
+		 * tcp_tmr to send dealy ACK and queued data */
+		if (cos_get_thd_id() == 12) return -22;   // test
+
 		goto redo;
         }
 
+	/* This is test: ret is a new split evt id and we need match
+	 * the torrent and evt on client side */
+	/* if (rd->s_evtid == ret) { */
+	/* 	/\* printc("found an client evt %d\n", rd->c_evtid); *\/ */
+	/* 	/\* printc("found an server evt %d\n", rd->s_evtid); *\/ */
+	/* 	/\* printc("ret evt %d\n", ret); *\/ */
+	/* 	return rd->c_evtid; */
+	/* } */
+	if (!rd->p_evtid && rd->grp == 1) {
+		assert(rd == evts_grp_list_head);
+		struct rec_data_evt *tmp = NULL;
+		for (tmp = FIRST_LIST(rd, next, prev) ;
+		     tmp != rd;
+		     tmp = FIRST_LIST(tmp, next, prev)) {
+			if (tmp) {
+				/* printc("found an client evt %d\n", tmp->c_evtid); */
+				/* printc("found an server evt %d\n", tmp->s_evtid); */
+				/* printc("ret evt %d\n", ret); */
+				assert(tmp->grp == 2);
+				if (tmp->s_evtid == ret) {
+					/* printc("should return %d\n", tmp->c_evtid); */
+					return tmp->c_evtid;
+				}
+			}
+		}
+	}
+	
 	return ret;
 }
 
@@ -452,8 +568,8 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
 	int ret, ser_evtid;
         struct rec_data_evt *rd = NULL;
 
-
-	/* printc("evt cli: evt_trigger %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
+redo:
+	/* printc("evt cli: evt_trigger thd %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
 #ifdef BENCHMARK_MEAS_TRIGGER
 	rdtscll(meas_end);
 	printc("end measuring.....\n");
@@ -465,7 +581,8 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
 	if (unlikely(fault)){
-
+		printc("see a fault during evt_trigger (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 #ifdef BENCHMARK_MEAS_TRIGGER
 		meas_flag = 1;
 		printc("start measuring.....\n");
@@ -498,9 +615,14 @@ o		  1) fault occurs in evt_trigger (before
 		  when return back from scheduler, we reflect evt to
 		  see if need redo
 		*/
-		/* goto redo; */
+		/* if (cos_get_thd_id() == 10) { */
+		/* 	cos_thd_cntl(COS_THD_CLEAR_PENDING_UPCALL, 0, 0, 1); */
+		/* } */
+
+		goto redo;
 	}
 
+	/* printc("evt cli: evt_trigger thd %d (ret %d)\n", cos_get_thd_id(), ret);	 */
 	return ret;
 }
 
@@ -528,7 +650,8 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid);
 	if (unlikely (fault)) {
-
+		printc("see a fault during evt_free (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 #ifdef BENCHMARK_MEAS_FREE
 		meas_flag = 1;
 		printc("start measuring.....\n");

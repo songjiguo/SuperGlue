@@ -234,7 +234,7 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	/* cos_brand_cntl(COS_BRAND_REMOVE_THD, 0, 0, 0); /\* remove the brand *\/ */
 	/* debug only: avoid endless faults and wait */
 	first++;
-	if(first > 5) {
+	if(first > 80) {
 		printc("has failed %d times\n",first);
 		sched_exit();
 	}
@@ -286,12 +286,12 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 int
 fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 {
-	/* printc("parameters: spdid %d fault_addr %p flags %d ip %p\n", spdid, fault_addr, flags, ip); */
+	printc("parameters: spdid %d fault_addr %p flags %d ip %p\n", spdid, fault_addr, flags, ip);
 	unsigned long r_ip;
 	struct llbooter_per_core *llboot = PERCPU_GET(llbooter);
 	
 	int tid = cos_get_thd_id();
-	printc("<< LL fault notification handler >>\n");
+	printc("<< LL fault notification handler (tid %d) >>\n", tid);
 	if(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0)) {
 		printc("llbooter: remove the invfrm_ip\n");
 		assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));

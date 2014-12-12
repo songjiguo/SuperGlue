@@ -81,7 +81,6 @@ long __sg_evt_wait(spdid_t spdid, long extern_evt)
 
 	/* C_TAKE(cos_spd_id()); */
 	lock_take(&evt_interface_lock);
-	/* printc("thd %d is going to evt_wait\n", cos_get_thd_id()); */
 
 	if (unlikely(!evts_head)) {
 		/* printc("Init evts_head\n"); */

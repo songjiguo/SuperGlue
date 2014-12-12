@@ -100,6 +100,9 @@ int __sg_sched_block(spdid_t spdid, int dependency_thd)
 	// add to list
 	cos_sched_lock_take();
 
+	/* printc("sched_block ser: (from spd %d) add thd %d to the tracking list, dep %d\n", */
+	/*        spdid, cos_get_thd_id(), dependency_thd); */
+
 	rd = rdblk_lookup(spdid);
 	if (unlikely(!rd)) {
 		rd = rdblk_alloc(spdid);

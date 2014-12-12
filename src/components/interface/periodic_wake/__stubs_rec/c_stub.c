@@ -226,7 +226,9 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, period);
 	if (unlikely (fault)){
-
+		printc("see a fault during periodic_wake_create (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
+		
 #ifdef BENCHMARK_MEAS_CREATE
 		meas_flag = 1;
 		printc("start measuring.....\n");
@@ -291,6 +293,9 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
+
+		printc("see a fault during periodic_wake_wait (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 
 #ifdef BENCHMARK_MEAS_WAIT
 		meas_flag = 1;

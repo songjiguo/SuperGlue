@@ -141,6 +141,8 @@ struct thread {
 
 	struct thread *brand_thd; /* track the brand thread associated with this thread */
 
+	unsigned int clear_pending_upcall;   // Jiguo
+
 } CACHE_ALIGNED;
 
 struct thread *thd_alloc(struct spd *spd);
@@ -169,7 +171,17 @@ static inline void thd_invocation_push(struct thread *curr_thd, struct spd *curr
 	inv_frame->sp = sp;
 	inv_frame->ip = ip;
 	inv_frame->spd = curr_spd;
-
+	
+	/* if (curr_thd->thread_id == 15) { */
+	/* 	printk("cos:push_frame spd %d curr_spd %d (curr_thd %d)\n",  */
+	/* 	       spd_get_index(inv_frame->spd), spd_get_index(curr_spd), */
+	/* 	       curr_thd->thread_id) ; */
+	/* } */
+	
+        /* // Jiguo: the caller spd might be the faulty spd */
+	/* if (inv_frame->fault.cnt < curr_spd->fault.cnt) */
+	inv_frame->fault.cnt = curr_spd->fault.cnt;
+	
 	return;
 }
 

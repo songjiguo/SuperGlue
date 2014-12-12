@@ -511,7 +511,12 @@ static int interrupt_wait(void)
 	int ret;
 
 	assert(wildcard_acap_id > 0);
+	
+	/* printc("thd %d is waiting for the network interrupt\n", cos_get_thd_id()); */
+
 	if (-1 == (ret = cos_ainv_wait(wildcard_acap_id))) BUG();
+
+	/* printc("thd %d after waiting for the network interrupt\n", cos_get_thd_id()); */
 
 	rdtscll(start);
 	/* if (ret > 0) { */
@@ -645,6 +650,7 @@ twrite(spdid_t spdid, td_t td, int cbid, int sz)
 
 	buf = cbuf2buf(cbid, sz);
 	if (!buf) ERR_THROW(-EINVAL, done);
+	/* printc("netif: thread %d is calling netif_event_xmit\n", cos_get_thd_id()); */
 	ret = netif_event_xmit(spdid, buf, sz);
 
 	/* // debug only */
@@ -734,36 +740,8 @@ void cos_init(void *arg)
 	pnums = avg = 0;
 	inc1 = inc2 = 0;
 
-#ifdef DEBUG_PERIOD	
-	unsigned long cos_immediate_process_cnt_prev = 0;
-
-	if (cos_get_thd_id() == debug_thd) {
-		if (periodic_wake_create(cos_spd_id(), 100)) BUG();
-		while(1) {
-			periodic_wake_wait(cos_spd_id());
-			printc("num interrupt_wait %ld interrupt_process %ld\n", 
-			       interrupt_wait_cnt, interrupt_process_cnt);
-			interrupt_wait_cnt = 0;
-			interrupt_process_cnt = 0;
-			if (cos_immediate_process_cnt > 0) {
-				printc("num immediate interrupt_process %ld\n", 
-				       cos_immediate_process_cnt - cos_immediate_process_cnt_prev);
-				cos_immediate_process_cnt_prev = cos_immediate_process_cnt;
-			}
-
-		}
-	}
-#endif
-	
 	if (first) {
 		first = 0;
-
-#ifdef DEBUG_PERIOD		
-		sp.c.type = SCHEDP_PRIO;
-		sp.c.value = 10;
-		debug_thd = sched_create_thd(cos_spd_id(), sp.v, 0, 0);
-#endif
-
 		init();
 	} else {
 		prints("net: not expecting more than one bootstrap.");

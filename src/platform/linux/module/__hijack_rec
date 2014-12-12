@@ -1013,18 +1013,7 @@ cos_handle_page_fault(struct thread *thd, vaddr_t fault_addr,
 }
 
 extern void
-fault_int_notif(struct thread *thd, struct spd *spd, unsigned int cap_num, struct pt_regs *regs, int fault_num);
-
-/* the composite specific page fault handler */
-static int 
-cos_fault_int_notif(struct thread *thd, struct spd *spd,
-		    unsigned int cap_num, struct pt_regs *regs)
-{
-	/* cos_record_fault_regs(thd, fault_addr, ecode, regs); */
-	fault_int_notif(thd, spd, cap_num, regs, COS_FLT_FLT_NOTIF);
-		
-	return 0;
-}
+fault_int_notif(struct thread *thd);
 
 //#define FAULT_DEBUG
 /*
@@ -1415,41 +1404,10 @@ host_idle_wakeup(void)
 	}
 }
 
-// Jiguo: FT interrupt
-static void
-thd_interrupt_fault_notif(struct thread *thd, struct pt_regs *regs)
-{
-	struct thd_invocation_frame *thd_frame;
-	unsigned int fltnotif_cap;
-	struct invocation_cap *flt_notif_cap_entry;
-	struct spd *notif_spd;
-
-#if (RECOVERY_ENABLE == 1)
-	thd_frame = thd_invstk_top(thd);
-
-	fltnotif_cap = thd_frame->spd->fault_handler[COS_FLT_FLT_NOTIF];
-	//flt_notif_cap_entry = &invocation_capabilities[fltnotif_cap];   jiguo
-	notif_spd = flt_notif_cap_entry->destination;
-	/* printk("notif spd is %d\n", spd_get_index(notif_spd)); */
-	if (fltnotif_cap > thd_frame->spd->ncaps) {
-		flt_notif_cap_entry->dest_entry_instruction = 0;
-		/* set thd ip and sp to be 0 */
-		/* return ip */
-		printk("handler is not defined !!!\n");
-	}
-	cos_fault_int_notif(thd, notif_spd, fltnotif_cap, regs);
-#endif
-
-	return;
-}
-
 int chal_attempt_ainv(struct async_cap *acap)
 {
 	struct pt_regs *regs = NULL;
 	unsigned long flags;
-
-	/* Recovery use */
-	struct thd_invocation_frame *thd_frame;
 
 	local_irq_save(flags);
 	if (likely(cos_thd_per_core[get_cpuid()].cos_thd)/* == current*/) {
@@ -1466,6 +1424,7 @@ int chal_attempt_ainv(struct async_cap *acap)
 		if (host_in_syscall() || host_in_idle()) {
 			struct thread *next;
 
+			
 			/*
 			 * _FIXME_: Here we are kludging a problem over.
 			 * The problem is this:
@@ -1504,11 +1463,6 @@ int chal_attempt_ainv(struct async_cap *acap)
 			 */
 			next = ainv_next_thread(acap, cos_current, 0);
 			if (next != cos_current) {
-				/* update the fault counter (recovery) */
-//				thd_frame = thd_invstk_top(cos_current);
-#if (RECOVERY_ENABLE == 1)
-//				thd_frame->curr_fault.cnt = thd_frame->spd->fault.cnt;
-#endif
 				assert(core_get_curr_thd() == next);
 				/* the following call isn't
 				 * necessary: if we are in a syscall,
@@ -1526,6 +1480,7 @@ int chal_attempt_ainv(struct async_cap *acap)
 				host_idle_wakeup();
 			}
 
+			printk("hijack(1): next thd %d\n", next->thread_id);
 			goto done;
  		}
 
@@ -1571,14 +1526,16 @@ int chal_attempt_ainv(struct async_cap *acap)
 					       thd_get_id(next));
 					///*assert*/BUG_ON(!(next->flags & THD_STATE_ACTIVE_UPCALL));
 				}
-				/* printk("hijack: next thd %d\n", next->thread_id); */
-//				if (unlikely(interrupt_fault_detect(next))) {
-//					/* Peter: detect fault on interrupt path */
-//					thd_interrupt_fault_notif(next, regs);
-//				} else {
-//					interrupt_fault_update(cos_current);
-//
+
 				thd_check_atomic_preempt(cos_current);
+
+				/* Jiguo: fault detection for interrupt */
+				if (unlikely(interrupt_fault_detect(next))) {
+					fault_int_notif(next);
+					goto done;
+				}
+				if (next->thread_id == 10)
+					printk("hijack(2): next thd %d\n", next->thread_id);
 
 				/* Those registers are saved in the
 				 * user space. No need to restore
@@ -1596,9 +1553,10 @@ int chal_attempt_ainv(struct async_cap *acap)
 				regs->sp = next->regs.sp;
 
 				//cos_meas_event(COS_MEAS_ACAP_UC);
-			} 
-			cos_meas_event(COS_MEAS_INT_PREEMPT);
+			}
 
+			cos_meas_event(COS_MEAS_INT_PREEMPT);
+			
 			event_record("normal (non-syscall/idle interrupting) upcall processed",
 				     thd_get_id(cos_current), thd_get_id(next));
 		} else {

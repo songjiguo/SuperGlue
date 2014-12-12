@@ -110,7 +110,7 @@ static long mapping_create(spdid_t spdid, struct evt *e)
 	 call evt_updateid to indicate the client has received id
 	 
 	 */
-	long id = ns_alloc(spdid);
+	long id = ns_alloc(cos_spd_id(), spdid);
 	assert(id >= 0);
 
         /* why need to delete such id?? After fault, we might find an

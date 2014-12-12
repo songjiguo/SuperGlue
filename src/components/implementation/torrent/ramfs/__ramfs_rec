@@ -194,6 +194,7 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	}
 #endif
 
+	/* printc("((((((((((((( evt_trigger 6 -- ramfs tsplit (thd %d evtid %d))))))))))))))))\n",  cos_get_thd_id(), evtid); */
 	evt_trigger(cos_spd_id(), evtid);
 
 	/* printc("ramfs split succesffuly and return tid %d\n\n", ret); */

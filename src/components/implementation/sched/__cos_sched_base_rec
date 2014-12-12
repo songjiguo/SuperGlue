@@ -482,6 +482,9 @@ static void sched_process_wakeups(void)
 	if (PERCPU_GET(sched_base_state)->wakeup_time && PERCPU_GET(sched_base_state)->ticks >= PERCPU_GET(sched_base_state)->wakeup_time && likely(PERCPU_GET(sched_base_state)->wakeup_thd)) {
 		if (PERCPU_GET(sched_base_state)->wakeup_thd->wake_cnt < 2) {
 			PERCPU_GET(sched_base_state)->wakeup_time = 0;
+
+			printc("sched_process_wakeups: pre_wakeup thread %d\n", 
+			       PERCPU_GET(sched_base_state)->wakeup_thd->id);
 			fp_pre_wakeup(PERCPU_GET(sched_base_state)->wakeup_thd);
 			/* If the event thread has not blocked yet, then don't
 			 * wake it fully */
@@ -807,7 +810,6 @@ static void fp_wakeup(struct sched_thd *thd, spdid_t spdid)
 		printc("fp_wakeup: thd %d waking %d, wake count %d\n", 
 		       cos_get_thd_id(), thd->id, thd->wake_cnt);
 	}
-	// this is triggering with wake_cnt == 2
 	assert(thd->wake_cnt == 1);
 	/* resume thread, thus no blocking component */
 	thd->blocking_component = 0;
@@ -854,7 +856,7 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	/* 	assert(0); */
 	/* } */
 
-	if (spdid == 18 && cos_get_thd_id() == 10 && test_control == 5000) {
+	if (spdid == 18 && cos_get_thd_id() == 10 && test_control == 20000) {
 		printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -862,6 +864,7 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 #endif
 
 	/* only increase the count once */
+	/* printc("sched_wakeup: pre_wakeup thread %d\n", thd->id);   */
 	fp_pre_wakeup(thd);
 	
 	if (thd->dependency_thd) {
@@ -995,6 +998,9 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 	/* 	goto warn; */
 	/* } */
 
+	/* /\* we shouldn't block while holding a component lock *\/ */
+	/* if (unlikely(0 != thd->ncs_held)) goto warn; */
+
 	if (unlikely(!(thd->blocking_component == 0 || 
 		       thd->blocking_component == spdid))) {
 		printc("sched warn 2 (thd %d from spd %d)\n", cos_get_thd_id(), spdid);
@@ -1024,6 +1030,7 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 	if (thd->wake_cnt) {
 		assert(thd->wake_cnt == 1);
 		cos_sched_lock_release();
+		printc("we already got a wakeup call for this thread %d\n", thd->id);
 		return 0;
 	}
 	/* dependency thread blocked??? */
@@ -1058,7 +1065,7 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		/* printc("...no dependency problem, going to depend on %d\n",dependency_thd); */
 		thd->dependency_thd = dep;
 		thd->flags |= THD_DEPENDENCY;
-		/* assert(thd->ncs_held == 0); */    // Jiguo: see above explanation
+		/* assert(thd->ncs_held == 0);    //Jiguo: see above explanation */
 	} else {
 		fp_block(thd, spdid);
 	}
@@ -1104,12 +1111,18 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		}
 		first = 0;
 	}
-	assert(thd->wake_cnt == 1);
+
+	/* Jiguo: the reflection might have woken up the thread, used to be == 1 */
+	assert(thd->wake_cnt > 0);
+	/* if (thd->wake_cnt != 1) printc("thd %d has wake_cnt %d\n", thd->id, thd->wake_cnt); */
+	/* assert(thd->wake_cnt == 1); */
+
 	/* The amount of time we've blocked */
 	ret = PERCPU_GET(sched_base_state)->ticks - thd->block_time - 1;
 	ret = ret > 0 ? ret : 0;
 done:
-	assert(thd->wake_cnt == 1);
+	assert(thd->wake_cnt > 0);  // Jiguo: see above reason
+	/* assert(thd->wake_cnt == 1); */
 	assert(!sched_thd_dependent(thd));
 	cos_sched_lock_release();
 	return ret; 
@@ -1118,6 +1131,7 @@ warn:
 	ret = -1;
 	goto done;
 unblock:
+	printc("sched_block-- unblock: pre_wakeup thread %d\n", thd->id);
 	fp_pre_wakeup(thd);
 	ret = -1;
 	goto done;
@@ -1312,7 +1326,7 @@ static struct sched_thd *__sched_setup_thread_arg(int dest_spd_id, void *metric_
 		new->spdid = (spdid_t)dest_spd_id;
 		new->init_data = (int)fn;
 	} else {
-		printc("creating a new one\n");
+		/* printc("creating a new one\n"); */
 		tid = (sched_is_root())                       ?
 			cos_create_thread(dest_spd_id, (int)fn, (int)d) :
 			parent_sched_child_thd_crt(cos_spd_id(), (spdid_t)(int)d);
@@ -1322,8 +1336,8 @@ static struct sched_thd *__sched_setup_thread_arg(int dest_spd_id, void *metric_
 	}
 	thread_new(new);
 
-	printc("a thread (new->id %d) is created: new->spdid %d new->init_data %d\n",  
-	       new->id, new->spdid, new->init_data);
+	/* printc("a thread (new->id %d) is created: new->spdid %d new->init_data %d\n",   */
+	/*        new->id, new->spdid, new->init_data); */
 
 	new->cpuid = cos_cpuid(); /* no thread migration between cores */
 	sched_set_thd_core(new->id, cos_cpuid());
@@ -1332,7 +1346,7 @@ static struct sched_thd *__sched_setup_thread_arg(int dest_spd_id, void *metric_
 	if (!fault) {
 		int tmp = *(int *)metric_str;
 		assert(tmp);
-		printc("tmp is %p\n", tmp);
+		/* printc("tmp is %p\n", tmp); */
 		cos_sched_cntl(COS_SCHED_THD_DEST, new->id, (int)dest_spd_id);
 		cos_sched_cntl(COS_SCHED_THD_METRIC, new->id, tmp);
 		cos_sched_cntl(COS_SCHED_THD_FN, new->id, (int)fn);
@@ -1499,9 +1513,7 @@ sched_create_thd(spdid_t spdid, u32_t sched_param_0, u32_t sched_param_1, u32_t 
 	
 		goto done;
 	} else {
-		printc("KKKKKKK\n");
 		ret = sched_create_thd_current_core(spdid, sched_params[0], sched_params[1], sched_params[2]);
-		printc("MMMMMMM\n");
 	}
 done:
 	return ret;
@@ -2245,6 +2257,8 @@ sched_reboot(int arg)
 	while (count_obj--) {
 		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
 		/* printc("evt mman_release: %p addr\n", (void *)addr); */
+		assert(addr);
+		memset(addr, 0, PAGE_SIZE);  // zero out anything on this page before release
 		mman_release_page(cos_spd_id(), addr, dest_spd);
 	}
 
@@ -2399,7 +2413,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		sched_reboot((int)arg1);
 		break;
 	case COS_UPCALL_DESTROY:
-		printc("upcall to destroy in scheduler\n");
+		/* printc("upcall to destroy in scheduler\n"); */
 		fp_kill_thd(sched_get_current());
 		break;
 	case COS_UPCALL_UNHANDLED_FAULT:
