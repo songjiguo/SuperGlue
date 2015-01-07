@@ -863,7 +863,7 @@ trelease(spdid_t spdid, td_t td)
 	struct torrent *t;
 	struct connection *c;
 
-	/* printc("https close\n"); */
+	printc("trelease: https close\n");
 	if (!tor_is_usrdef(td)) return;
 
 	LOCK();

@@ -27,6 +27,19 @@
 
 static int test_num = 0;
 
+/* Jiguo: A thread might trigger an event that has not been re-created
+ * by a different thread. So if an event is not found when trigger,
+ * the thread will block and woken later by the thread that re-create
+ * that event. For now, use link list for simplicity and a thread can
+ * at most block due one missing event */
+struct evt_blkthd {
+	long eid;
+	int thd;
+	struct evt_blkthd *next, *prev;
+};
+struct evt_blkthd track_blkthd_list;
+struct evt_blkthd *blkthd_list;
+
 typedef enum {
 	EVT_GROUP, 
 	EVT_NORMAL
@@ -152,12 +165,32 @@ __evt_trigger(spdid_t spdid, long eid)
 	/*        cos_get_thd_id(), spdid, eid); */
 	/* can't trigger groups */
 	if (!e) {
-		/* printc("thread %d (from spd %d) is trying to trigger evt %d... but evt does not exist\n", cos_get_thd_id(), spdid, eid); */
-		/* if (cos_get_thd_id() == 10) { */
-		/* 	cos_thd_cntl(COS_THD_CLEAR_PENDING_UPCALL, 0, 0, 1); */
-		/* }		 */
-		return -EINVAL;
+		int old_evtid = ns_lookup(cos_spd_id(), eid);
+		assert(old_evtid >= 1);  // the event has been freed by the woken thread ?
+		printc("thread %d (from spd %d) is trying to trigger evt %d (old_evtid %d)... but evt does not exist\n", cos_get_thd_id(), spdid, eid, old_evtid);
+
+		assert(blkthd_list);
+		struct evt_blkthd blk_on_evt;
+		blk_on_evt.eid = old_evtid;
+		blk_on_evt.thd = cos_get_thd_id();
+		INIT_LIST(&blk_on_evt, next, prev);
+
+		ADD_LIST(blkthd_list, &blk_on_evt, next, prev);
+
+		lock_release(&evt_lock);
+		sched_block(cos_spd_id(), 0);
+		lock_take(&evt_lock);
+
+		REM_LIST(&blk_on_evt, next, prev);
+
+		int actual_evtid = ns_lookup(cos_spd_id(), old_evtid);
+		assert(actual_evtid >= 1);  // the event has been freed by the woken thread ?
+		e = cvect_lookup(&evt_map, actual_evtid);
+		assert(e);
+		printc("thread %d (from spd %d) is trying to trigger evt %d... but evt does not exist, now we found actual_evtid %d\n", cos_get_thd_id(), spdid, eid, actual_evtid);	
+		/* return -EINVAL; */
 	}
+	assert(e);
 	if (e->type != EVT_NORMAL) {
 		/* printc("thread %d (from spd %d) is trying to trigger evt %d... but evt type is not EVT_NORMAL\n", cos_get_thd_id(), spdid, eid); */
 		return -EINVAL;
@@ -218,7 +251,7 @@ __evt_wait(spdid_t spdid, long eid)
 	if (!(e->status & EVT_TRIGGERED)) {
 		e->status |= EVT_BLOCKED;
 		e->bthd = cos_get_thd_id();
-		/* printc("thd %d is going to change block state\n", cos_get_thd_id()); */
+		printc("thd %d is going to change block state\n", cos_get_thd_id());
 		return 0;
 	}
 	
@@ -237,21 +270,24 @@ __evt_wait(spdid_t spdid, long eid)
 		assert(g->tchildren);
 		r = g->tchildren;
 		if (EMPTY_LIST(r, next, prev)) {
+			printc("(0)thd %d remove \"triggered\" evt %d grp evt %d\n", 
+			       cos_get_thd_id(), r->eid, g->eid);
 			REM_LIST(r, next, prev);
 			g->tchildren = NULL;
 			g->status &= ~EVT_TRIGGERED;
 		} else {
 			f = FIRST_LIST(r, next, prev);
+			printc("(1)thd %d remove \"triggered\" evt %d grp evt %d\n", 
+			       cos_get_thd_id(), r->eid, g->eid);
 			REM_LIST(r, next, prev);
 			g->tchildren = f;
 			more = 0;
 		}
 		if (g->iachildren) ADD_LIST(g->iachildren, r, next, prev);
 		else               g->iachildren = r;
-		
 		if (!more) break;
 	}
-	/* printc("evt_wait successfully return an event id %d\n", t->eid); */
+	printc("evt_wait successfully return an event id %d\n", t->eid);
 
 	/* Due to the client protocol (e.eg., web server uses the evt
 	 * id to find torrent id), we need find the actual old client
@@ -286,6 +322,23 @@ __evt_split(spdid_t spdid, long parent, int group, int old_evtid)
 	if (unlikely(old_evtid)) {
 		assert(old_evtid != e->eid);
 		if (ns_update(cos_spd_id(), old_evtid, e->eid, 0)) assert(0);
+
+		/* Now if this event is re-created, it should already
+		 * be inserted to the tree. We need check if there is
+		 * any thread block on this event */
+		struct evt_blkthd *tmp = NULL;
+		printc("__evt_split: try to find blocked thread on evt %d (new evtid %d)\n",
+		       old_evtid, e->eid);
+		for (tmp = FIRST_LIST(blkthd_list, next, prev) ;
+		     tmp != blkthd_list;
+		     tmp = FIRST_LIST(tmp, next, prev)) {
+			if (tmp->eid == old_evtid) {
+				printc("__evt_split: found thd %d blocked on %d and wake up\n",
+				       tmp->thd, tmp->eid);
+				sched_wakeup(cos_spd_id(), tmp->thd);
+				break;
+			}
+		}
 	}
 	
 	lock_release(&evt_lock);
@@ -334,7 +387,7 @@ long evt_wait(spdid_t spdid, long evt_id)
 {
 	long ret;
 
-	/* printc("evt_wait: passed in evt_id %d by thd %d\n", evt_id, cos_get_thd_id()); */
+	printc("evt_wait: passed in evt_id %d by thd %d\n", evt_id, cos_get_thd_id());
 
 	do {
 		lock_take(&evt_lock);
@@ -346,23 +399,32 @@ long evt_wait(spdid_t spdid, long evt_id)
 			assert(0);
 		}
 #endif
+		int actual_ret;
 		ret = __evt_wait(spdid, evt_id);
-		lock_release(&evt_lock);
-		
-		/* printc("evt_wait: before sched_block (thd %d and ret %d) \n", */
-		/*        cos_get_thd_id(), ret); */
-		
-		if (ret <= 0 && 0 > sched_block(cos_spd_id(), 0)) BUG();
+		if (ret > 0) {
+			actual_ret = ns_lookup(cos_spd_id(), ret);
+			/* assert(actual_ret >= 1); */
+			/* the event in evt_ns might have been
+			 * removed */
+			/* if (actual_ret == -22) { */
+			/* 	printc("evt_wait retry: ret %d actual_ret %d (by thd %d)\n",  */
+			/* 	       ret, actual_ret, cos_get_thd_id()); */
+			/* 	goto retry; */
+			/* } */
+			printc("evt_wait: ret %d actual_ret %d (by thd %d)\n", 
+			       ret, actual_ret, cos_get_thd_id());
+			ret = actual_ret;
+		}
 
-		/* if (!ret && 0 > sched_block(cos_spd_id(), 0)) BUG(); */
+		lock_release(&evt_lock);		
+		printc("evt_wait: before sched_block (thd %d and ret %d) \n",
+		       cos_get_thd_id(), ret);
 		
-		/* /\* block if ret is -11 or -22. should check this on */
-		/*  * return *\/ */
-		/* if (ret <= 0 && 0 > sched_block(cos_spd_id(), 0)) BUG(); */
+		if (!ret && 0 > sched_block(cos_spd_id(), 0)) BUG();
 		
-		/* printc("evt_wait: after sched_block (thd %d and ret %d) \n", */
-		/*        cos_get_thd_id(), ret); */
-
+		printc("evt_wait: after sched_block (thd %d and ret %d) \n",
+		       cos_get_thd_id(), ret);
+		
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_AFTER)
 		printc("trigger fault in evt_wait after (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
 		if (spdid == 20 && cos_get_thd_id() == 15 && test_num++ > 50) {
@@ -371,8 +433,9 @@ long evt_wait(spdid_t spdid, long evt_id)
 		}
 #endif
 
-	} while (ret <= 0);
-	return ret; 
+	} while (!ret);
+
+	return ret;
 }
 
 int
@@ -381,7 +444,7 @@ evt_trigger(spdid_t spdid, long evt_id)
 	int ret;
 	lock_take(&evt_lock);
 
-	/* printc("evt_trigger: passed in evt_id %d by thd %d\n", evt_id, cos_get_thd_id()); */
+	printc("evt_trigger: passed in evt_id %d by thd %d\n", evt_id, cos_get_thd_id());
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_BEFORE)
 	/* printc("trigger fault in evt_trigger before: thd %d passed spd %d (evt %d)\n", */
@@ -402,11 +465,9 @@ evt_trigger(spdid_t spdid, long evt_id)
 	assert(actual_evtid >= 1);  // the event has been freed by the woken thread ?
 	ret = __evt_trigger(spdid, actual_evtid);
 	lock_release(&evt_lock);
-
-	/* printc("ns_lookup return id %d (ret from __evt_trigger is %d)\n",  */
-	/*        actual_evtid, ret); */
-	/* after fault, __evt_trigger might return -22  */
-
+	
+	printc("evt_trigger: ns_lookup return actual id %d (passed in evt_id %d ret from __evt_trigger is %d)\n", actual_evtid, evt_id, ret);
+	
 	if (ret > 0) {
 		/* printc("evt_trigger is trying to wake up thread ret %d\n", ret); */
 		sched_wakeup(cos_spd_id(), ret);
@@ -439,9 +500,12 @@ cos_init(void)
 
 	cvect_init_static(&evt_map);
 
+	INIT_LIST(&track_blkthd_list, next, prev);
+	blkthd_list = &track_blkthd_list;
+
 	// Jiguo: rdreflection
 	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
-		printc("\n\nneed do reflection now!!!!\n");
+		printc("\n\nneed do reflection now!!!! (thd %d)\n", cos_get_thd_id());
 		rd_reflection();
 		printc("\nreflection done!!!\n");
 	}
@@ -500,7 +564,7 @@ rd_reflection()
 	/* printc("evt relfects on sched: %d objs\n", count_obj); */
 	while (count_obj--) {
 		wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0);
-		printc("wake_thd %d\n", wake_thd);
+		printc("thread %d wake_thd %d\n", cos_get_thd_id(), wake_thd);
 		sched_wakeup(cos_spd_id(), wake_thd);
 	}
 

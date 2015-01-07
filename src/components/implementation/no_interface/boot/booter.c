@@ -301,6 +301,7 @@ boot_spd_thd(spdid_t spdid, int failed)
 	if (unlikely(failed)) {
 		sp.c.type  = SCHEDP_PRIO;
 		sp.c.value = 3;   // test with a high priority thread
+		/* sp.c.value = 30;   // test with a low priority thread */
 	}
 	
 	union sched_param sp_coreid;

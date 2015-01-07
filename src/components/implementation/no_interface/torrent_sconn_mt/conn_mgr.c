@@ -101,7 +101,7 @@ evt_wait_all(void) { return evt_wait(cos_spd_id(), evt_all[cos_get_thd_id()]); }
  * tor < 0 == event is "to"
  */
 static inline long
-evt_get_thdid(int thdid, int init_evt)
+evt_get_thdid(int thdid)
 {
 	long eid;
 	
@@ -114,9 +114,7 @@ evt_get_thdid(int thdid, int init_evt)
 	/* eid = evt_split(cos_spd_id(), evt_all[thdid], 0); */
 
 	if (ncached == 0) {
-		// 1 means group, 2 means this is init_evt and not released
-		if (init_evt) eid = evt_split(cos_spd_id(), evt_all[thdid], 2);
-		else          eid = evt_split(cos_spd_id(), evt_all[thdid], 0);
+		eid = evt_split(cos_spd_id(), evt_all[thdid], 0);
 		/* printc("conn_mgr: tsplit a new evt id %d for thd %d (parent %d, group 0)\n", */
 		/*        eid, thdid, evt_all[thdid]); */
 	} else {
@@ -135,7 +133,7 @@ evt_get_thdid(int thdid, int init_evt)
 }
 
 static inline long
-evt_get(int init_evt) { return evt_get_thdid(cos_get_thd_id(), init_evt); }
+evt_get() { return evt_get_thdid(cos_get_thd_id()); }
 
 static inline void
 evt_put(long evtid)
@@ -202,9 +200,9 @@ accept_new(int accept_fd)
 	int from, to, feid, teid;
 
 	while (1) {
-		feid = evt_get(0);
+		feid = evt_get();
 		
-		/* printc("conn_mgr: tsplit new feid %d for thd %d\n", feid, cos_get_thd_id()); */
+		printc("conn_mgr: tsplit new feid %d for thd %d\n", feid, cos_get_thd_id());
 		
 		assert(feid > 0);
 		from = server_tsplit(cos_spd_id(), accept_fd, "", 0, TOR_RW, feid);
@@ -216,17 +214,18 @@ accept_new(int accept_fd)
 		}
 		assert(from != accept_fd);
 		if (-EAGAIN == from) {
+			printc("(0)evt_put: thd %d evt %d\n", cos_get_thd_id(), feid);
 			evt_put(feid);
 			return;
 		} else if (from < 0) {
 			printc("from torrent returned %d\n", from);
-			BUG();
+			/* BUG(); */   // might return Error if the fault has occurred
 			return;
 		}
 
-		teid = evt_get(0);
+		teid = evt_get();
 
-		/* printc("conn_mgr: tsplit new teid %d for thd %d\n", teid, cos_get_thd_id()); */
+		printc("conn_mgr: tsplit new teid %d for thd %d\n", teid, cos_get_thd_id());
 
 		assert(teid > 0);
 		to = tsplit(cos_spd_id(), td_root, "", 0, TOR_RW, teid);
@@ -286,7 +285,9 @@ close:
 	num_connection--;
 	trelease(cos_spd_id(), to);
 	assert(tc->feid && tc->teid);
+	printc("(1)evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->feid);
 	evt_put(tc->feid);
+	printc("(2)evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->teid);
 	evt_put(tc->teid);
 	goto done;
 }
@@ -347,7 +348,9 @@ close:
 	num_connection--;
 	trelease(cos_spd_id(), to);
 	assert(tc->feid && tc->teid);
+	printc("(3)evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->feid);
 	evt_put(tc->feid);
+	printc("(4)evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->feid);
 	evt_put(tc->teid);
 	goto done;
 }
@@ -420,7 +423,7 @@ cos_init(void *arg)
 	printc("Thread %d, port %d\n", cos_get_thd_id(), __port+off);	
 	port = off++;
 	port += __port;
-	eid = evt_get(1);
+	eid = evt_get();
 	printc("conn_mgr: tsplit init evtid %d for thd %d\n", eid, cos_get_thd_id());
 	if (snprintf(__create_str, 128, create_str, port) < 0) BUG();
 	ret = c = server_tsplit(cos_spd_id(), td_root, __create_str, strlen(__create_str), TOR_ALL, eid);
@@ -438,18 +441,17 @@ cos_init(void *arg)
 		memset(&tc, 0, sizeof(struct tor_conn));
 		rdtscll(end);
 		meas_record(end-start);
-		/* printc("thd %d calling evt_wait all\n", cos_get_thd_id()); */
+		printc("thd %d calling evt_wait all\n", cos_get_thd_id());
                 /* should check this return value */
-	redo:
+	/* redo: */
 		evt = evt_wait_all();
-		if (evt == evt_all[cos_get_thd_id()]) goto redo;
-
-		/* printc("\n---->conn: thd %d event comes (returned evt %d)\n", */
-		/*        cos_get_thd_id(), evt); */
+		/* if (evt == evt_all[cos_get_thd_id()]) goto redo; */
+		printc("\n---->conn: thd %d event comes (returned evt %d)\n",
+		       cos_get_thd_id(), evt);
 
 		rdtscll(start);
 		t   = evt_torrent(evt);
-		/* printc("thd %d find t %d for event %d\n", cos_get_thd_id(), t, evt); */
+		printc("thd %d find t %d for event %d\n", cos_get_thd_id(), t, evt);
 		if (t > 0) {
 			tc.feid = evt;
 			tc.from = t;

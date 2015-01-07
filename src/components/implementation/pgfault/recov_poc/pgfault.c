@@ -64,6 +64,16 @@ int fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *i
 
 	/* remove this for web server test */
 	
+	if (spdid == 15) {
+		printc("test lock\n");
+		assert(0);
+	}
+
+	if (cos_get_thd_id() == 11) {
+		printc("this is timer thread 11 and fail\n");
+		assert(0);
+	}
+
 	if (test_num++ > 100) {
 		printc("has failed %d times\n", test_num);
 		assert(0);

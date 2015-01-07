@@ -234,7 +234,22 @@ static void __event_expiration(event_time_t time, struct thread_event *events)
 		 * threads. */
 
 		// Jiguo: wake up the thread through evt
-		if (b) evt_trigger(spdid, tmp->evt);
+		if (b) {
+			printc("timed_evt: event_expiration evt_trigger (tdh %d evt %d)\n", 
+			       cos_get_thd_id(), tmp->evt);
+
+			if (sched_component_release(spdid)) {
+				prints("fprr: scheduler lock release failed!!!");
+				BUG();
+			}
+			
+			evt_trigger(spdid, tmp->evt);
+
+			if (sched_component_take(spdid)) {
+				prints("fprr: scheduler lock failed!!!");
+				BUG();
+			}
+		}
 	}
 }
 
@@ -768,6 +783,7 @@ static void start_timer_thread(void)
 #endif
 	/* Wait for events, then act on expired events.  Loop. */
 	while (1) {
+		printc("timed_evt: timer thread %d\n", cos_get_thd_id());
 		event_time_t next_wakeup;
 		cos_mpd_update(); /* update mpd config given this
 				   * thread is now in this component

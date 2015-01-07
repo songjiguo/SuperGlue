@@ -483,8 +483,8 @@ static void sched_process_wakeups(void)
 		if (PERCPU_GET(sched_base_state)->wakeup_thd->wake_cnt < 2) {
 			PERCPU_GET(sched_base_state)->wakeup_time = 0;
 
-			printc("sched_process_wakeups: pre_wakeup thread %d\n", 
-			       PERCPU_GET(sched_base_state)->wakeup_thd->id);
+			printc("\nsched_process_wakeups: pre_wakeup thread %d(by thd %d)\n", 
+			       PERCPU_GET(sched_base_state)->wakeup_thd->id, cos_get_thd_id());
 			fp_pre_wakeup(PERCPU_GET(sched_base_state)->wakeup_thd);
 			/* If the event thread has not blocked yet, then don't
 			 * wake it fully */
@@ -792,7 +792,8 @@ static void fp_pre_wakeup(struct sched_thd *t)
 	assert(t->wake_cnt >= 0 && t->wake_cnt <= 2);
 	if (2 == t->wake_cnt) return;
 	t->wake_cnt++;
-	/* printc("thd %d cnt++ %d ->%d\n", t->id, t->wake_cnt-1, t->wake_cnt); */
+	printc("fp_pre_wakeup: thd %d wake_cnt %d (curr thd %d)\n", 
+	       t->id, t->wake_cnt, cos_get_thd_id());
 	/* if (sched_get_current() != t && /\* Hack around comment "STKMGR: self wakeup" *\/ */
 	/*     !sched_thd_dependent(t) && */
 	/*     !(sched_thd_blocked(t) || t->wake_cnt == 2)) { */
@@ -899,7 +900,7 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	}
 
 	assert(!sched_thd_dependent(thd));
-	/* printc("thread %d about to call sched_switch_thread\n", cos_get_thd_id()); */
+	printc("thread %d about to call sched_switch_thread\n", cos_get_thd_id());
 	sched_switch_thread(0, WAKE_LOOP);
 done:
 	return 0;
@@ -990,17 +991,13 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 	 * ncs_held's owner and decide to return or continue. For web
 	 * server testing, simply comment this temporarily */
 
-	/* /\* we shouldn't block while holding a component lock *\/ */
-	/* if (unlikely(0 != thd->ncs_held)) { */
-	/* 	printc("sched warn 1 (thd %d from spd %d)\n", thd->id, spdid); */
-	/* 	printc("thd->blocking_component %d\n", thd->blocking_component); */
-	/* 	printc("thd->contended_component %d\n", thd->contended_component); */
-	/* 	goto warn; */
-	/* } */
-
-	/* /\* we shouldn't block while holding a component lock *\/ */
-	/* if (unlikely(0 != thd->ncs_held)) goto warn; */
-
+	/* we shouldn't block while holding a component lock */
+	if (unlikely(0 != thd->ncs_held)) {
+		printc("sched warn 1 (thd %d from spd %d)\n", thd->id, spdid);
+		printc("thd->blocking_component %d\n", thd->blocking_component);
+		printc("thd->contended_component %d\n", thd->contended_component);
+		goto warn;
+	}
 	if (unlikely(!(thd->blocking_component == 0 || 
 		       thd->blocking_component == spdid))) {
 		printc("sched warn 2 (thd %d from spd %d)\n", cos_get_thd_id(), spdid);
@@ -1054,7 +1051,8 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		}
 
 		if (sched_thd_blocked(dep)) {
-			printc("dep thd blocked already.\n");
+			printc("dep thd %d blocked already. (from spd %d)\n", 
+			       dep_thd, spdid);
 			goto unblock;
 		}
 	}
@@ -1065,7 +1063,7 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		/* printc("...no dependency problem, going to depend on %d\n",dependency_thd); */
 		thd->dependency_thd = dep;
 		thd->flags |= THD_DEPENDENCY;
-		/* assert(thd->ncs_held == 0);    //Jiguo: see above explanation */
+		assert(thd->ncs_held == 0);
 	} else {
 		fp_block(thd, spdid);
 	}
@@ -1112,17 +1110,29 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		first = 0;
 	}
 
-	/* Jiguo: the reflection might have woken up the thread, used to be == 1 */
-	assert(thd->wake_cnt > 0);
-	/* if (thd->wake_cnt != 1) printc("thd %d has wake_cnt %d\n", thd->id, thd->wake_cnt); */
+	/* Jiguo: Here is an issue. Say the network thread has
+	 * triggered and woken up thd, but not switch to thd yet. The
+	 * fault occurs before the actual switch. Currently c3 track
+	 * the blocked threads over scheduler interface on stack. So
+	 * when the reflection over the scheduler server interface
+	 * might wake up thd again, the tracked thread is still on the
+	 * list. So the wake_cnt could be 2 in this special case. */
+	
+	/* if (thd->wake_cnt != 1) printc("thd %d's wake_cnt %d\n", thd->id, thd->wake_cnt); */
+	
 	/* assert(thd->wake_cnt == 1); */
+	if (thd->wake_cnt == 2) thd->wake_cnt--;
+	assert(thd->wake_cnt == 1);
+	/* assert(thd->wake_cnt == 1 || thd->wake_cnt == 2); */
 
 	/* The amount of time we've blocked */
 	ret = PERCPU_GET(sched_base_state)->ticks - thd->block_time - 1;
 	ret = ret > 0 ? ret : 0;
 done:
-	assert(thd->wake_cnt > 0);  // Jiguo: see above reason
-	/* assert(thd->wake_cnt == 1); */
+	if (thd->wake_cnt == 2) thd->wake_cnt--;
+	assert(thd->wake_cnt == 1);
+
+	/* assert(thd->wake_cnt == 1 || thd->wake_cnt == 2); // see above explanation */
 	assert(!sched_thd_dependent(thd));
 	cos_sched_lock_release();
 	return ret; 

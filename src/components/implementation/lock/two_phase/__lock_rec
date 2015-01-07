@@ -263,8 +263,9 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	ml = lock_find(lock_id, spd);
 	/* tried to access a lock not yet created */
 	if (!ml) goto error;
-	assert(!lock_is_thd_blocked(ml, curr));
 
+	assert(!lock_is_thd_blocked(ml, curr));
+	
 	/* The calling component needs to retry its user-level lock,
 	 * some preemption has caused the generation count to get off,
 	 * i.e. we don't have the most up-to-date view of the
@@ -305,12 +306,12 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 
 	/* what if net thread is blocked, and another thread is woken
 	 * up back to here? Will see a non-empty list? -- Jiguo */
+	if (!EMPTY_LIST(&blocked_desc, next, prev)) {
+		printc("lock_component_take: from spd %d thd %d found not empty blocked list\n",
+		       spd, cos_get_thd_id());
+		BUG();
+	}
 
-	/* if (!EMPTY_LIST(&blocked_desc, next, prev)) { */
-	/* 	printc("lock_component_take thd %d found not empty blocked list\n", */
-	/* 	       spd, cos_get_thd_id()); */
-	/* 	BUG(); */
-	/* } */
 	/* 
 	 * OK, this seems ridiculous but here is the rational: Assume
 	 * we are a middle-prio thread, and were just woken by a low

@@ -477,20 +477,22 @@ static void cos_net_lwip_tcp_err(void *arg, err_t err)
 	case ERR_RST:
 		assert(ic->conn_type == TCP);
 		assert(ic->conn_type != TCP_CLOSED);
-		/* printc("((((((((((((( evt_trigger 2 -- tcp_err (thd %d evtid %d))))))))))))))))\n", cos_get_thd_id(), ic->data); */
+		printc("((((((((((((( evt_trigger 2 -- tcp_err (thd %d evtid %d))))))))))))))))\n", cos_get_thd_id(), ic->data);
 		/* if (-1 != ic->data && evt_trigger(cos_spd_id(), ic->data) < 0) BUG(); */
 		int ret;
 		if (-1 != ic->data) {
 			ret = evt_trigger(cos_spd_id(), ic->data);
-			if (ret == -EINVAL) {
-				printc("evt_trigger return -22\n");
-				/* return ERR_RST; */
-			}
 		}
-
+		
 		ic->conn_type = TCP_CLOSED;
 		ic->conn.tp = NULL;
 		net_conn_free_packet_data(ic);
+		
+		if (ret == -EINVAL) {
+			printc("evt_trigger return -22 (evt_trigger 2 return -22) thd %d\n", cos_get_thd_id());
+			/* return ERR_ABRT; */
+		}
+
 		break;
 	default:
 		printc("TCP error #%d: don't really have docs to know what this means.", err);
@@ -611,22 +613,32 @@ static err_t cos_net_lwip_tcp_recv(void *arg, struct tcp_pcb *tp, struct pbuf *p
 	pbuf_free(first);
 
 	/* printc("thd in %ld tcp_recv call trigger evt id %d\n", cos_get_thd_id(), ic->data); */
-	/* printc("((((((((((((( evt_trigger 3 -- tcp_recv (thd %d evtid %d)))))))))))))))))))))))))\n", cos_get_thd_id(), ic->data); */
+	printc("((((((((((((( evt_trigger 3 -- tcp_recv (thd %d evtid %d)))))))))))))))))))))))))\n", cos_get_thd_id(), ic->data);
 	/* if (-1 != ic->data && evt_trigger(cos_spd_id(), ic->data) < 0) BUG(); */
+	/* int ret; */
+	/* if (-1 != ic->data) { */
+	/* 	ret = evt_trigger(cos_spd_id(), ic->data); */
+	/* } */
+
 	int ret;
 	if (-1 != ic->data) {
 		ret = evt_trigger(cos_spd_id(), ic->data);
 	}
-	if (ret == -EINVAL) {
-		printc("evt_trigger return -22 (evt_trigger 3 return -22)\n");
-		/* if (ic->conn.tp) tcp_abort(ic->conn.tp); */
-
-		/* ic->conn_type = TCP_CLOSED; */
-		/* ic->conn.tp = NULL; */
-		/* net_conn_free_packet_data(ic); */
-		
-		/* return ERR_RST; */
-	}
+	/* while(ret == -EINVAL) { */
+	/* 	printc("evt_trigger return -22 (evt_trigger 3 return -22 thd %d)\n", cos_get_thd_id()); */
+	/* 	if (sched_block(cos_spd_id(), 0) < 0) BUG(); */
+	/* 	if (-1 != ic->data) { */
+	/* 		ret = evt_trigger(cos_spd_id(), ic->data); */
+	/* 	} */
+	/* } */
+	/* assert(ret >= 0); */
+	
+	/* if (ret == -EINVAL) { */
+	/* 	printc("evt_trigger return -22 (evt_trigger 3 return -22 (thd %d))\n", */
+	/* 	       cos_get_thd_id()); */
+		/* cos_net_lwip_tcp_err(arg, ERR_ABRT); */
+		/* return ERR_ABRT; */
+	/* } */
 
 	/* tcp_recv_cnt++; */
 /* 	/\* If the thread blocked waiting for a packet, wake it up *\/ */
@@ -721,6 +733,8 @@ net_connection_t net_create_tcp_connection(spdid_t spdid, u16_t tid, long evt_id
 	return __net_create_tcp_connection(spdid, tid, NULL, evt_id);
 }
 
+int net_close(spdid_t spdid, net_connection_t nc);
+
 static err_t cos_net_lwip_tcp_accept(void *arg, struct tcp_pcb *new_tp, err_t err)
 {
 	struct intern_connection *ic = arg, *ica;
@@ -753,20 +767,23 @@ static err_t cos_net_lwip_tcp_accept(void *arg, struct tcp_pcb *new_tp, err_t er
 	assert(-1 != ic->data);
 	/* printc("cos_net_lwip_tcp_accept trigger event (thd %d)\n", cos_get_thd_id()); */
 	/* printc("thd %ld in tcp_accept call trigger evtid %d\n", cos_get_thd_id(), ic->data); */
-	/* printc("((((((((((((( evt_trigger 4 -- tcp_accept (thd %d evtid %d))))))))))))))))))\n", cos_get_thd_id(), ic->data); */
+	printc("((((((((((((( evt_trigger 4 -- tcp_accept (thd %d evtid %d))))))))))))))))))\n", cos_get_thd_id(), ic->data);
 	/* if (evt_trigger(cos_spd_id(), ic->data) < 0) BUG(); */
-	int ret = evt_trigger(cos_spd_id(), ic->data);
-	
-	if (ret == -EINVAL) {
-		printc("evt_trigger return -22 (evt_trigger 4 return -22)\n");
-		/* if (ic->conn.tp) tcp_abort(ic->conn.tp); */
 
-		/* ic->conn_type = TCP_CLOSED; */
-		/* ic->conn.tp = NULL; */
-		/* net_conn_free_packet_data(ic); */
-		/* return ERR_RST; */
-	}
-	
+	int ret = evt_trigger(cos_spd_id(), ic->data);
+	/* while(ret == -EINVAL) { */
+	/* 	printc("evt_trigger return -22 (evt_trigger 4 return -22 thd %d)\n", cos_get_thd_id()); */
+	/* 	if (sched_block(cos_spd_id(), 0) < 0) BUG(); */
+	/* 	ret = evt_trigger(cos_spd_id(), ic->data); */
+	/* } */
+	/* assert(ret >= 0); */
+
+	/* if (ret == -EINVAL) { */
+	/* 	printc("evt_trigger return -22 (evt_trigger 4 return -22)\n"); */
+	/* 	if (sched_block(cos_spd_id(), 0) < 0) BUG(); */
+	/* 	/\* cos_net_lwip_tcp_err(arg, ERR_ABRT); *\/ */
+	/* 	/\* return ERR_ABRT; *\/ */
+	/* } */
 	/* tcp_accept_cnt++; */
 
 	return ERR_OK;
@@ -910,8 +927,7 @@ int net_accept_data(spdid_t spdid, net_connection_t nc, long data)
 	 * because ->data was not set, trigger the event now. */
 	/* printc("trigger event??? (thd %d) \n", cos_get_thd_id()); */
 	/* printc("thd %ld in net_accept_data call trigger evtid %d\n", cos_get_thd_id(), ic->data); */
-	/* printc("(((((((((((evt_trigger 5 -- net_accept_data (thd %d evtid %d))))))))))))))))\n", cos_get_thd_id(), ic->data); */
-	
+	printc("(((((((((((evt_trigger 5 -- net_accept_data (thd %d evtid %d))))))))))))))))\n", cos_get_thd_id(), ic->data);
 	/* if (0 < ic->incoming_size &&  */
 	/*     evt_trigger(cos_spd_id(), data) < 0) goto err; */
 	int test;
@@ -920,14 +936,9 @@ int net_accept_data(spdid_t spdid, net_connection_t nc, long data)
 	}
 
 	if (test == -EINVAL) {
-		printc("evt_trigger return -22 (evt_trigger 5 return -22)\n");
-		/* if (ic->conn.tp) tcp_abort(ic->conn.tp); */
-
-		/* ic->conn_type = TCP_CLOSED; */
-		/* ic->conn.tp = NULL; */
-		/* net_conn_free_packet_data(ic); */
-
-		/* return ERR_RST; */
+		printc("evt_trigger return -22 (evt_trigger 5 return -22)  thd %d\n", cos_get_thd_id());
+		/* cos_net_lwip_tcp_err(ic, ERR_ABRT); */
+		/* return ERR_ABRT; */
 	}
 
 	/* net_accetp_cnt++; */
@@ -1048,6 +1059,7 @@ static int __net_connect(spdid_t spdid, net_connection_t nc, struct ip_addr *ip,
 	struct intern_connection *ic;
 	u16_t tid = cos_get_thd_id();
 	
+	printc("__net_connect: thd %d is taking the lock\n", cos_get_thd_id());
 	NET_LOCK_TAKE();
 	if (!net_conn_valid(nc)) goto perm_err;
 	ic = net_conn_get_internal(nc);
@@ -1286,6 +1298,7 @@ static void cos_net_interrupt(char *packet, int sz)
 	unsigned long long ts;
 #endif
 //	printc(">>> %d\n", net_lock.lock_id);
+	printc("cos_net_interrupt: thd %d is taking the lock\n", cos_get_thd_id());
 	NET_LOCK_TAKE();
 //	printc("<<< %d\n", net_lock.lock_id);
 
@@ -1326,7 +1339,7 @@ static void cos_net_interrupt(char *packet, int sz)
 	memcpy(d, packet, len);
 	p->payload = p->alloc_track = d;
 	/* hand off packet ownership here... */
-	/* printc("net: calling IP input....(thd %d)\n", cos_get_thd_id()); */
+	printc("net: calling IP input....(thd %d)\n", cos_get_thd_id());
 	if (ERR_OK != cos_if.input(p, &cos_if)) {
 		prints("net: failure in IP input.");
 		pbuf_free(p);
@@ -1374,8 +1387,7 @@ static int cos_net_evt_loop(void)
 		sz = server_tread(cos_spd_id(), ip_td, cb, alloc_sz);
 		/* tcp_tread_cnt++; */
 		assert(sz > 0);
-		/* printc("network uc %d server_cos_net_interrupt...data %s\n",  */
-		/*        cos_get_thd_id(), data); */
+		printc("network uc %d server_cos_net_interrupt.......\n", cos_get_thd_id());
 		cos_net_interrupt(data, sz);
 		assert(lock_contested(&net_lock) != cos_get_thd_id());
 		cbuf_free(cb);
@@ -1399,7 +1411,7 @@ static err_t cos_net_stack_send(struct netif *ni, struct pbuf *p, struct ip_addr
 
 	/* assuming the net lock is taken here */
 
-	/* printc("net: calling IP output....(thd %d)\n", cos_get_thd_id()); */
+	printc("net: calling IP output....(thd %d)\n", cos_get_thd_id());
 	assert(p && p->ref == 1);
 	assert(p->type == PBUF_RAM);
 	buff = cbuf_alloc(MTU, &cb);
@@ -1478,6 +1490,7 @@ modify_connection(spdid_t spdid, net_connection_t nc, char *ops, int len)
 		u32_t port;
 		int r;
 
+		printc("modify_connection(bind): thd %d is taking the lock\n", cos_get_thd_id());
 		NET_LOCK_TAKE();
 		ic = net_conn_get_internal(nc);
 		//ic = net_verify_tcp_connection(nc, &ret);
@@ -1494,7 +1507,7 @@ modify_connection(spdid_t spdid, net_connection_t nc, char *ops, int len)
 	if (prop) {
 		int r;
 		unsigned int q;
-
+		printc("modify_connection(listen): thd %d is taking the lock\n", cos_get_thd_id());
 		NET_LOCK_TAKE();
 		ic = net_conn_get_internal(nc);
 		//ic = net_verify_tcp_connection(nc, &ret);
@@ -1524,6 +1537,7 @@ tsplit(spdid_t spdid, td_t tid, char *param, int len,
 
 	if (tor_isnull(tid)) return -EINVAL;
 
+	printc("tsplit: thd %d is taking the lock\n", cos_get_thd_id());
 	NET_LOCK_TAKE();
 	/* creating a new connection */
 	if (tid == td_root || len == 0 || strstr(param, "accept")) {
@@ -1556,6 +1570,7 @@ tsplit(spdid_t spdid, td_t tid, char *param, int len,
 		NET_LOCK_RELEASE();
 		r = modify_connection(spdid, nc, param, len);
 		if (r < 0) ret = r;
+		printc("tsplit(2): thd %d is taking the lock\n", cos_get_thd_id());
 		NET_LOCK_TAKE();
 	}
 done:
@@ -1575,6 +1590,7 @@ trelease(spdid_t spdid, td_t td)
 
 	if (!tor_is_usrdef(td)) return;
 
+	printc("trelease: thd %d is taking the lock\n", cos_get_thd_id());
 	NET_LOCK_TAKE();
 	t = tor_lookup(td);
 	if (!t) goto done;
@@ -1612,6 +1628,7 @@ twrite(spdid_t spdid, td_t td, int cbid, int sz)
 	if (!buf)           return -EINVAL;
 	if (tor_isnull(td)) return -EINVAL;
 
+	printc("twrite: thd %d is taking the lock\n", cos_get_thd_id());
 	NET_LOCK_TAKE();
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);
@@ -1638,6 +1655,7 @@ tread(spdid_t spdid, td_t td, int cbid, int sz)
 	if (!buf)           return -EINVAL;
 	if (tor_isnull(td)) return -EINVAL;
 
+	printc("tread: thd %d is taking the lock\n", cos_get_thd_id());
 	NET_LOCK_TAKE();
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);
@@ -1702,7 +1720,7 @@ static int init(void)
 #endif
 
 	lock_static_init(&net_lock);
-	/* printc("netlock id %d\n", net_lock.lock_id); */
+	printc("cos_net init: thd %d is taking the lock\n", cos_get_thd_id());
 	NET_LOCK_TAKE();
 
 	torlib_init();
@@ -1714,6 +1732,7 @@ static int init(void)
 	/* Start the tcp timer */
 	while (1) {
 		/* Sleep for a quarter of seconds as prescribed by lwip */
+		printc("tcp timer: thd %d is taking the lock\n", cos_get_thd_id());
 		NET_LOCK_TAKE();
 
 		if (++cnt == 4) {

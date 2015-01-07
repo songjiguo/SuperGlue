@@ -530,7 +530,7 @@ static inline int cos_switch_thread_release(unsigned short int thd_id,
 	cos_sched_lock_release();
 
 	/* kernel will read next thread information from cos_next */
-	/* printc("core %ld: __switch_thread, thd %u, flags %u\n", cos_cpuid(), thd_id, flags); */
+	printc("core %ld: __switch_thread, thd %u, flags %u\n", cos_cpuid(), thd_id, flags);
 #ifdef MEA_NET
 	if (cos_get_thd_id() == WHICH_THD) {
 		rdtscll(end);
