@@ -188,14 +188,14 @@ rd_recover_state(struct rec_data_evt *rd)
 				tmp->p_evtid = rd->s_evtid;
                                 /* only re-create this child once */
 				tmp->fcnt    = fcounter; 
-				printc("\n>>found an evt %d (thd %d)\n", 
-				       tmp->c_evtid, cos_get_thd_id());
-				printc("its parent evt %d\n", tmp->p_evtid);
+				/* printc("\n>>found an evt %d (thd %d)\n",  */
+				/*        tmp->c_evtid, cos_get_thd_id()); */
+				/* printc("its parent evt %d\n", tmp->p_evtid); */
 				tmp_evtid = c3_evt_split(cos_spd_id(), tmp->p_evtid,
 							 tmp->grp, tmp->c_evtid);
 				assert(tmp_evtid >= 1);
 				tmp->s_evtid = tmp_evtid;
-				printc("c3_tsplit new evtid %d\n", tmp->s_evtid);
+				/* printc("c3_tsplit new evtid %d\n", tmp->s_evtid); */
 			}
 		}
 	} else {
@@ -471,8 +471,8 @@ redo:
         // assume always in the same component as evt_split
         rd = rd_update(extern_evt, EVT_STATE_WAITING);
 	assert(rd);   
-	printc("evt cli: evt_wait thd %d (extern_evt %d rd->evt id %ld)\n",
-	       cos_get_thd_id(), extern_evt, rd->s_evtid);
+	/* printc("evt cli: evt_wait thd %d (extern_evt %d rd->evt id %ld)\n", */
+	/*        cos_get_thd_id(), extern_evt, rd->s_evtid); */
 
 #ifdef BENCHMARK_MEAS_WAIT
 	rdtscll(meas_end);
@@ -519,7 +519,7 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
         struct rec_data_evt *rd = NULL;
 
 redo:
-	printc("evt cli: evt_trigger thd %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
+	/* printc("evt cli: evt_trigger thd %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
 #ifdef BENCHMARK_MEAS_TRIGGER
 	rdtscll(meas_end);
 	printc("end measuring.....\n");

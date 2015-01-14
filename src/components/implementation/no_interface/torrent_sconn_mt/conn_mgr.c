@@ -115,12 +115,12 @@ evt_get_thdid(int thdid)
 
 	if (ncached == 0) {
 		eid = evt_split(cos_spd_id(), evt_all[thdid], 0);
-		/* printc("conn_mgr: tsplit a new evt id %d for thd %d (parent %d, group 0)\n", */
-		/*        eid, thdid, evt_all[thdid]); */
+		printc("conn_mgr: tsplit a new evt id %d for thd %d (parent %d, group 0)\n",
+		       eid, thdid, evt_all[thdid]);
 	} else {
 		eid = evt_cache[--ncached];
-		/* printc("conn_mgr: tsplit a cached evt id %d for thd %d (parent %d, group 0)\n", */
-		/*        eid, thdid, evt_all[thdid]); */
+		printc("conn_mgr: tsplit a cached evt id %d for thd %d (parent %d, group 0)\n",
+		       eid, thdid, evt_all[thdid]);
 	}
 	assert(eid > 0);
 
@@ -285,9 +285,9 @@ close:
 	num_connection--;
 	trelease(cos_spd_id(), to);
 	assert(tc->feid && tc->teid);
-	printc("(1)evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->feid);
+	printc("(1) evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->feid);
 	evt_put(tc->feid);
-	printc("(2)evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->teid);
+	printc("(2) evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->teid);
 	evt_put(tc->teid);
 	goto done;
 }

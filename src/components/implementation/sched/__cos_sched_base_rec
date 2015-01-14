@@ -985,12 +985,6 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		}
 	}
 
-	/* Jiguo: here is the issue -- the timer thread now use call
-	 * evt_trigger and might still hold the critical section, say
-	 * from scheduler. So this check can break. TODO: check the
-	 * ncs_held's owner and decide to return or continue. For web
-	 * server testing, simply comment this temporarily */
-
 	/* we shouldn't block while holding a component lock */
 	if (unlikely(0 != thd->ncs_held)) {
 		printc("sched warn 1 (thd %d from spd %d)\n", thd->id, spdid);
@@ -1117,22 +1111,16 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 	 * when the reflection over the scheduler server interface
 	 * might wake up thd again, the tracked thread is still on the
 	 * list. So the wake_cnt could be 2 in this special case. */
-	
-	/* if (thd->wake_cnt != 1) printc("thd %d's wake_cnt %d\n", thd->id, thd->wake_cnt); */
-	
 	/* assert(thd->wake_cnt == 1); */
-	if (thd->wake_cnt == 2) thd->wake_cnt--;
+	if (unlikely(thd->wake_cnt == 2)) thd->wake_cnt--;   // Jiguo: special case
 	assert(thd->wake_cnt == 1);
-	/* assert(thd->wake_cnt == 1 || thd->wake_cnt == 2); */
 
 	/* The amount of time we've blocked */
 	ret = PERCPU_GET(sched_base_state)->ticks - thd->block_time - 1;
 	ret = ret > 0 ? ret : 0;
 done:
-	if (thd->wake_cnt == 2) thd->wake_cnt--;
+	if (thd->wake_cnt == 2) thd->wake_cnt--;  // Jiguo: special case, same as above
 	assert(thd->wake_cnt == 1);
-
-	/* assert(thd->wake_cnt == 1 || thd->wake_cnt == 2); // see above explanation */
 	assert(!sched_thd_dependent(thd));
 	cos_sched_lock_release();
 	return ret; 
@@ -1675,7 +1663,7 @@ int sched_child_thd_crt(spdid_t spdid, spdid_t dest_spd)
 	struct sched_thd *t, *st, *new;
 	int tid;
 
-	assert(0);  // quick test if this function is called by any child -- Jiguo
+	/* assert(0);  // quick test if this function is called by any child -- Jiguo */
 
 	cos_sched_lock_take();
 	t = sched_get_current();

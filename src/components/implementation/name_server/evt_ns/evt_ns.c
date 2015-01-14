@@ -97,15 +97,15 @@ ns_free(spdid_t spdid, int id)
 	// the fault could happen after the entry has been removed!!!
 	m = mapping_find(id);
 	if (!m) goto done;
-	printc("(1) ns_free from spd %d: passed id %d m->id %d m->next_id %d\n", 
-	       spdid, id, m->id, m->next_id);
+	/* printc("(1) ns_free from spd %d: passed id %d m->id %d m->next_id %d\n",  */
+	/*        spdid, id, m->id, m->next_id); */
 	if ((tmp = mapping_find(m->next_id)) && tmp != m) {
-		printc("(2) evt name server delete tmp id %d m->next id %d\n", 
-		       tmp->id, m->next_id);
+		/* printc("(2) evt name server delete tmp id %d m->next id %d\n",  */
+		/*        tmp->id, m->next_id); */
 		mapping_free(tmp->id);
 		cslab_free_evt(tmp);
 	}
-	printc("(3) evt name server delete id %d\n", m->id);
+	/* printc("(3) evt name server delete id %d\n", m->id); */
 	mapping_free(m->id);
 	cslab_free_evt(m);
 	ret = 0;
@@ -150,7 +150,7 @@ ns_lookup(spdid_t spdid, int id)
 	int ret = 0;
 	struct evt_node *curr, *tmp;
 
-	printc("evt_ns: ns_lookup (id %d by thd %d)\n", id, cos_get_thd_id());
+	/* printc("evt_ns: ns_lookup (id %d by thd %d)\n", id, cos_get_thd_id()); */
 
 	LOCK();
 
@@ -163,7 +163,7 @@ ns_lookup(spdid_t spdid, int id)
 	/* if (!curr) goto done; */
 	assert(curr);
 	ret = curr->next_id;
-	printc("evt_ns: ns_lookup done. Fonud new id %d for old id %d\n", ret, id);
+	/* printc("evt_ns: ns_lookup done. Fonud new id %d for old id %d\n", ret, id); */
 done:
 	UNLOCK();
 	return ret;

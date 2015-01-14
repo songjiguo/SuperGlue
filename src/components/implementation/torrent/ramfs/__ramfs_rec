@@ -289,7 +289,7 @@ twritep(spdid_t spdid, td_t td, int cb, int sz)
 		ret            = left > sz ? sz : left;
 		fso->size      = t->offset + ret;
 	}
-	printc("twrite: fso path %s\n", fso->unique_path);
+	/* printc("twrite: fso path %s\n", fso->unique_path); */
 	/* printc("fso->allocated %d t->offset %d \n",fso->allocated, t->offset); */
 	/* printc("write buf -- %s\n", buf); */
 	memcpy(fso->data + t->offset, buf, ret);
@@ -297,8 +297,8 @@ twritep(spdid_t spdid, td_t td, int cb, int sz)
 
 	struct tid_uniqid_data *idmapping = tiduniq_lookup(td);
 	assert(idmapping);
-	printc("idmapping->tid %d idmapping->uniq_id %d\n", 
-	       idmapping->tid, idmapping->uniq_id);
+	/* printc("idmapping->tid %d idmapping->uniq_id %d\n",  */
+	/*        idmapping->tid, idmapping->uniq_id); */
 	assert(idmapping->uniq_id);
 
 	/* Pass the FT relevant info to cbuf manager. Keep it around *

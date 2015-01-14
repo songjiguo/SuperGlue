@@ -2751,7 +2751,7 @@ ainv_next_thread(struct async_cap *acap, struct thread *preempted, int preempt)
 	/* 	/\* printk("before update meas_mode: %d\n", rb_track->packets[tail].meas_mode); *\/ */
 	/* 	rb_track->packets[tail].meas_mode = MEAS_ARRIVAL_CONTINUE_PREV; */
 	/* 	/\* printk("after update meas_mode: %d\n", rb_track->packets[tail].meas_mode); *\/ */
-	printk(" upcall not immediate -- goto preempted %d \n", thd_get_id(preempted));
+	/* printk(" upcall not immediate -- goto preempted %d \n", thd_get_id(preempted)); */
 	/* } */
 	/* ////////////////////////// */
 		
