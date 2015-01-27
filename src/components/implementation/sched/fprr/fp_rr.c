@@ -431,9 +431,9 @@ thread_param_set(struct sched_thd *t, struct sched_param_s *ps)
 		}
 		ps++;
 	}
-	printc("ps->type %d\n", ps->type);
-	printc("fprr: cpu %d has new thd %d @ prio %d (type %d)\n",
-	       cos_cpuid(), t->id, prio, t_ps->type);
+	/* printc("ps->type %d\n", ps->type); */
+	/* printc("fprr: cpu %d has new thd %d @ prio %d (type %d)\n", */
+	/*        cos_cpuid(), t->id, prio, t_ps->type); */
 	if (sched_thd_ready(t)) fp_rem_thd(t);
 	
 	fp_add_thd(t, prio);

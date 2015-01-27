@@ -533,7 +533,7 @@ static int tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	DBG(KERN_INFO "%s: tun_net_xmit %d\n", tun->dev->name, skb->len);
 
-	/* printk("\n <<Network interrupt arrives!!>> \n \n"); */
+	printk("\n <<Network interrupt arrives!!>> \n \n");
 
 	/* Drop packet if interface is not attached */
 	//if (!tun->attached)

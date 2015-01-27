@@ -160,7 +160,7 @@ sched_thread_remove(struct spd *spd, int thd_id)
 	}
 
 	if (spd_is_scheduler(spd) && !spd_is_root_sched(spd)){
-		printk("cos: remove all tracking info for thread %d\n", thd_id);
+		/* printk("cos: remove all tracking info for thread %d\n", thd_id); */
 		thd->sched_info[spd->sched_depth].thread_dest	= 0;
 		thd->sched_info[spd->sched_depth].thread_metric = 0;
 		thd->sched_info[spd->sched_depth].thread_fn	= 0;

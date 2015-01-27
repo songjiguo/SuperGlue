@@ -477,7 +477,7 @@ static void cos_net_lwip_tcp_err(void *arg, err_t err)
 	case ERR_RST:
 		assert(ic->conn_type == TCP);
 		assert(ic->conn_type != TCP_CLOSED);
-		printc("((((((((((((( evt_trigger 2 -- tcp_err (thd %d evtid %d))))))))))))))))\n", cos_get_thd_id(), ic->data);
+		/* printc("((((((((((((( evt_trigger 2 -- tcp_err (thd %d evtid %d))))))))))))))))\n", cos_get_thd_id(), ic->data); */
 		/* if (-1 != ic->data && evt_trigger(cos_spd_id(), ic->data) < 0) BUG(); */
 		int ret;
 		if (-1 != ic->data) {
@@ -615,7 +615,7 @@ static err_t cos_net_lwip_tcp_recv(void *arg, struct tcp_pcb *tp, struct pbuf *p
 	pbuf_free(first);
 
 	/* printc("thd in %ld tcp_recv call trigger evt id %d\n", cos_get_thd_id(), ic->data); */
-	printc("((((((((((((( evt_trigger 3 -- tcp_recv (thd %d evtid %d)))))))))))))))))))))))))\n", cos_get_thd_id(), ic->data);
+	/* printc("((((((((((((( evt_trigger 3 -- tcp_recv (thd %d evtid %d)))))))))))))))))))))))))\n", cos_get_thd_id(), ic->data); */
 	/* if (-1 != ic->data && evt_trigger(cos_spd_id(), ic->data) < 0) BUG(); */
 	/* int ret; */
 	/* if (-1 != ic->data) { */
@@ -771,7 +771,7 @@ static err_t cos_net_lwip_tcp_accept(void *arg, struct tcp_pcb *new_tp, err_t er
 	assert(-1 != ic->data);
 	/* printc("cos_net_lwip_tcp_accept trigger event (thd %d)\n", cos_get_thd_id()); */
 	/* printc("thd %ld in tcp_accept call trigger evtid %d\n", cos_get_thd_id(), ic->data); */
-	printc("((((((((((((( evt_trigger 4 -- tcp_accept (thd %d evtid %d))))))))))))))))))\n", cos_get_thd_id(), ic->data);
+	/* printc("((((((((((((( evt_trigger 4 -- tcp_accept (thd %d evtid %d))))))))))))))))))\n", cos_get_thd_id(), ic->data); */
 	/* if (evt_trigger(cos_spd_id(), ic->data) < 0) BUG(); */
 
 	NET_LOCK_RELEASE();
@@ -933,7 +933,7 @@ int net_accept_data(spdid_t spdid, net_connection_t nc, long data)
 	 * because ->data was not set, trigger the event now. */
 	/* printc("trigger event??? (thd %d) \n", cos_get_thd_id()); */
 	/* printc("thd %ld in net_accept_data call trigger evtid %d\n", cos_get_thd_id(), ic->data); */
-	printc("(((((((((((evt_trigger 5 -- net_accept_data (thd %d evtid %d))))))))))))))))\n", cos_get_thd_id(), ic->data);
+	/* printc("(((((((((((evt_trigger 5 -- net_accept_data (thd %d evtid %d))))))))))))))))\n", cos_get_thd_id(), ic->data); */
 	/* if (0 < ic->incoming_size &&  */
 	/*     evt_trigger(cos_spd_id(), data) < 0) goto err; */
 	int test;
@@ -1067,7 +1067,6 @@ static int __net_connect(spdid_t spdid, net_connection_t nc, struct ip_addr *ip,
 	struct intern_connection *ic;
 	u16_t tid = cos_get_thd_id();
 	
-	printc("__net_connect: thd %d is taking the lock\n", cos_get_thd_id());
 	NET_LOCK_TAKE();
 	if (!net_conn_valid(nc)) goto perm_err;
 	ic = net_conn_get_internal(nc);
@@ -1305,10 +1304,7 @@ static void cos_net_interrupt(char *packet, int sz)
 #ifdef TEST_TIMING
 	unsigned long long ts;
 #endif
-//	printc(">>> %d\n", net_lock.lock_id);
-	/* printc("cos_net_interrupt: thd %d is taking the lock\n", cos_get_thd_id()); */
 	NET_LOCK_TAKE();
-//	printc("<<< %d\n", net_lock.lock_id);
 
 	assert(packet);
 	ih = (struct ip_hdr*)packet;
@@ -1498,7 +1494,6 @@ modify_connection(spdid_t spdid, net_connection_t nc, char *ops, int len)
 		u32_t port;
 		int r;
 
-		printc("modify_connection(bind): thd %d is taking the lock\n", cos_get_thd_id());
 		NET_LOCK_TAKE();
 		ic = net_conn_get_internal(nc);
 		//ic = net_verify_tcp_connection(nc, &ret);
@@ -1515,7 +1510,7 @@ modify_connection(spdid_t spdid, net_connection_t nc, char *ops, int len)
 	if (prop) {
 		int r;
 		unsigned int q;
-		printc("modify_connection(listen): thd %d is taking the lock\n", cos_get_thd_id());
+
 		NET_LOCK_TAKE();
 		ic = net_conn_get_internal(nc);
 		//ic = net_verify_tcp_connection(nc, &ret);
@@ -1545,7 +1540,6 @@ tsplit(spdid_t spdid, td_t tid, char *param, int len,
 
 	if (tor_isnull(tid)) return -EINVAL;
 
-	printc("tsplit: thd %d is taking the lock\n", cos_get_thd_id());
 	NET_LOCK_TAKE();
 	/* creating a new connection */
 	if (tid == td_root || len == 0 || strstr(param, "accept")) {
@@ -1578,7 +1572,6 @@ tsplit(spdid_t spdid, td_t tid, char *param, int len,
 		NET_LOCK_RELEASE();
 		r = modify_connection(spdid, nc, param, len);
 		if (r < 0) ret = r;
-		printc("tsplit(2): thd %d is taking the lock\n", cos_get_thd_id());
 		NET_LOCK_TAKE();
 	}
 done:
@@ -1598,7 +1591,6 @@ trelease(spdid_t spdid, td_t td)
 
 	if (!tor_is_usrdef(td)) return;
 
-	printc("trelease: thd %d is taking the lock\n", cos_get_thd_id());
 	NET_LOCK_TAKE();
 	t = tor_lookup(td);
 	if (!t) goto done;
@@ -1636,7 +1628,6 @@ twrite(spdid_t spdid, td_t td, int cbid, int sz)
 	if (!buf)           return -EINVAL;
 	if (tor_isnull(td)) return -EINVAL;
 
-	/* printc("twrite: thd %d is taking the lock\n", cos_get_thd_id()); */
 	NET_LOCK_TAKE();
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);
@@ -1663,7 +1654,6 @@ tread(spdid_t spdid, td_t td, int cbid, int sz)
 	if (!buf)           return -EINVAL;
 	if (tor_isnull(td)) return -EINVAL;
 
-	printc("tread: thd %d is taking the lock\n", cos_get_thd_id());
 	NET_LOCK_TAKE();
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);
@@ -1728,7 +1718,6 @@ static int init(void)
 #endif
 
 	lock_static_init(&net_lock);
-	printc("cos_net init: thd %d is taking the lock\n", cos_get_thd_id());
 	NET_LOCK_TAKE();
 
 	torlib_init();
@@ -1740,7 +1729,6 @@ static int init(void)
 	/* Start the tcp timer */
 	while (1) {
 		/* Sleep for a quarter of seconds as prescribed by lwip */
-		printc("tcp timer: thd %d is taking the lock\n", cos_get_thd_id());
 		NET_LOCK_TAKE();
 
 		if (++cnt == 4) {

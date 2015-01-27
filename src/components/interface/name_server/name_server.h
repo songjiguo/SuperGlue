@@ -8,10 +8,8 @@
 #include <cos_component.h>
 
 long ns_alloc(spdid_t server_spd, spdid_t cli_spdid);
-/* long ns_alloc(spdid_t spdid);         // allocate the unique id */
-int ns_free(spdid_t spdid, int id);  // delete all ids on the list of id
+int ns_free(spdid_t spdid, spdid_t cli_spdid, int id);  // delete all ids on the list of id
 long ns_lookup(spdid_t spdid, int id); // return the id of the list "head" -- old cli id
-
 /* add curr id to the list of old id */
 int ns_update(spdid_t spdid, int old_id, int curr_id, long par);
 
@@ -20,4 +18,6 @@ int ns_update(spdid_t spdid, int old_id, int curr_id, long par);
  * ser_ftcnt*/
 long ns_reflection(spdid_t spdid, int id, int type);  
 
+// upcall into each client to eagerly rebuild the event state
+int ns_upcall(spdid_t spdid);    
 #endif /* NAMESERVER_H */ 

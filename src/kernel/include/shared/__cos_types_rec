@@ -342,6 +342,8 @@ typedef enum {
 	COS_UPCALL_DESTROY,
 	COS_UPCALL_RECOVERY,	   /* for mm recovery */
 	COS_UPCALL_REBOOT,	   /* for sched recovery */
+	COS_UPCALL_RECEVT,	   /* for event recovery */
+	COS_UPCALL_REFLECTION,	   /* for reflection purpose. Now only used by evt */
 	COS_UPCALL_EAGER_RECOVERY, /* for compare lazy and eager */
 	COS_UPCALL_LOG_PROCESS,    /* for log monitor process*/
 	COS_UPCALL_FAILURE_NOTIF,

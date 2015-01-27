@@ -22,6 +22,8 @@
 #include <stdio.h>
 #include <torrent.h>
 
+#include <c3_test.h>
+
 extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
 extern void server_trelease(spdid_t spdid, td_t tid);
 extern int server_tread(spdid_t spdid, td_t td, int cbid, int sz);
@@ -115,12 +117,11 @@ evt_get_thdid(int thdid)
 
 	if (ncached == 0) {
 		eid = evt_split(cos_spd_id(), evt_all[thdid], 0);
-		printc("conn_mgr: tsplit a new evt id %d for thd %d (parent %d, group 0)\n",
-		       eid, thdid, evt_all[thdid]);
+		/* printc("conn_mgr: tsplit a new evt id %d for thd %d (parent %d, group 0)\n", */
+		/*        eid, thdid, evt_all[thdid]); */
 	} else {
 		eid = evt_cache[--ncached];
-		printc("conn_mgr: tsplit a cached evt id %d for thd %d (parent %d, group 0)\n",
-		       eid, thdid, evt_all[thdid]);
+		/* printc("conn_mgr: tsplit a cached evt id %d for thd %d (parent %d, group 0)\n", eid, thdid, evt_all[thdid]); */
 	}
 	assert(eid > 0);
 
@@ -202,35 +203,33 @@ accept_new(int accept_fd)
 	while (1) {
 		feid = evt_get();
 		
-		printc("conn_mgr: tsplit new feid %d for thd %d\n", feid, cos_get_thd_id());
-		
+		/* printc("conn_mgr: tsplit new feid %d for thd %d\n", feid, cos_get_thd_id()); */
 		assert(feid > 0);
 		from = server_tsplit(cos_spd_id(), accept_fd, "", 0, TOR_RW, feid);
 		connmgr_from_tsplit_cnt++;
 		num_connection++;
 		if (!print_once && num_connection > 2) {
 			print_once = 1;
-			printc("<<<num conn %ld>>>\n", num_connection);
+			/* printc("<<<num conn %ld>>>\n", num_connection); */
 		}
 		assert(from != accept_fd);
 		if (-EAGAIN == from) {
-			printc("(0)evt_put: thd %d evt %d\n", cos_get_thd_id(), feid);
 			evt_put(feid);
 			return;
 		} else if (from < 0) {
-			printc("from torrent returned %d\n", from);
+			/* printc("from torrent returned %d\n", from); */
 			/* BUG(); */   // might return Error if the fault has occurred
 			return;
 		}
 
 		teid = evt_get();
 
-		printc("conn_mgr: tsplit new teid %d for thd %d\n", teid, cos_get_thd_id());
+		/* printc("conn_mgr: tsplit new teid %d for thd %d\n", teid, cos_get_thd_id()); */
 
 		assert(teid > 0);
 		to = tsplit(cos_spd_id(), td_root, "", 0, TOR_RW, teid);
 		if (to < 0) {
-			printc("torrent split returned %d", to);
+			/* printc("torrent split returned %d", to); */
 			BUG();
 		}
 		connmgr_tsplit_cnt++;
@@ -260,13 +259,13 @@ from_data_new(struct tor_conn *tc)
 		else if (-EPIPE == amnt) {
 			goto close;
 		} else if (amnt < 0) {
-			printc("read from fd %d produced %d.\n", from, amnt);
+			/* printc("read from fd %d produced %d.\n", from, amnt); */
 			BUG();
 		}
 
 		assert(amnt <= BUFF_SZ);
 		if (amnt != (ret = twrite(cos_spd_id(), to, cb, amnt))) {
-			printc("conn_mgr: write failed w/ %d on fd %d\n", ret, to);
+			/* printc("conn_mgr: write failed w/ %d on fd %d\n", ret, to); */
 			goto close;
 			
 		}
@@ -285,9 +284,9 @@ close:
 	num_connection--;
 	trelease(cos_spd_id(), to);
 	assert(tc->feid && tc->teid);
-	printc("(1) evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->feid);
+	/* printc("(1) evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->feid); */
 	evt_put(tc->feid);
-	printc("(2) evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->teid);
+	/* printc("(2) evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->teid); */
 	evt_put(tc->teid);
 	goto done;
 }
@@ -342,15 +341,15 @@ done:
 	return;
 close:
 	mapping_remove(from, to, tc->feid, tc->teid);
-	printc("net_close to_data_new (in trelease) (thd %d, from %d)\n", 
-	       cos_get_thd_id(), from);
+	/* printc("net_close to_data_new (in trelease) (thd %d, from %d)\n",  */
+	/*        cos_get_thd_id(), from); */
 	server_trelease(cos_spd_id(), from);
 	num_connection--;
 	trelease(cos_spd_id(), to);
 	assert(tc->feid && tc->teid);
-	printc("(3)evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->feid);
+	/* printc("(3)evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->feid); */
 	evt_put(tc->feid);
-	printc("(4)evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->feid);
+	/* printc("(4)evt_put: thd %d evt %d\n", cos_get_thd_id(), tc->feid); */
 	evt_put(tc->teid);
 	goto done;
 }
@@ -441,30 +440,32 @@ cos_init(void *arg)
 		memset(&tc, 0, sizeof(struct tor_conn));
 		rdtscll(end);
 		meas_record(end-start);
-		printc("thd %d calling evt_wait all\n", cos_get_thd_id());
+		/* printc("thd %d calling evt_wait all\n", cos_get_thd_id()); */
                 /* should check this return value */
-	/* redo: */
+		/* redo: */
 		evt = evt_wait_all();
-		/* if (evt == evt_all[cos_get_thd_id()]) goto redo; */
 		printc("\n---->conn: thd %d event comes (returned evt %d)\n",
 		       cos_get_thd_id(), evt);
-
+		
 		rdtscll(start);
 		t   = evt_torrent(evt);
+		/* if (!t) goto redo; */
+		
 		printc("thd %d find t %d for event %d\n", cos_get_thd_id(), t, evt);
 		if (t > 0) {
 			tc.feid = evt;
 			tc.from = t;
 			if (t == accept_fd) {
 				tc.to = 0;
-				/* printc("[[[conn_mgr:accept_new(thd %d)]]]\n",  */
-				/*        cos_get_thd_id()); */
+				printc("[[[conn_mgr:accept_new(thd %d)]]]\n",
+				       cos_get_thd_id());
 				accept_new(accept_fd);
 			} else {
 				tc.to = tor_get_to(t, &tc.teid);
-				assert(tc.to > 0);
-				/* printc("[[[conn_mgr:from_data_new(thd %d)]]]\n",  */
-				/*        cos_get_thd_id()); */
+				/* assert(tc.to > 0); */
+				if (tc.to <= 0) continue;
+				printc("[[[conn_mgr:from_data_new(thd %d)]]]\n",
+				       cos_get_thd_id());
 				from_data_new(&tc);
 			}
 		} else {
@@ -472,8 +473,9 @@ cos_init(void *arg)
 			tc.teid = evt;
 			tc.to   = t;
 			tc.from = tor_get_from(t, &tc.feid);
-			assert(tc.from > 0);
-			/* printc("[[[conn_mgr:to_data_new(thd %d)]]]\n", cos_get_thd_id()); */
+			/* assert(tc.from > 0); */
+			if (tc.from <= 0) continue;
+			printc("[[[conn_mgr:to_data_new(thd %d)]]]\n", cos_get_thd_id());
 			to_data_new(&tc);
 		}
 
@@ -523,6 +525,9 @@ periodic_wake_get_period(unsigned short int tid)
 	return 0;
 }
 
+#ifdef EVT_C3
+void events_replay_all();
+#endif
 
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
@@ -539,6 +544,13 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		       cos_get_thd_id(), arg1, t);
 		return;
 	}
+	case COS_UPCALL_RECEVT:
+		printc("conn_mgr: upcall to recover the event (thd %d, spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
+#ifdef EVT_C3
+		events_replay_all();
+#endif
+		break;
 	default:
 		/* fault! */
 		*(int*)NULL = 0;

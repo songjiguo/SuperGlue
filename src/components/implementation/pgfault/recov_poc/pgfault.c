@@ -60,25 +60,12 @@ int fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *i
 	//int i;
 
 	printc("pgfault parameters: spdid %d fault_addr %p flags %d ip %p (thd %d)\n", spdid, fault_addr, flags, ip, cos_get_thd_id());
-
-
-	/* remove this for web server test */
 	
-	if (spdid == 15) {
-		printc("test lock\n");
-		assert(0);
-	}
-
-	if (cos_get_thd_id() == 11) {
-		printc("this is timer thread 11 and fail\n");
-		assert(0);
-	}
-
 	if (test_num++ > 100) {
 		printc("has failed %d times\n", test_num);
 		assert(0);
 	}
-
+	
 	printc("in the fault_page_fault_handler 1\n");
 	/* printc("Thread %d faults in spd %d @ %p\n", tid, spdid, fault_addr); */
 	if (spdid != cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) {
@@ -106,6 +93,6 @@ int fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *i
 	 */
 	if ((int)ip == 1) failure_notif_wait(cos_spd_id(), spdid);
 	else         failure_notif_fail(cos_spd_id(), spdid);
-	
+
 	return 0;
 }

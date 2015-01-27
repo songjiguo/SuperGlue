@@ -1,28 +1,62 @@
-/*
-  Event c^3 client stub interface. The interface tracking code
-  is supposed to work for both group and non-group events 
+/* Jiguo: Event c^3 client stub interface. The interface tracking code
+   is supposed to work for both group and non-group events
   
-  Issue:
-  1. virtual page allocated in malloc is increasing always (FIX later)
-  2. thread woken up through reflection does not invoke trigger to update the state
-  (add evt_update_status api to evt, but when to call this?)
+   Issue:
+   1. virtual page allocated in malloc is increasing always (FIX later)
+   2. thread woken up through reflection does not invoke trigger to update the state
+   (add evt_update_status api to evt, but when to call this?)
   
-  This interface is different from lock/sched/mm... since an event
-  can be triggered from a completely different component. create,
-  wait and free have to be done by the same component/interface, but
-  trigger can be from the same component or a different one. If the
-  event is triggered by a different thread in a different component,
-  how do we ensure that next time, evt_trigger will pass the correct
-  server side id to evt manager?  Solution:a separate spd that
-  maintains the mapping of client and server id. Need call this spd
-  every time ....overhead, but a reasonable solution for now
+   This interface is different from lock/sched/mm... since an event
+   can be triggered from a completely different component. create,
+   wait and free have to be done by the same component/interface, but
+   trigger can be from the same component or a different one. If the
+   event is triggered by a different thread in a different component,
+   how do we ensure that next time, evt_trigger will pass the correct
+   server side id to evt manager?  Solution:a separate spd that
+   maintains the mapping of client and server id. Need call this spd
+   every time ....overhead, but a reasonable solution for now
   
-  Important --- Only event manager and cbuf manager are components
-  that can have global name space issue. For torrent interface, we
-  restrict that the operation must be in the same component in which
-  the torrent is created (they do not need name server!)
+   Important --- Only event manager and cbuf manager are components
+   that can have global name space issue. For torrent interface, we
+   restrict that the operation must be in the same component in which
+   the torrent is created (they do not need name server!)
 
-  NOTE: do not mix-use evt_create(e) and evt_split (eg). Only one
+   NOTE: do not mix-use evt_create(e) and evt_split (eg). Only one
+
+   The recovery for event manager is quite complicated due to the fact
+   that evt_trigger is hard to track (could be in different component
+   and triggered by different thread). The recovery should be both
+   efficient and general, and need to avoid waking up the timing
+   thread at improper time.
+
+   Possible solutions and issues:
+
+   1) We can track where each evt_trigger is made from and the
+   time_stamp over the evt_trigger client interface. After fault, the
+   recovery thread can upcall into these components and push the
+   time-stamp to evt_manager to help recovery (along with evt_wait
+   time_stamp and fault time_stamp.) For example, if the evt_trigger
+   time_stamp is less than fault time_stamp, we do the evt_trigger.
+   
+   Issue: overhead (track which spd does evt_trigger and time_stamp)
+
+   2) We can check the return value of evt_wait and decide if it is
+   woken up due to the recovery or the normal path. Need check both
+   return value and current condition to decide.
+
+   Issue: Need change the client where it calls evt_wait. Fortunately
+   only time_evt is the one that can matter the system timing. Other
+   places do not care. So this solution is not general, but should
+   work and cause less overhead.
+   
+   One unsolved issue: currently we call scheduler server interface to
+   sched_wakeup all threads that block from event manager, using a
+   linked list. There is race condition there (the fault can happen
+   before a thread is added to the blk_list, therefore that thread can
+   never be invoked). One naive way to solve this: using a periodic
+   thread to check all threads that still be in blocked status from
+   event manager??? Have to wake up all new added threads as well.....
+
 */
 
 #include <cos_component.h>
@@ -59,6 +93,8 @@ static int meas_flag = 0;
 /* global fault counter, only increase, never decrease */
 static unsigned long fcounter;
 
+static unsigned int recover_all = 0;  // only tested/changed by the recovery thread
+
 /* recovery data structure for evt */
 struct rec_data_evt {
 	spdid_t       spdid;
@@ -69,13 +105,19 @@ struct rec_data_evt {
 	int           grp;      // same as above
 
 	struct rec_data_evt *next, *prev;  // track all init events in a group
+	struct rec_data_evt *p_next, *p_prev;  // link all parent event
 
 	unsigned int  state;
 	unsigned long fcnt;
 };
 /* Assumption: a component has at most one group, all init events are
- * splited from the same component */
-struct rec_data_evt *evts_grp_list_head;
+ * splited from the same component. 
+ *
+ * Above assumption is not valid anymore. Now we will do eager
+ * recovery. All rd without parent will be linked. Each rd can be the
+ * parent of a group and each group can include multiple child rds.
+ */
+struct rec_data_evt *evts_grp_list_head = NULL;
 
 /* the state of an event object (each operation expects to change) */
 enum {
@@ -87,21 +129,35 @@ enum {
 	EVT_STATE_FREE
 };
 
+static void
+print_rde_info(struct rec_data_evt *rde)
+{
+	assert(rde);
+
+	printc("rde->spdid %d\n", rde->spdid);
+	printc("rde->c_evtid %d\n", rde->c_evtid);
+	printc("rde->s_evtid %d\n", rde->s_evtid);
+	printc("rde->p_evtid %d\n", rde->p_evtid);
+	printc("rde->grp %d\n", rde->grp);
+
+	return;
+}
 /**********************************************/
 /* slab allocaevt and cvect for tracking evts */
 /**********************************************/
 
 CVECT_CREATE_STATIC(rec_evt_map);   // track each event object and its id (create/free/wait)
+CVECT_CREATE_STATIC(rec_evt_map_inv);   // for lookup s_id from c_id
 CSLAB_CREATE(rdevt, sizeof(struct rec_data_evt));
 
 static struct rec_data_evt *
-rdevt_lookup(int id)
+rdevt_lookup(cvect_t *vect, int id)
 { 
-	return (struct rec_data_evt *)cvect_lookup(&rec_evt_map, id); 
+	return (struct rec_data_evt *)cvect_lookup(vect, id); 
 }
 
 static struct rec_data_evt *
-rdevt_alloc(int id)
+rdevt_alloc(cvect_t *vect, int id)
 {
 	struct rec_data_evt *rd = NULL;
 	
@@ -109,7 +165,7 @@ rdevt_alloc(int id)
 	
 	rd = cslab_alloc_rdevt();
 	assert(rd);	
-	cvect_add(&rec_evt_map, rd, id);   // this must be greater than 1
+	cvect_add(vect, rd, id);   // this must be greater than 1
 
 	INIT_LIST(rd, next, prev);
 
@@ -117,20 +173,29 @@ rdevt_alloc(int id)
 }
 
 static void
-rdevt_dealloc(struct rec_data_evt *rd)
+rdevt_dealloc(cvect_t *vect, struct rec_data_evt *rd, int id)
 {
 	assert(rd);
-	if (cvect_del(&rec_evt_map, rd->c_evtid)) BUG();
+	if (cvect_del(vect, id)) BUG();
 
-	REM_LIST(rd, next, prev);  // remove tracked event from a group
+	REM_LIST(rd, next, prev);  // remove tracked event
 
+	rd->spdid	 = 0;
+	rd->c_evtid	 = 0;
+	rd->s_evtid	 = 0;
+	rd->p_evtid	 = 0;
+	rd->grp	         = 0;
+	rd->state	 = 0;
+	rd->fcnt	 = 0;
+	
 	cslab_free_rdevt(rd);
+
 	return;
 }
 
 static void 
 rd_cons(struct rec_data_evt *rd, spdid_t spdid, long c_evtid, 
-	long s_evtid, long parent, int grp, int state)
+	long s_evtid, long parent, int grp, int state, int recovery)
 {
 	assert(rd);
 	
@@ -143,17 +208,48 @@ rd_cons(struct rec_data_evt *rd, spdid_t spdid, long c_evtid,
 	rd->state	 = state;
 	rd->fcnt	 = fcounter;
 
-	/* If there is parent and group, track here */
-	if (parent == 0 && grp == 1) {   // parent evt
-		evts_grp_list_head = rd;
+	if (unlikely(recovery)) goto done;
+	
+	struct rec_data_evt *curr_parent  = NULL;
+	/* If there is parent and group, track here. A child event
+	 * should only be created after the parent event is created */
+	/* if (parent == 0 && grp == 1) {   // parent evt */
+	if (parent == 0) {   // parent evt, no matter whatever grp is
+		INIT_LIST(rd, p_next, p_prev);
+		/* printc("(thd %d spd %ld) create a parent event(%d) here\n", */
+		/*        cos_get_thd_id(), cos_spd_id(), c_evtid); */
+		if (unlikely(!evts_grp_list_head)) {
+			evts_grp_list_head = rd;
+		} else {
+			ADD_LIST(evts_grp_list_head, rd, p_next, p_prev);
+		}
 	} else if (parent > 0 && !grp) {     // child evt
-		assert(evts_grp_list_head->next);
-		ADD_LIST(evts_grp_list_head, rd, next, prev);
+		assert(evts_grp_list_head);
+		struct rec_data_evt *tmp;
+		/* printc("(thd %d spd %ld) create a child event(%d, parent %d) here\n", */
+		/*        cos_get_thd_id(), cos_spd_id(), c_evtid, parent); */
+		/* printc("evts_grp_list_head->c_evtid %d s_evtid %d parent %d\n",  */
+		/*        evts_grp_list_head->c_evtid, evts_grp_list_head->c_evtid, parent); */
+		if (evts_grp_list_head->s_evtid == parent) {
+			ADD_LIST(evts_grp_list_head, rd, next, prev);
+			goto done;
+		} else {
+			for(tmp = FIRST_LIST(evts_grp_list_head, next, prev); 
+			    tmp!= evts_grp_list_head; 
+			    tmp = tmp->next) {
+				if (tmp->s_evtid == parent) {
+					/* printc("evts_tmp->c_evtid %d parent %d\n",  */
+					/*        tmp->c_evtid, parent); */
+					ADD_LIST(tmp, rd, next, prev);
+					goto done;
+				}
+			}
+		}
+		assert(0);  // we must have found the parent rd!!!
 	}
-
+done:
 	return;
 }
-
 
 /* This is ugly: the recovery of init events in a group (e.g.,
  * connection manager) 
@@ -161,7 +257,7 @@ rd_cons(struct rec_data_evt *rd, spdid_t spdid, long c_evtid,
 static void
 rd_recover_state(struct rec_data_evt *rd)
 {
-	struct rec_data_evt *prd = NULL, *tmp = NULL;
+	struct rec_data_evt *prd = NULL, *tmp = NULL, *tmp_new = NULL;
 	long tmp_evtid;
 
 	assert(rd && rd->c_evtid >= 1);
@@ -170,42 +266,90 @@ rd_recover_state(struct rec_data_evt *rd)
 
 	if (!rd->p_evtid) {
 		assert(!rd->grp || rd->grp == 1);
-		printc("has no parent\n");
-		tmp_evtid = c3_evt_split(cos_spd_id(), rd->p_evtid, 
-					 rd->grp, rd->c_evtid);
+		/* printc("has no parent\n"); */
+		/* printc("re-split an event in spd %d interface\n", rd->spdid); */
+		/* printc("re-split an c_evt %d\n", rd->c_evtid); */
+
+		tmp_evtid = c3_evt_split(cos_spd_id(), rd->p_evtid, rd->grp, rd->c_evtid);
 		assert(tmp_evtid >= 1);
-		rd->s_evtid = tmp_evtid;
-		printc("re-split an s_evt %d\n", rd->s_evtid);
-		printc("re-split an c_evt %d\n", rd->c_evtid);
-		
-		/* rebuild all child event here */
+
+		rd->s_evtid = tmp_evtid;      // update the old rd's server side evtid
+		/* tmp_new->c_evtid = rd->c_evtid; // update the new rd's client side evtid */
+		/* printc("re-split an s_evt %d\n", rd->s_evtid); */
+
+		int tmp_cnt2 = 0;
+		/* rebuild all child events belong to the same group */
 		if (rd->grp == 1) {
 			assert(rd == evts_grp_list_head);
-			for (tmp = FIRST_LIST(rd, next, prev) ;
-			     tmp != rd;
-			     tmp = FIRST_LIST(tmp, next, prev)) {
+			for(tmp = FIRST_LIST(rd, next, prev) ;
+			    tmp != rd;
+			    tmp = FIRST_LIST(tmp, next, prev)) {
+				
+				if (tmp_cnt2++ > 20) assert(0);
                                 /* a child update its new re-created parent id */
 				tmp->p_evtid = rd->s_evtid;
                                 /* only re-create this child once */
 				tmp->fcnt    = fcounter; 
-				/* printc("\n>>found an evt %d (thd %d)\n",  */
+				/* printc("\n>>found an evt %d (thd %d)\n", */
 				/*        tmp->c_evtid, cos_get_thd_id()); */
 				/* printc("its parent evt %d\n", tmp->p_evtid); */
 				tmp_evtid = c3_evt_split(cos_spd_id(), tmp->p_evtid,
 							 tmp->grp, tmp->c_evtid);
 				assert(tmp_evtid >= 1);
+				
+				printc("evt cli: c3_evt_split(1) returns %d\n", tmp_evtid);
+				tmp_new = rdevt_lookup(&rec_evt_map, tmp_evtid);
+				assert(!tmp_new);
+				printc("evt cli: c3_evt_split(2) returns %d\n", tmp_evtid);
+
 				tmp->s_evtid = tmp_evtid;
+				/* tmp_new->c_evtid = tmp->c_evtid; */
 				/* printc("c3_tsplit new evtid %d\n", tmp->s_evtid); */
 			}
 		}
 	} else {
-		prd = rdevt_lookup(rd->c_evtid);
+		assert(0);  // for eager, we should not be here
+		prd = rdevt_lookup(&rec_evt_map, rd->c_evtid);
                 /* assume parent event is in the same component and
 		 * only one level */
 		assert(prd);  
 		rd_recover_state(prd);
 	}
 	
+	return;
+}
+
+
+/* This is the interface eager recovery function called from the
+ * client component. TODO:find a better way to upcall into a component
+ * and do the recovery over the interface. Automatically? */
+void 
+events_replay_all()
+{
+	printc("now thd %d is in spd %ld interface and ready to recover all events\n",
+	       cos_get_thd_id(), cos_spd_id());
+	
+	recover_all = 1;
+
+	struct rec_data_evt *rde = evts_grp_list_head;
+	assert(rde && !rde->p_evtid); // there must be some events (therefore upcall)
+	rd_recover_state(rde);
+
+	int tmp_cnt = 0;
+	// rest parent rd
+	for(rde = FIRST_LIST(evts_grp_list_head, p_next, p_prev); 
+	    rde!= evts_grp_list_head; 
+	    rde = rde->p_next) {
+		printc("evt cli: rd_recover_state (%d)\n", tmp_cnt);
+		print_rde_info(rde);
+		if (tmp_cnt++ > 100) assert(0);
+		rd_recover_state(rde);
+	}
+
+	printc("thd %d in spd %ld interface has recovered all events\n",
+	       cos_get_thd_id(), cos_spd_id());
+
+	/* if (cos_spd_id() == 20) assert(0);	 */
 	return;
 }
 
@@ -216,11 +360,13 @@ rd_update(int evtid, int state)
 
 	/* TAKE(cos_spd_id()); */
 
-        rd = rdevt_lookup(evtid);
+        rd = rdevt_lookup(&rec_evt_map, evtid);
 	if (unlikely(!rd)) goto done;
 	if (likely(rd->fcnt == fcounter)) goto done;
 	
 	rd->fcnt = fcounter;
+
+	goto done;  // for eager recovery only
 
 	/* Jiguo: if evt is created in a different component, do we
 	 * need switch to recovery thread and upcall to the creator? I
@@ -335,7 +481,6 @@ done:
 	return rd;
 }
 
-
 /************************************/
 /******  client stub functions ******/
 /************************************/
@@ -369,35 +514,58 @@ redo:
 		printc("start measuring.....\n");
 		rdtscll(meas_start);
 #endif		
-
-		CSTUB_FAULT_UPDATE();
+		/* recovery thread should have updated this in c3_evt_split */
+		/* CSTUB_FAULT_UPDATE(); */
 		goto redo;
 	}
 	
 	assert(ret > 0);
 	/* printc("cli: evt_create create a new rd in spd %ld (server id %d)\n",  */
 	/*        cos_spd_id(), ret); */
-	rd = rdevt_alloc(ret);
+	rd = rdevt_alloc(&rec_evt_map, ret);
 	assert(rd);
-	rd_cons(rd, cos_spd_id(), ret, ret, 0, 0, EVT_STATE_CREATE);
+	rd_cons(rd, cos_spd_id(), ret, ret, 0, 0, EVT_STATE_CREATE, 0);
 	
 	return ret;
 }
 
-// no tracking here for create a new server side evt
+/* There is no need to track a re-split server side evt. Also
+ * ns_update will be called due to the evt_trigger cab called from
+ * some component that is not tracked (try to avoid the overhead of
+ * each evt_trigger) */
 CSTUB_FN(long, c3_evt_split) (struct usr_inv_cap *uc,
 			      spdid_t spdid, long parent_evt, int grp, int old_evtid)
 {
 	long fault = 0;
 	long ret;
+	
+	// update the fault counter and cap.fcnt only once after the fault (eagerly)
+	if (recover_all) {
+		recover_all = 0;
+		CSTUB_FAULT_UPDATE();
+	}
 redo:
 	CSTUB_INVOKE(ret, fault, uc, 4, spdid, parent_evt, grp, old_evtid);
 	if (unlikely (fault)){
-		CSTUB_FAULT_UPDATE();
+		/* recovery thread should have updated this above */
+		/* CSTUB_FAULT_UPDATE(); */
 		goto redo;
 	}
+	
+	assert(ret > 0);
+	/* printc("cli: c3_evt_split create a new rd in spd %ld (server id %d)\n", */
+	/*        cos_spd_id(), ret); */
+	
+	/* The new created event should not be presented. evt_ns
+	 * should guarantee this */
+	struct rec_data_evt *rd = rdevt_lookup(&rec_evt_map, ret);
+	assert(!rd);
+	rd = rdevt_lookup(&rec_evt_map_inv, ret);
+	if (!rd) rd = rdevt_alloc(&rec_evt_map_inv, ret);
+	assert(rd);
+	rd_cons(rd, cos_spd_id(), old_evtid, ret, 0, 0, EVT_STATE_CREATE, 1);
 
-	/* printc("evt cli: c3_evt_split returns a new evtid %d for old evtid %d\n",  */
+	/* printc("evt cli: c3_evt_split returns a new evtid %d for old evtid %d\n", */
 	/*        ret, old_evtid); */
 	return ret;
 }
@@ -437,6 +605,7 @@ redo:
 		printc("recovery an event cost: %llu\n", meas_end - meas_start);
 	}
 #endif		
+
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, p_evt, grp);
 	if (unlikely (fault)){
 		printc("see a fault during evt_split (thd %d in spd %ld)\n",
@@ -447,15 +616,21 @@ redo:
 		rdtscll(meas_start);
 #endif		
 
-		CSTUB_FAULT_UPDATE();
+                /* recovery thread should have done this in the eager
+		 * recovery (c3_evt_split). See above.... If there is
+		 * no event created over this interface ever, we do
+		 * not care if the fault has failed over this
+		 * interface -- on demand somehow */
+		/* CSTUB_FAULT_UPDATE();  // keep this since the event has not been created */
 		goto redo;
 	}
 	assert(ret > 0);
 	/* printc("cli: evt_create create a new rd in spd %ld (server id %d)\n",  */
 	/*        cos_spd_id(), ret); */
-	rd = rdevt_alloc(ret);
+
+	rd = rdevt_alloc(&rec_evt_map, ret);
 	assert(rd);
-	rd_cons(rd, cos_spd_id(), ret, ret, p_evt, grp, EVT_STATE_CREATE);
+	rd_cons(rd, cos_spd_id(), ret, ret, p_evt, grp, EVT_STATE_CREATE, 0);
 
 	return ret;
 }
@@ -466,7 +641,10 @@ CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
 	long fault = 0;
 	long ret;
 
+	int fault_wait = 0;  // used to indicate the return status
+
         struct rec_data_evt *rd = NULL;
+        struct rec_data_evt *rd_cli = NULL;
 redo:
         // assume always in the same component as evt_split
         rd = rd_update(extern_evt, EVT_STATE_WAITING);
@@ -487,16 +665,22 @@ redo:
         if (unlikely (fault)){
 		printc("(ret %d)see a fault during evt_wait (thd %d in spd %ld)\n",
 		       ret, cos_get_thd_id(), cos_spd_id());
+		fault_wait = 1;
 #ifdef BENCHMARK_MEAS_WAIT
 		meas_flag = 1;
 		printc("start measuring.....\n");
 		rdtscll(meas_start);
 #endif		
-		CSTUB_FAULT_UPDATE();
 
-		/* /\* If we are TCP timer, we need return and call */
-		/*  * tcp_tmr to send ACK and queued data *\/ */
-		/* if (cos_get_thd_id() == 12) return -22;   // test */
+		/* Here is the issue: the fault counter on cap is only
+		 * updated over the interface of the component that
+		 * split/create/free the event. evt_wait and
+		 * evt_trigger could be in the same component or the
+		 * different one. So we need check if the event is
+		 * created here. If not, we need call
+		 * CSTUB_FAULT_UPDATE when we "see" the fault */
+		/* struct rec_data_evt *tmp = rdevt_lookup(extern_evt); */
+		/* if (unlikely(!tmp)) CSTUB_FAULT_UPDATE(); */
 
 		goto redo;
         }
@@ -505,7 +689,30 @@ redo:
 	printc("evt:wait: cli: ret %d passed in extern_evt %d (thd %d)\n",
 	       ret, extern_evt, cos_get_thd_id());
 
-	return ret;
+	/* Look up the client side id from the returned server side
+	 * id, if there is a re-split one. Here is the issue: a thread
+	 * can wait on an event that belongs to a group. So evt_wait
+	 * does not always return rd->s_evtid and we can not find
+	 * rd->c_evtid from rd->s_evtid. The id returned from server
+	 * side is not able to help find which client id in case
+	 *
+	 * Question: how to find client id from a return server
+	 * id?. Note that the recovery depends on the client info.
+	 *
+	 * Solution: maintain another cvect
+	 * (rec_evt_map_inverse). evt_ns can guarantee the uniqueness
+	 * of event id (e.g., no where else in the system will see the
+	 * same id)
+	 */
+	
+	// test
+	if (unlikely(fault_wait && cos_spd_id() == 16 )) return 0;
+	if (rd_cli = rdevt_lookup(&rec_evt_map_inv, ret)) {
+		printc("evt cli: evt_wait thd %d see inverse (evt id %ld)\n", 
+		       cos_get_thd_id(), rd_cli->c_evtid);
+		return rd_cli->c_evtid;
+	}
+	else        return ret;
 }
 
 
@@ -538,8 +745,12 @@ redo:
 		printc("start measuring.....\n");
 		rdtscll(meas_start);
 #endif		
-
-		CSTUB_FAULT_UPDATE();
+		struct rec_data_evt *tmp = rdevt_lookup(&rec_evt_map, extern_evt);
+		if (unlikely(!tmp)) {
+			printc("evt_trigger cli: (thd %d spd %ld) evt %d is not tracked\n",
+			       cos_get_thd_id(), cos_spd_id(), extern_evt);
+			CSTUB_FAULT_UPDATE();
+		}
                 /*
 o		  1) fault occurs in evt_trigger (before
 		  sched_wakeup).In this case, reflection will wake up
@@ -579,8 +790,9 @@ CSTUB_FN(int, evt_free) (struct usr_inv_cap *uc,
 	int ret;
 
         struct rec_data_evt *rd = NULL;
+        struct rec_data_evt *rd_cli = NULL;
 redo:
-	/* printc("evt cli: evt_free %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
+	printc("evt cli: evt_free(1) %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
         rd = rd_update(extern_evt, EVT_STATE_FREE);
 	assert(rd);
 	assert(rd->c_evtid == extern_evt);
@@ -603,11 +815,22 @@ redo:
 		printc("start measuring.....\n");
 		rdtscll(meas_start);
 #endif		
-		CSTUB_FAULT_UPDATE();
+		/* CSTUB_FAULT_UPDATE(); */
 		goto redo;
 	}
 
-	rdevt_dealloc(rd);
+
+	printc("evt cli: evt_free(2) %d (evt id %ld)\n", cos_get_thd_id(), rd->s_evtid);
+	int tmp = rd->s_evtid;
+	rdevt_dealloc(&rec_evt_map, rd, rd->c_evtid);
+	rd_cli  = rdevt_lookup(&rec_evt_map_inv, tmp);
+	if (unlikely(rd_cli)) {
+		printc("evt cli: evt_free(3) %d (evt id %ld)\n", cos_get_thd_id(), rd_cli);
+		rdevt_dealloc(&rec_evt_map_inv, rd_cli, tmp);
+		/* assert(!rd_cli); */
+	}
+	
+	/* assert(!rd); */  // ???
 
 	return ret;
 }

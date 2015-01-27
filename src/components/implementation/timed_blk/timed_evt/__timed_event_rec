@@ -17,6 +17,8 @@
 #include <cos_vect.h>
 #include <cos_alloc.h>
 
+#include <c3_test.h>
+
 #include <pgfault.h>
 
 #include <timed_blk.h>
@@ -235,8 +237,8 @@ static void __event_expiration(event_time_t time, struct thread_event *events)
 
 		// Jiguo: wake up the thread through evt
 		if (b) {
-			printc("timed_evt: event_expiration evt_trigger (tdh %d evt %d)\n", 
-			       cos_get_thd_id(), tmp->evt);
+			/* printc("timed_evt: event_expiration evt_trigger (tdh %d evt %d)\n", */
+			/*        cos_get_thd_id(), tmp->evt); */
 
 			if (sched_component_release(spdid)) {
 				prints("fprr: scheduler lock release failed!!!");
@@ -331,7 +333,7 @@ int timed_event_block(spdid_t spdinv, unsigned int amnt)
 	te->evt = evt;
 
 	ticks = sched_timestamp();
-	printc("ticks %llu, amnt %d\n", ticks, amnt);
+	/* printc("ticks %llu, amnt %d\n", ticks, amnt); */
 	te->event_expiration = ticks + amnt;
 	block_time = ticks;
    	assert(te->event_expiration > ticks);
@@ -343,28 +345,19 @@ int timed_event_block(spdid_t spdinv, unsigned int amnt)
 	if (t != next_event_time()) sched_timeout(spdid, amnt);
 
 	// Jiguo: change to use event 
-	printc("thd %d is going to call evt_wait in spd %ld\n", 
-	       cos_get_thd_id(), cos_spd_id());
-	long tmp = evt_wait(cos_spd_id(), te->evt);
-	printc("thd %d after evt_wait in spd %ld\n", 
-	       cos_get_thd_id(), cos_spd_id());
-
-	/* if (-1 == sched_block(spdid, 0)) { */
-	/* 	prints("fprr: sched block failed in timed_event_block."); */
-	/* } */
-	
-         /* Jiguo: if we are woken up from reflection after a fault, we
-	 * are still on the list */
-	struct thread_event *tmp_evt;
-	if (tmp == -22) {
-		tmp_evt = find_remove_event(cos_get_thd_id());
-		/* assert(tmp_evt); */   // ??? Jiguo
-		/* assert(tmp_evt->thread_id == cos_get_thd_id()); */
-	} else {
-		/* we better have been taking off the list! */
-		assert(EMPTY_LIST(te, next, prev));
+	long wait_ret;
+redo:
+	wait_ret = evt_wait(cos_spd_id(), te->evt);
+	/* if return from the fault and the time is not expired, keep
+	 * waiting. No need to take lock? */
+	if (unlikely(!wait_ret && !EMPTY_LIST(te, next, prev))) {
+		printc("thd %d is going to call evt_wait in spd %ld again\n",
+		       cos_get_thd_id(), cos_spd_id());
+		goto redo;  
 	}
 
+	/* printc("thd %d after evt_wait in spd %ld\n", cos_get_thd_id(), cos_spd_id()); */
+	assert(EMPTY_LIST(te, next, prev));
 
 	if (te->flags & TE_TIMED_OUT) return TIMER_EXPIRED;
 
@@ -718,8 +711,16 @@ int periodic_wake_wait(spdid_t spdinv)
 	RELEASE(spdid);
 
 	// Jiguo: change to use event	
-	/* printc("periodic_wake_wait: thd %d calls evt_wait\n", cos_get_thd_id()); */
-	evt_wait(cos_spd_id(), te->evt);
+	long wait_ret;
+redo:
+	wait_ret = evt_wait(cos_spd_id(), te->evt);
+	/* if return from the fault and the time is not expired, keep waiting */
+	if (unlikely(!wait_ret && !EMPTY_LIST(te, next, prev))) {
+		printc("periodic_wake_wait: thd %d calls evt_wait again\n", cos_get_thd_id());
+		goto redo;
+	}
+
+	/* if (!tmp) assert(0); */
 	/* if (-1 == sched_block(spdid, 0)) { */
 	/* 	prints("fprr: sched block failed in timed_event_periodic_wait.");	} */
 
@@ -783,7 +784,7 @@ static void start_timer_thread(void)
 #endif
 	/* Wait for events, then act on expired events.  Loop. */
 	while (1) {
-		printc("timed_evt: timer thread %d\n", cos_get_thd_id());
+		/* printc("timed_evt: timer thread %d\n", cos_get_thd_id()); */
 		event_time_t next_wakeup;
 		cos_mpd_update(); /* update mpd config given this
 				   * thread is now in this component
@@ -835,12 +836,14 @@ static void start_timer_thread(void)
 
 static void rd_reflection();
 
+static int init_first = 1;
+
 void cos_init()
 {
 	union sched_param sp;
 
-	if (first) {
-		first = 0;
+	if (init_first) {
+		init_first = 0;
 		INIT_LIST(&events, next, prev);
 		events.thread_id = 0;
 		INIT_LIST(&periodic, next, prev);
@@ -888,5 +891,35 @@ rd_reflection()
 	evt_trigger_all(cos_spd_id());  // for now, only pte and mailbox use this
 		
 	printc("\n\n reflection done!!!\n\n");
+	return;
+}
+
+#ifdef EVT_C3
+void events_replay_all();
+#endif
+
+void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
+{
+	printc("upcall type %d, core %ld, thd %d, args %p %p %p\n",
+	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
+	switch (t) {
+	case COS_UPCALL_THD_CREATE:
+	{
+		printc("time_event: upcall to call cos_init (thd %d, spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
+		if (!arg1) cos_init();
+		else start_timer_thread();  // Jiguo: no idea....thread can not find fn?
+		break;
+	}
+	case COS_UPCALL_RECEVT:
+		printc("time_event: upcall to recover the event (thd %d, spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
+#ifdef EVT_C3
+		events_replay_all();
+#endif
+		break;
+	default:
+		return;
+	}
 	return;
 }

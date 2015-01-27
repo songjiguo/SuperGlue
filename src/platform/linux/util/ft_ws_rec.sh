@@ -43,8 +43,8 @@ rfs.o-sm.o|fprr.o|print.o|mm.o|buf.o|bufp.o|l.o|va.o|unique_map.o|eg.o|pfr.o;\
 unique_map.o-sm.o|fprr.o|print.o|mm.o|l.o|va.o|buf.o|bufp.o;\
 popcgi.o-sm.o|fprr.o|print.o|mm.o|buf.o|bufp.o|va.o|l.o|[server_]rfs.o|eg.o|te.o;\
 \
-evtns.o-fprr.o|print.o|mm.o|l.o|va.o;\
-eg.o-sm.o|fprr.o|print.o|mm.o|l.o|va.o|pfr.o|evtns.o\
+evtns.o-fprr.o|print.o|mm.o|l.o|va.o|llboot.o;\
+eg.o-sm.o|fprr.o|print.o|mm.o|l.o|va.o|pfr.o|evtns.o|llboot.o\
 " ./gen_client_stub
 
 

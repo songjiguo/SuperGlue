@@ -73,6 +73,7 @@ twritep_pack(spdid_t spdid, td_t td, char *data, int len)
 	char *d;
 	int ret;
 
+	printc("twritep_pack passed in len %d\n", len);
 	d = cbufp_alloc(len, &cb);
 	if (!d) return -1;
 	cbufp_send(cb);

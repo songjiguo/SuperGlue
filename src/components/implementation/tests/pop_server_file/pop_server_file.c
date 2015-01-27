@@ -7,6 +7,8 @@
 
 #include <timed_blk.h>
 
+#include <c3_test.h>
+
 char buffer[1024];
 
 extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
@@ -30,9 +32,10 @@ void pop_cgi(void)
 	}
 	
 	/* ret1 = twrite_pack(cos_spd_id(), t1, data1, strlen(data1)); */
-
+	printc("write the file on the server\n");
 	ret1 = twritep_pack(cos_spd_id(), t1, data1, strlen(data1));
 
+	printc("close the file on the server\n");
 	trelease(cos_spd_id(), t1);
 
 	printc("unsigned long long length %d\n", sizeof(unsigned long long));
@@ -50,6 +53,9 @@ void cos_init(void)
 	
 	if(first == 0){
 		first = 1;
+		
+		printc("popcgi: upcall to call cos_init create new thd(thd %d, spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 
 		sp.c.type = SCHEDP_PRIO;
 		sp.c.value = 8;
@@ -57,9 +63,51 @@ void cos_init(void)
 	} else {
 		if (second == 0) {
 			second = 1;
+			printc("popcgi: upcall to call time_event_block and pop_cgi(thd %d, spd %ld)\n", cos_get_thd_id(), cos_spd_id());
+		
 			timed_event_block(cos_spd_id(), 1);
-			pop_cgi();			
+			pop_cgi();
 		}
-	}	
+	}
+
+	return;
+}
+
+#ifdef EVT_C3
+void events_replay_all();
+#endif
+
+void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
+{
+	static int init_first = 0;
+	printc("upcall type %d, core %ld, thd %d, args %p %p %p\n",
+	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
+
+	static int first = 1;
+	if (first) { 
+		first = 0; 
+		/* ??? if we do not do this, cbufp_free_list_get
+		 * length is 0 ??? The memory is not initialized? */
+		constructors_execute();
+	}
+	
+	switch (t) {
+	case COS_UPCALL_THD_CREATE:
+	{
+		printc("popcgi: upcall to call cos_init (thd %d, spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
+		if (!arg1) cos_init();
+		break;
+	}
+	case COS_UPCALL_RECEVT:
+		printc("popcgi: upcall to recover the event (thd %d, spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
+#ifdef EVT_C3
+		events_replay_all();
+#endif
+		break;
+	default:
+		return;
+	}
 	return;
 }

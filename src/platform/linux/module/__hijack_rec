@@ -1420,11 +1420,15 @@ int chal_attempt_ainv(struct async_cap *acap)
 		}
 
 		cos_current = core_get_curr_thd();
+
+		printk("chal_attemp_ainv: cos_current %d\n", thd_get_id(cos_current));
+
 		/* See comment in cosnet.c:cosnet_xmit_packet */
 		if (host_in_syscall() || host_in_idle()) {
 			struct thread *next;
 
-			
+			if (host_in_syscall()) printk("chal_attemp_ainv: (1) host_in_sys\n");
+			if (host_in_idle()) printk("chal_attemp_ainv: (2) host_in_idle\n");
 			/*
 			 * _FIXME_: Here we are kludging a problem over.
 			 * The problem is this:
@@ -1480,7 +1484,7 @@ int chal_attempt_ainv(struct async_cap *acap)
 				host_idle_wakeup();
 			}
 
-			printk("hijack(1): next thd %d\n", next->thread_id);
+			/* printk("hijack(1): next thd %d\n", next->thread_id); */
 			goto done;
  		}
 
@@ -1519,6 +1523,8 @@ int chal_attempt_ainv(struct async_cap *acap)
 
 			/* the major work here: */
 			next = ainv_next_thread(acap, cos_current, 1);
+			printk("chal_attemp_ainv: (4) cos_current %d next %d\n", 
+			       thd_get_id(cos_current), thd_get_id(next));
 			if (next != cos_current) {
 				thd_save_preempted_state(cos_current, regs);
 				if (!(next->flags & THD_STATE_ACTIVE_UPCALL)) {
@@ -1529,13 +1535,15 @@ int chal_attempt_ainv(struct async_cap *acap)
 
 				thd_check_atomic_preempt(cos_current);
 
+				// network thread
+				if (next->thread_id == 10)
+					printk("hijack(2): next thd %d\n", next->thread_id);
+
 				/* Jiguo: fault detection for interrupt */
 				if (unlikely(interrupt_fault_detect(next))) {
 					fault_int_notif(next);
 					goto done;
 				}
-				if (next->thread_id == 10)
-					printk("hijack(2): next thd %d\n", next->thread_id);
 
 				/* Those registers are saved in the
 				 * user space. No need to restore

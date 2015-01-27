@@ -302,8 +302,8 @@ redo:
         rd = rd_update(cos_get_thd_id(), thd_id, THD_STATE_BLOCK);
 	assert(rd);
 
-	printc("thread %d calls from spd %d << sched_block thd %d>>\n",
-	       cos_get_thd_id(), spdid, thd_id);
+	/* printc("thread %d calls from spd %d << sched_block thd %d>>\n", */
+	/*        cos_get_thd_id(), spdid, thd_id); */
 	
 #ifdef MEASU_SCHED_INTERFACE_BLOCK
 	rdtscll(start);

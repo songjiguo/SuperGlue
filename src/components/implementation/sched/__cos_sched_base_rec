@@ -483,8 +483,8 @@ static void sched_process_wakeups(void)
 		if (PERCPU_GET(sched_base_state)->wakeup_thd->wake_cnt < 2) {
 			PERCPU_GET(sched_base_state)->wakeup_time = 0;
 
-			printc("\nsched_process_wakeups: pre_wakeup thread %d(by thd %d)\n", 
-			       PERCPU_GET(sched_base_state)->wakeup_thd->id, cos_get_thd_id());
+			/* printc("\nsched_process_wakeups: pre_wakeup thread %d(by thd %d)\n",  */
+			/*        PERCPU_GET(sched_base_state)->wakeup_thd->id, cos_get_thd_id()) */;
 			fp_pre_wakeup(PERCPU_GET(sched_base_state)->wakeup_thd);
 			/* If the event thread has not blocked yet, then don't
 			 * wake it fully */
@@ -792,8 +792,9 @@ static void fp_pre_wakeup(struct sched_thd *t)
 	assert(t->wake_cnt >= 0 && t->wake_cnt <= 2);
 	if (2 == t->wake_cnt) return;
 	t->wake_cnt++;
-	printc("fp_pre_wakeup: thd %d wake_cnt %d (curr thd %d)\n", 
-	       t->id, t->wake_cnt, cos_get_thd_id());
+	/* printc("fp_pre_wakeup: thd %d wake_cnt %d (curr thd %d)\n",  */
+	/*        t->id, t->wake_cnt, cos_get_thd_id()); */
+
 	/* if (sched_get_current() != t && /\* Hack around comment "STKMGR: self wakeup" *\/ */
 	/*     !sched_thd_dependent(t) && */
 	/*     !(sched_thd_blocked(t) || t->wake_cnt == 2)) { */
@@ -900,7 +901,7 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	}
 
 	assert(!sched_thd_dependent(thd));
-	printc("thread %d about to call sched_switch_thread\n", cos_get_thd_id());
+	/* printc("thread %d about to call sched_switch_thread\n", cos_get_thd_id()); */
 	sched_switch_thread(0, WAKE_LOOP);
 done:
 	return 0;
@@ -1315,7 +1316,7 @@ static struct sched_thd *__sched_setup_thread_arg(int dest_spd_id, void *metric_
 	/* can we reuse an already created (but since killed) thread? */
 	if (!EMPTY_LIST(&PERCPU_GET(sched_base_state)->graveyard, prio_next, prio_prev)) {
 		/* Only can do remote components here. */
-		printc("using a thread from graveyard\n");
+		/* printc("using a thread from graveyard\n"); */
 		assert(dest_spd_id && (dest_spd_id != cos_spd_id()));
 		new = FIRST_LIST(&PERCPU_GET(sched_base_state)->graveyard, prio_next, prio_prev);
 		assert(new->flags & THD_DYING);

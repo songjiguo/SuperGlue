@@ -513,9 +513,7 @@ static int interrupt_wait(void)
 	assert(wildcard_acap_id > 0);
 	
 	printc("thd %d is waiting for the network interrupt\n", cos_get_thd_id());
-
 	if (-1 == (ret = cos_ainv_wait(wildcard_acap_id))) BUG();
-
 	printc("thd %d after waiting for the network interrupt\n", cos_get_thd_id());
 
 	rdtscll(start);
