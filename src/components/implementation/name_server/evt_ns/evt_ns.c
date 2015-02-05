@@ -265,15 +265,15 @@ ns_upcall(spdid_t spdid)
 	
 	/* LOCK(); */
 	
-	printc("evt_ns: ready to upcall (thd %d call from spd %d)\n", 
-	       cos_get_thd_id(), spdid);
+	/* printc("evt_ns: ready to upcall (thd %d call from spd %d)\n",  */
+	/*        cos_get_thd_id(), spdid); */
 	
 	int i;
 	for (i = 0; i < MAX_NUM_SPDS; i++) {
 		if (!spd_evts_cnt[i]) continue;
 		/* UNLOCK(); */
-		printc("evt_ns has found spd %d has created evt (counter %d)\n", 
-		       i, spd_evts_cnt[i]);
+		/* printc("evt_ns has found spd %d has created evt (counter %d)\n",  */
+		/*        i, spd_evts_cnt[i]); */
 		recovery_upcall(cos_spd_id(), COS_UPCALL_RECEVT, i, 0);
 		/* LOCK(); */
 	}

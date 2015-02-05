@@ -533,7 +533,7 @@ static int tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	DBG(KERN_INFO "%s: tun_net_xmit %d\n", tun->dev->name, skb->len);
 
-	printk("\n <<Network interrupt arrives!!>> \n \n");
+	/* printk("<<Network interrupt arrives!!>> \n \n"); */
 
 	/* Drop packet if interface is not attached */
 	//if (!tun->attached)
@@ -549,13 +549,16 @@ static int tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 		//goto drop;
 	}
 
+	/* Jiguo: use this when the queue is full (could be filled up
+	 * during the recovery), do we need this?? */
 	/* Packet dropping */
-/*	if (cosnet_queues_full(tun)) {
+	if (cosnet_queues_full(tun)) {
+		printk("<<Network interrupt, but full and drop !!>> \n");
 		netif_stop_queue(dev);
 		tun->stats.tx_fifo_errors++;
 		goto drop;
 	}
-*/
+
 	if (!cosnet->packet_queue) {
 		printk("cos: packet queue not set up for acap.\n");
 		goto drop;

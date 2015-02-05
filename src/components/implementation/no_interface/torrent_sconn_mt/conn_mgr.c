@@ -218,7 +218,7 @@ accept_new(int accept_fd)
 			return;
 		} else if (from < 0) {
 			/* printc("from torrent returned %d\n", from); */
-			/* BUG(); */   // might return Error if the fault has occurred
+			BUG();
 			return;
 		}
 
@@ -254,7 +254,7 @@ from_data_new(struct tor_conn *tc)
 		/* printc("connmgr reads net (thd %d)\n", cos_get_thd_id()); */
 		amnt = server_tread(cos_spd_id(), from, cb, BUFF_SZ-1);
 		connmgr_from_tread_cnt++;
-		/* printc("connmgr reads net amnt %d\n", amnt); */
+		/* printc("from data new reads net amnt %d\n", amnt); */
 		if (0 == amnt) break;
 		else if (-EPIPE == amnt) {
 			goto close;
@@ -262,12 +262,11 @@ from_data_new(struct tor_conn *tc)
 			/* printc("read from fd %d produced %d.\n", from, amnt); */
 			BUG();
 		}
-
+		
 		assert(amnt <= BUFF_SZ);
 		if (amnt != (ret = twrite(cos_spd_id(), to, cb, amnt))) {
 			/* printc("conn_mgr: write failed w/ %d on fd %d\n", ret, to); */
 			goto close;
-			
 		}
 		connmgr_twrite_cnt++;
 
@@ -278,7 +277,7 @@ done:
 	return;
 close:
 	mapping_remove(from, to, tc->feid, tc->teid);
-	/* printc("net_close from_data_new (in trelease) (thd %d, from %d)\n",  */
+	/* printc("net_close from_data_new (in trelease) (thd %d, from %d)\n", */
 	/*        cos_get_thd_id(), from); */
 	server_trelease(cos_spd_id(), from);
 	num_connection--;
@@ -313,12 +312,11 @@ to_data_new(struct tor_conn *tc)
 		/* printc("connmgr reads https\n"); */
 		amnt = tread(cos_spd_id(), to, cb, BUFF_SZ-1);
 		connmgr_tread_cnt++;
+		/* printc("to data new reads amnt %d\n", amnt); */
 		if (0 == amnt) {
 			amnt_0_break_cnt++;
-			/* goto close; */
 			break;
-		}
-		else if (-EPIPE == amnt) {
+		} else if (-EPIPE == amnt) {
 			goto close;
 		} else if (amnt < 0) {
 			printc("read from fd %d produced %d.\n", from, amnt);
@@ -399,6 +397,43 @@ meas_record(u64_t meas)
 	}
 }
 
+extern cvect_t rec_evt_map;
+extern struct rec_data_evt *evts_grp_list_head;
+
+/* recovery data structure for evt */
+struct rec_data_evt {
+	spdid_t       spdid;
+	long          c_evtid;
+	long          s_evtid;
+
+	long          p_evtid;  // parent event id (eg needs this)
+	int           grp;      // same as above
+
+	struct rec_data_evt *next, *prev;  // track all init events in a group
+	struct rec_data_evt *p_next, *p_prev;  // link all parent event
+
+	unsigned int  state;
+	unsigned long fcnt;
+};
+static struct rec_data_evt *
+rdevt_lookup(cvect_t *vect, int id)
+{ 
+	return (struct rec_data_evt *)cvect_lookup(vect, id); 
+}
+
+static void
+print_rde_info(struct rec_data_evt *rde)
+{
+	assert(rde);
+
+	printc("rde->spdid %d\n", rde->spdid);
+	printc("rde->c_evtid %d\n", rde->c_evtid);
+	printc("rde->s_evtid %d\n", rde->s_evtid);
+	printc("rde->p_evtid %d\n", rde->p_evtid);
+	printc("rde->grp %d\n", rde->grp);
+
+	return;
+}
 
 void
 cos_init(void *arg)
@@ -431,41 +466,71 @@ cos_init(void *arg)
 	evt_add(c, eid);
 
 	rdtscll(start);
+	int i, tmp_t;
+	static int tmp_first = 0;
+	long tmp_evt = 0;
 	/* event loop... */
 	while (1) {
 		struct tor_conn tc;
 		int t;
 		long evt;
-
+		
 		memset(&tc, 0, sizeof(struct tor_conn));
 		rdtscll(end);
 		meas_record(end-start);
 		/* printc("thd %d calling evt_wait all\n", cos_get_thd_id()); */
                 /* should check this return value */
-		/* redo: */
-		evt = evt_wait_all();
-		printc("\n---->conn: thd %d event comes (returned evt %d)\n",
-		       cos_get_thd_id(), evt);
+	redo:
+		/* printc("\n---->conn: thd %d evt_wail_all\n", cos_get_thd_id()); */
+		tmp_evt = evt_wait_all();
+		/* printc("---->conn: thd %d event comes (returned evt %d)\n", */
+		/*        cos_get_thd_id(), tmp_evt); */
+		if (unlikely(tmp_evt < 0)) evt = -tmp_evt;
+		else evt = tmp_evt;
 		
 		rdtscll(start);
 		t   = evt_torrent(evt);
-		/* if (!t) goto redo; */
+		/* printc("thd %d find t %d for event %d\n", cos_get_thd_id(), t, evt); */
 		
-		printc("thd %d find t %d for event %d\n", cos_get_thd_id(), t, evt);
+		if (unlikely(tmp_evt < 0)) {
+			if (t == accept_fd) {
+				/* printc("[[[conn_mgr flt:goto redo accept path(thd %d)]]]\n", */
+				/*        cos_get_thd_id()); */
+				goto redo; // accept path
+			}
+			if (t < 0) t *= -1;
+			if (cvect_lookup(&tor_from, t)) {
+				cvect_del(&tor_from, t);
+				server_trelease(cos_spd_id(), t);
+			} else if (cvect_lookup(&tor_to, t)) {
+				cvect_del(&tor_to, t);
+				trelease(cos_spd_id(), t);
+			}
+			if (cvect_lookup(&evts, evt)) cvect_del(&evts, evt);
+			evt_put(evt);
+			/* printc("[[[conn_mgr flt:goto redo(thd %d)]]]\n", */
+			/*        cos_get_thd_id()); */
+			goto redo;
+		}
+		
 		if (t > 0) {
 			tc.feid = evt;
 			tc.from = t;
 			if (t == accept_fd) {
 				tc.to = 0;
-				printc("[[[conn_mgr:accept_new(thd %d)]]]\n",
-				       cos_get_thd_id());
+				/* printc("[[[conn_mgr:accept_new(thd %d)]]]\n", */
+				/*        cos_get_thd_id()); */
 				accept_new(accept_fd);
 			} else {
 				tc.to = tor_get_to(t, &tc.teid);
-				/* assert(tc.to > 0); */
-				if (tc.to <= 0) continue;
-				printc("[[[conn_mgr:from_data_new(thd %d)]]]\n",
-				       cos_get_thd_id());
+				assert(tc.to > 0);
+				/* if (tc.to <= 0) { */
+				/* 	printc("andy\n"); */
+				/* 	/\* assert(0); *\/ */
+				/* 	continue; */
+				/* } */
+				/* printc("[[[conn_mgr:from_data_new(thd %d)]]]\n", */
+				/*        cos_get_thd_id()); */
 				from_data_new(&tc);
 			}
 		} else {
@@ -473,9 +538,13 @@ cos_init(void *arg)
 			tc.teid = evt;
 			tc.to   = t;
 			tc.from = tor_get_from(t, &tc.feid);
-			/* assert(tc.from > 0); */
-			if (tc.from <= 0) continue;
-			printc("[[[conn_mgr:to_data_new(thd %d)]]]\n", cos_get_thd_id());
+			assert(tc.from > 0);
+			/* if (tc.from <= 0) { */
+			/* 	printc("kevin\n"); */
+			/* 	/\* assert(0); *\/ */
+			/* 	continue; */
+			/* } */
+			/* printc("[[[conn_mgr:to_data_new(thd %d)]]]\n", cos_get_thd_id()); */
 			to_data_new(&tc);
 		}
 

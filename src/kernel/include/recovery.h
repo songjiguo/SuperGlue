@@ -214,8 +214,8 @@ ipc_fault_detect(struct invocation_cap *cap_entry, struct spd *dest_spd)
 	/* if (thd_get_id(core_get_curr_thd_id(get_cpuid_fast())) == 3) return 0; */
 
 	if (cap_entry->fault.cnt < dest_spd->fault.cnt) {
-		printk("cap_entry fault cnt %lu\n", cap_entry->fault.cnt);
-		printk("dest spd %d fault cnt %lu\n", spd_get_index(dest_spd), dest_spd->fault.cnt);
+		/* printk("cap_entry fault cnt %lu\n", cap_entry->fault.cnt); */
+		/* printk("dest spd %d fault cnt %lu\n", spd_get_index(dest_spd), dest_spd->fault.cnt); */
 		/* inv_frame->fault.cnt = spd->fault.cnt; */   // we update cap
 		return 1;
 	}
@@ -360,8 +360,8 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 	this_spd  = spd_get_by_index(spdid);
 	d_spd     = spd_get_by_index(d_spdid);
 
-	printk("passed this_spd is %d\n", spdid);
-	printk("passed d_spd is %d\n", d_spdid);
+	/* printk("passed this_spd is %d\n", spdid); */
+	/* printk("passed d_spd is %d\n", d_spdid); */
 
 	if (!this_spd || !d_spd) {
 		printk("cos: invalid fault cnt  call for spd %d or spd %d\n",
@@ -392,7 +392,7 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 
 	switch(option) {
 	case COS_SPD_FAULT_TRIGGER:
-		printk("increase fault counter for spd %d\n", d_spdid);
+		/* printk("increase fault counter for spd %d\n", d_spdid); */
 		d_spd->fault.cnt++;
 		d_spd->reflection.cnt = d_spd->fault.cnt;
 		break;
@@ -401,29 +401,29 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 		 * destination spd)*/
 		if (cap_entry->fault.cnt == cap_entry->destination->fault.cnt) {
 			ret = cap_entry->destination->fault.cnt;
-			printk("(fault update 1) ret %d\n", ret);
+			/* printk("(fault update 1) ret %d\n", ret); */
 			break;
 		}
 		
 		for (i = 1; i < d_spd->ncaps ; i++) {
 			struct invocation_cap *cap = &d_spd->caps[i];
 			if (cap->destination == cap_entry->destination) {
-				printk("update fcnt: d_spd %d -> spd %d (dest on fault detect: %d)\n",
-				       d_spdid, spd_get_index(cap->destination),
-				       spd_get_index(cap_entry->destination));
+				/* printk("update fcnt: d_spd %d -> spd %d (dest on fault detect: %d)\n", */
+				/*        d_spdid, spd_get_index(cap->destination), */
+				/*        spd_get_index(cap_entry->destination)); */
 				cap->fault.cnt = cap_entry->destination->fault.cnt;
 			}
 		}
 		ret = cap_entry->destination->fault.cnt;
-		printk("(fault update 2) ret\n", ret);
+		/* printk("(fault update 2) ret\n", ret); */
 		break;
 	case COS_CAP_REFLECT_UPDATE: 		/* Update reflect counter for this client */
 		/* printk("check if reflection counter\n"); */
 		if (d_spd->fault.cnt == 0) return 0; // no fault ever
 		if (d_spd->reflection.cnt 
 		    == d_spd->fault.cnt) {
-			printk("(1)d_spd->reflection.cnt %d d_spd->fault.cnt %d\n",
-			       d_spd->reflection.cnt, d_spd->fault.cnt);
+			/* printk("(1)d_spd->reflection.cnt %d d_spd->fault.cnt %d\n", */
+			/*        d_spd->reflection.cnt, d_spd->fault.cnt); */
 			d_spd->reflection.cnt++; // to avoid multiple calls
 			ret = 1;
 		}

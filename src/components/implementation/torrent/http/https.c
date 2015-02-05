@@ -51,6 +51,9 @@ extern int server_treadp(spdid_t spdid, td_t td, int len, int *off, int *sz);
 static volatile unsigned long http_conn_cnt = 0, http_req_cnt = 0;
 static volatile unsigned long http_new_request_cnt = 0;
 
+static volatile unsigned long long http_conn_cnt_ts = 0;  // debug time stamp
+static volatile unsigned long long http_req_cnt_ts = 0;  // debug time stamp
+
 static volatile unsigned long  tread_cnt = 0;  // debug
 static volatile unsigned long  tread_cnt2 = 0;  // debug
 
@@ -701,6 +704,7 @@ static int connection_get_reply(struct connection *c, char *resp, int resp_sz)
 		next = r->next;
 		/* bookkeeping */
 		http_req_cnt++;
+		rdtscll(http_req_cnt_ts);
 
 		http_free_request(r);
 		r = c->pending_reqs;
@@ -863,6 +867,9 @@ trelease(spdid_t spdid, td_t td)
 	struct torrent *t;
 	struct connection *c;
 
+	/* printc("trelease in https (spd %ld) thd %d called from spd %d\n",  */
+	/*        cos_spd_id(), cos_get_thd_id(), spdid); */
+	
 	if (!tor_is_usrdef(td)) return;
 
 	LOCK();
@@ -875,7 +882,9 @@ trelease(spdid_t spdid, td_t td)
 	if (c) {
 		http_free_connection(c);
 		/* bookkeeping */
+		/* printc("https: http_conn_cnt++ by thd %d\n", cos_get_thd_id()); */
 		http_conn_cnt++;
+		rdtscll(http_conn_cnt_ts);
 	}
 	tor_free(t);
 done:
@@ -986,90 +995,6 @@ unlock:
 	goto done;
 }
 
-/* long  */
-/* content_split(spdid_t spdid, long conn_id, long evt_id) */
-/* { */
-/* 	return -ENOSYS; */
-/* } */
-
-/* int  */
-/* content_write(spdid_t spdid, long connection_id, char *reqs, int sz) */
-/* { */
-/* 	struct connection *c; */
-/* 	struct torrent *t; */
-/* 	cbuf_t cb; */
-/* 	char *cbuf; */
-/* //     printc("HTTP write"); */
-	
-/* 	t = tor_lookup(connection_id); */
-/* 	assert(t); */
-/* 	c = t->data; */
-	
-/* 	cbuf = cbuf_alloc(sz, &cb); */
-/* 	memcpy(cbuf, reqs, sz); */
-/* 	if (connection_parse_requests(c, cbuf, sz)) return -EINVAL; */
-/* 	cbuf_free(cbuf); */
-
-/* 	return sz; */
-/* } */
-
-/* int  */
-/* content_read(spdid_t spdid, long connection_id, char *reqs, int sz) */
-/* { */
-/* 	struct torrent *t; */
-/* 	struct connection *c; */
-/* 	cbuf_t cb; */
-/* 	char *cbuf; */
-/* 	int ret; */
-	
-/* 	t = tor_lookup(connection_id); */
-/* 	assert(t); */
-/* 	c = t->data; */
-	
-/* 	cbuf = cbuf_alloc(sz, &cb); */
-/* 	ret  = connection_get_reply(c, cbuf, sz); */
-/* 	memcpy(reqs, cbuf, sz); */
-/* 	cbuf_free(cbuf); */
-
-/* 	return ret; */
-/* } */
-
-/* long */
-/* content_create(spdid_t spdid, long evt_id, struct cos_array *d) */
-/* { */
-/* 	struct connection *c = http_new_connection(0, evt_id); */
-/* 	struct torrent *t; */
-	
-/* 	t = tor_alloc(c, TOR_ALL); */
-/* 	if (!t) return -1; */
-/* 	c->conn_id = t->td; */
-/* 	if (t->td < 0) { */
-/* 		http_free_connection(c); */
-/* 		return -ENOMEM; */
-/* 	} */
-/* 	return c->conn_id; */
-/* } */
-
-/* int  */
-/* content_remove(spdid_t spdid, long conn_id) */
-/* { */
-/* 	struct torrent *t; */
-/* 	struct connection *c; */
-
-/* 	if (!tor_is_usrdef(conn_id)) return -1; */
-
-/* 	t = tor_lookup(conn_id); */
-/* 	if (!t) goto done; */
-/* 	c = t->data; */
-/* 	if (c) { */
-/* 		http_free_connection(c); */
-/* 		/\* bookkeeping *\/ */
-/* 		http_conn_cnt++; */
-/* 	} */
-/* 	tor_free(t); */
-/* done: */
-/* 	return 0; */
-/* } */
 
 int
 __twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen) {
@@ -1077,7 +1002,7 @@ __twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char 
 	return 0;
 }
 
-#define HTTP_REPORT_FREQ 100
+#define HTTP_REPORT_FREQ 25
 
 void cos_init(void *arg)
 {
@@ -1088,6 +1013,8 @@ void cos_init(void *arg)
 	while (1) {
 		periodic_wake_wait(cos_spd_id());
 		printc("HTTP conns %ld, reqs %ld\n", http_conn_cnt, http_req_cnt);
+		/* printc("HTTP conns_ts %lld, reqs_ts %lld\n",  */
+		/*        http_conn_cnt_ts, http_req_cnt_ts); */
 		http_conn_cnt = http_req_cnt = 0;
 
 		/* printc("tread from connmgr: %ld, thread2 %ld\n", tread_cnt, tread_cnt2); */

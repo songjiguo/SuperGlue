@@ -512,11 +512,10 @@ static int interrupt_wait(void)
 
 	assert(wildcard_acap_id > 0);
 	
-	printc("thd %d is waiting for the network interrupt\n", cos_get_thd_id());
+	/* printc("thd %d is waiting for the network interrupt\n", cos_get_thd_id()); */
 	if (-1 == (ret = cos_ainv_wait(wildcard_acap_id))) BUG();
-	printc("thd %d after waiting for the network interrupt\n", cos_get_thd_id());
+	/* printc("thd %d after waiting for the network interrupt\n", cos_get_thd_id()); */
 
-	rdtscll(start);
 	/* if (ret > 0) { */
 	/* 	cos_immediate_process_cnt = ret; */
 	/* } */
@@ -571,8 +570,9 @@ int netif_event_wait(spdid_t spdid, char *mem, int sz)
 	/* if (pnums%100000 == 0) { */
 	/* 	printc("pnums %llu avg %llu\n", pnums, avg); */
 	/* } */
-	/* printc("after %d: I\n", cos_get_thd_id()); */
+	/* printc("netif: before NET_LOCK_TAKE by thd %d\n", cos_get_thd_id()); */
 	NET_LOCK_TAKE();
+	/* printc("netif: after NET_LOCK_TAKE by thd %d\n", cos_get_thd_id()); */
 	if (interrupt_process(mem, sz, &ret_sz)) BUG();
 	/* interrupt_process_cnt++; */
 	NET_LOCK_RELEASE();

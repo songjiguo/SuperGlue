@@ -456,8 +456,8 @@ __fault_ipc_invoke(struct thread *thd, vaddr_t fault_addr, int flags, struct pt_
 	unsigned int fault_cap;
 	struct pt_regs *nregs;
 
-	printk("in __fault_ipc_invoke\n");
-	if (dest_spd) printk("deskt spd %d \n", spd_get_index(dest_spd));
+	/* printk("in __fault_ipc_invoke\n"); */
+	/* if (dest_spd) printk("deskt spd %d \n", spd_get_index(dest_spd)); */
 
 	if (unlikely(dest_spd)) s = dest_spd;
 	else {
@@ -500,9 +500,9 @@ __fault_ipc_invoke(struct thread *thd, vaddr_t fault_addr, int flags, struct pt_
 	struct thread *test_thd = core_get_curr_thd_id(get_cpuid_fast());
 	struct spd *test_spd = thd_curr_spd_thd(test_thd);
 	struct invocation_cap *test_entry = &test_spd->caps[fault_cap];
-	printk("curr_thd %d curr_spd %d entry->destination %d for cap %d\n***\n",
-	       thd_get_id(test_thd), spd_get_index(test_spd), 
-	       spd_get_index(test_entry->destination), fault_cap);
+	/* printk("curr_thd %d curr_spd %d entry->destination %d for cap %d\n***\n", */
+	/*        thd_get_id(test_thd), spd_get_index(test_spd),  */
+	/*        spd_get_index(test_entry->destination), fault_cap); */
 
 	/* int i; */
 	/* if (fault_num == 8) { */
@@ -518,14 +518,14 @@ __fault_ipc_invoke(struct thread *thd, vaddr_t fault_addr, int flags, struct pt_
 
 	a = ipc_walk_static_cap(fault_cap<<20, regs->sp, regs->ip, &r);
 
-	printk("found dest spd %d \n", spd_get_index(s));
-	printk("fault_num %d \n", fault_num);
-	printk("fault_cap %d \n", fault_cap);
-	printk("s %d r.spd_id %d a %p r.thd_id %d\n",
-	       spd_get_index(s), r.spd_id, a, r.thd_id);
-	if (fault_num == COS_FLT_FLT_NOTIF) {
-		printk("fault type is to notify.....\n");
-	}
+	/* printk("found dest spd %d \n", spd_get_index(s)); */
+	/* printk("fault_num %d \n", fault_num); */
+	/* printk("fault_cap %d \n", fault_cap); */
+	/* printk("s %d r.spd_id %d a %p r.thd_id %d\n", */
+	/*        spd_get_index(s), r.spd_id, a, r.thd_id); */
+	/* if (fault_num == COS_FLT_FLT_NOTIF) { */
+	/* 	printk("fault type is to notify.....\n"); */
+	/* } */
 	
 	/* setup the registers for the fault handler invocation */
 	regs->ax = r.thd_id;  // Jiguo: why do we need pass the thread id?
@@ -2548,14 +2548,14 @@ ainv_next_thread(struct async_cap *acap, struct thread *preempted, int preempt)
 	/* struct rb_buff_track_t rbb; */
 	/* unsigned int tail; */
 
-	if (thd_get_id(upcall) == 10) {  // test network
-		printk("\n\nainv_next_thread: preempted %d  -- upcall %d \n", 
-		       thd_get_id(preempted), thd_get_id(upcall));
-	}
+	/* printk("\n\nainv_next_thread: preempted %d  -- upcall %d \n", */
+	/*        thd_get_id(preempted), thd_get_id(upcall)); */
+
 	/* printk("brand %d  its upcall %d \n", thd_get_id(brand), thd_get_id(upcall)); */
 	/* // timer: 7 (brand 6) */
 	/* // network: 12 (brand 13) */
 	/* ////////////////////////// */
+	/* if (thd_get_id(preempted) == 2) return preempted; */
 
 	/* 
 	 * If the upcall is already active, the scheduler's already
@@ -2567,8 +2567,8 @@ ainv_next_thread(struct async_cap *acap, struct thread *preempted, int preempt)
 	 */
 	/* Added by Qi: Or if we receive an event for an acap that we
 	 * are not currently waiting on, do the same as above. */
-
-	if (upcall->flags & THD_STATE_ACTIVE_UPCALL || 
+	/* if (upcall->flags & THD_STATE_ACTIVE_UPCALL || */  // old
+	if (upcall->flags & THD_STATE_ACTIVE_UPCALL || (thd_get_id(preempted) == 2) ||
 	    (upcall->srv_acap && upcall->srv_acap != acap)) {
 		cos_meas_event(COS_MEAS_ACAP_PEND);
 		cos_meas_stats_start(COS_MEAS_STATS_UC_PEND_DELAY, 0);
@@ -2618,10 +2618,12 @@ ainv_next_thread(struct async_cap *acap, struct thread *preempted, int preempt)
 		/* } */
 		/* ////////////////////////// */
 		/* if (thd_get_id(upcall) == 10) { */
-		/* 	if (upcall->flags & THD_STATE_ACTIVE_UPCALL) printk("ACTIVE\n"); */
-		/* 	if (upcall->srv_acap && upcall->srv_acap != acap) printk("acap!\n"); */
-		/* 	printk("return to preempted thd %d \n", thd_get_id(preempted)); */
+			/* if (upcall->flags & THD_STATE_ACTIVE_UPCALL) printk("ACTIVE\n"); */
+			/* if (upcall->srv_acap && upcall->srv_acap != acap) printk("acap!\n"); */
+			/* printk("return to preempted thd %d \n", thd_get_id(preempted)); */
 		/* } */
+
+		/* printk("return to preempted thd %d \n", thd_get_id(preempted)); */
 		return preempted;
 	}
 
@@ -2632,13 +2634,13 @@ ainv_next_thread(struct async_cap *acap, struct thread *preempted, int preempt)
 	 * should ignore the interrupt, otherwise the following flag
 	 * will cause interrupt thread always in ACTIVE status and not
 	 * switched to */
-	if (thd_get_id(preempted) != 2) {
-		upcall->flags |= THD_STATE_ACTIVE_UPCALL;
-		upcall->flags &= ~THD_STATE_READY_UPCALL;
-	}
-	/* Original*/
-	/* upcall->flags |= THD_STATE_ACTIVE_UPCALL; */
-	/* upcall->flags &= ~THD_STATE_READY_UPCALL; */
+	/* if (thd_get_id(preempted) != 2) { */
+	/* 	upcall->flags |= THD_STATE_ACTIVE_UPCALL; */
+	/* 	upcall->flags &= ~THD_STATE_READY_UPCALL; */
+	/* } */
+	/* Original */
+	upcall->flags |= THD_STATE_ACTIVE_UPCALL;
+	upcall->flags &= ~THD_STATE_READY_UPCALL;
 
 	cos_meas_stats_start(COS_MEAS_STATS_UC_EXEC_DELAY, 1);
 	cos_meas_stats_start(COS_MEAS_STATS_UC_TERM_DELAY, 1);
@@ -2739,11 +2741,11 @@ ainv_next_thread(struct async_cap *acap, struct thread *preempted, int preempt)
 		/* 	/\* printk("before update meas_mode: %d\n", rb_track->packets[tail].meas_mode); *\/ */
 		/* 	rb_track->packets[tail].meas_mode = MEAS_ARRIVAL_IMMEDIATE_UPCALL; */
 		/* 	/\* printk("after update meas_mode: %d\n", rb_track->packets[tail].meas_mode); *\/ */
-		/* if (thd_get_id(upcall) == 10) { */
-		/* 	printk("return to upcall thd %d \n", thd_get_id(upcall)); */
-		/* } */
+
+			/* printk("return to upcall thd %d \n", thd_get_id(upcall)); */
 		/* ////////////////////////// */
 
+		/* printk("return to upcall thd %d \n", thd_get_id(upcall)); */
 		return upcall;
 	}
 		
@@ -2773,7 +2775,7 @@ ainv_next_thread(struct async_cap *acap, struct thread *preempted, int preempt)
 	/* 	rb_track->packets[tail].meas_mode = MEAS_ARRIVAL_CONTINUE_PREV; */
 	/* 	/\* printk("after update meas_mode: %d\n", rb_track->packets[tail].meas_mode); *\/ */
 	/* if (thd_get_id(upcall) == 10) { */
-	/* 	printk("finally returns to preempted %d \n", thd_get_id(preempted)); */
+		/* printk("finally returns to preempted %d \n", thd_get_id(preempted)); */
 	/* } */
 	/* } */
 	/* ////////////////////////// */
@@ -2781,6 +2783,7 @@ ainv_next_thread(struct async_cap *acap, struct thread *preempted, int preempt)
 	report_upcall("d", upcall);
 
 	cos_meas_event(COS_MEAS_ACAP_DELAYED);
+	/* printk("finally returns to preempted %d \n", thd_get_id(preempted)); */
 	return preempted;
 }
 
@@ -4200,8 +4203,8 @@ static struct pt_regs *ainv_execution_completion(struct thread *curr, int *preem
 	if (acap_entry->pending_upcall) {
 		event_record("ainv complete, self pending upcall executed", thd_get_id(curr), 0);
 		report_upcall("c", curr);
-		printk("cos: there is pending upcall (thd % spd %d)\n",
-		       thd_get_id(curr), spd_get_index(cspd));
+		/* printk("cos: there is pending upcall (thd % spd %d)\n", */
+		/*        thd_get_id(curr), spd_get_index(cspd)); */
 		return sched_tailcall_pending_upcall(curr, cspd);
 	}
 	/*
@@ -4216,7 +4219,7 @@ static struct pt_regs *ainv_execution_completion(struct thread *curr, int *preem
 		struct spd *dest;
 		int i;
 
-		printk("cos: (1)(thd % spd %d)\n", thd_get_id(curr), spd_get_index(cspd));
+		/* printk("cos: (1)(thd % spd %d)\n", thd_get_id(curr), spd_get_index(cspd)); */
 
 		prev_tsi = thd_get_sched_info(curr, 0);
 		assert(prev_tsi->scheduler);
@@ -4243,8 +4246,8 @@ static struct pt_regs *ainv_execution_completion(struct thread *curr, int *preem
 	}
 
 	event_record("ainv completion, switch to interrupted thread", thd_get_id(curr), thd_get_id(prev));
-	printk("cos: (2)(switch from thd % to thd %d)\n", 
-	       thd_get_id(curr), thd_get_id(prev));
+	/* printk("cos: (2)(switch from thd % to thd %d)\n",  */
+	/*        thd_get_id(curr), thd_get_id(prev)); */
 	ainv_completion_switch_to(curr, prev);
 	*preempt = 1;
 	report_upcall("i", curr);

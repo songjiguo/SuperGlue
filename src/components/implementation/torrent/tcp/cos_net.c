@@ -246,6 +246,8 @@ static inline struct intern_connection *net_conn_alloc(conn_t conn_type, u16_t t
 	struct intern_connection *ic;
 	net_connection_t nc;
 
+	/* printc("net: net_conn_alloc....(thd %d)\n", cos_get_thd_id()); */
+
 	ic = malloc(sizeof(struct intern_connection));
 	if (NULL == ic) return NULL;
 	nc = cos_map_add(&connections, ic);
@@ -478,23 +480,10 @@ static void cos_net_lwip_tcp_err(void *arg, err_t err)
 		assert(ic->conn_type == TCP);
 		assert(ic->conn_type != TCP_CLOSED);
 		/* printc("((((((((((((( evt_trigger 2 -- tcp_err (thd %d evtid %d))))))))))))))))\n", cos_get_thd_id(), ic->data); */
-		/* if (-1 != ic->data && evt_trigger(cos_spd_id(), ic->data) < 0) BUG(); */
-		int ret;
-		if (-1 != ic->data) {
-			NET_LOCK_RELEASE();// now evt_trigger might block!!!! Jiguo
-			ret = evt_trigger(cos_spd_id(), ic->data);
-			NET_LOCK_TAKE();
-		}
-		
+		if (-1 != ic->data && evt_trigger(cos_spd_id(), ic->data)) BUG();
 		ic->conn_type = TCP_CLOSED;
 		ic->conn.tp = NULL;
 		net_conn_free_packet_data(ic);
-		
-		if (ret == -EINVAL) {
-			printc("evt_trigger return -22 (evt_trigger 2 return -22) thd %d\n", cos_get_thd_id());
-			/* return ERR_ABRT; */
-		}
-
 		break;
 	default:
 		printc("TCP error #%d: don't really have docs to know what this means.", err);
@@ -614,43 +603,8 @@ static err_t cos_net_lwip_tcp_recv(void *arg, struct tcp_pcb *tp, struct pbuf *p
 	/* This should deallocate the entire chain */
 	pbuf_free(first);
 
-	/* printc("thd in %ld tcp_recv call trigger evt id %d\n", cos_get_thd_id(), ic->data); */
 	/* printc("((((((((((((( evt_trigger 3 -- tcp_recv (thd %d evtid %d)))))))))))))))))))))))))\n", cos_get_thd_id(), ic->data); */
-	/* if (-1 != ic->data && evt_trigger(cos_spd_id(), ic->data) < 0) BUG(); */
-	/* int ret; */
-	/* if (-1 != ic->data) { */
-	/* 	ret = evt_trigger(cos_spd_id(), ic->data); */
-	/* } */
-
-	int ret;
-	if (-1 != ic->data) {
-		NET_LOCK_RELEASE();
-		ret = evt_trigger(cos_spd_id(), ic->data);
-		NET_LOCK_TAKE();
-	}
-	/* while(ret == -EINVAL) { */
-	/* 	printc("evt_trigger return -22 (evt_trigger 3 return -22 thd %d)\n", cos_get_thd_id()); */
-	/* 	if (sched_block(cos_spd_id(), 0) < 0) BUG(); */
-	/* 	if (-1 != ic->data) { */
-	/* 		ret = evt_trigger(cos_spd_id(), ic->data); */
-	/* 	} */
-	/* } */
-	/* assert(ret >= 0); */
-	
-	/* if (ret == -EINVAL) { */
-	/* 	printc("evt_trigger return -22 (evt_trigger 3 return -22 (thd %d))\n", */
-	/* 	       cos_get_thd_id()); */
-		/* cos_net_lwip_tcp_err(arg, ERR_ABRT); */
-		/* return ERR_ABRT; */
-	/* } */
-
-	/* tcp_recv_cnt++; */
-/* 	/\* If the thread blocked waiting for a packet, wake it up *\/ */
-/* 	if (RECVING == ic->thd_status) { */
-/* 		ic->thd_status = ACTIVE; */
-/* 		assert(ic->thd_status == ACTIVE); /\* Detect races *\/ */
-/* 		if (sched_wakeup(cos_spd_id(), ic->tid)) BUG(); */
-/* 	} */
+	if (-1 != ic->data && evt_trigger(cos_spd_id(), ic->data)) BUG();
 
 	return ERR_OK;
 }
@@ -661,6 +615,7 @@ static err_t cos_net_lwip_tcp_sent(void *arg, struct tcp_pcb *tp, u16_t len)
 	assert(ic);
 
 	/* printc("net: calling tcp_sent....(thd %d)\n", cos_get_thd_id()); */
+
 	/* I don't know why this is happening, but even when sending
 	 * nothing, it says that we send 1 byte on accepts.  There is
 	 * no ic->data associated with the connection yet, so we have
@@ -697,7 +652,7 @@ __net_create_tcp_connection(spdid_t spdid, u16_t tid, struct tcp_pcb *new_tp, lo
 	net_connection_t ret;
 
 	if (NULL == new_tp) {
-		printc("net: calling tcp_new....(thd %d)\n", cos_get_thd_id());
+		/* printc("net: calling tcp_new....(thd %d)\n", cos_get_thd_id()); */
 		tp = tcp_new();	
 		if (NULL == tp) {
 			prints("Could not allocate tcp connection");
@@ -769,28 +724,8 @@ static err_t cos_net_lwip_tcp_accept(void *arg, struct tcp_pcb *new_tp, err_t er
 		ic->accepted_last = ica;
 	}
 	assert(-1 != ic->data);
-	/* printc("cos_net_lwip_tcp_accept trigger event (thd %d)\n", cos_get_thd_id()); */
-	/* printc("thd %ld in tcp_accept call trigger evtid %d\n", cos_get_thd_id(), ic->data); */
 	/* printc("((((((((((((( evt_trigger 4 -- tcp_accept (thd %d evtid %d))))))))))))))))))\n", cos_get_thd_id(), ic->data); */
-	/* if (evt_trigger(cos_spd_id(), ic->data) < 0) BUG(); */
-
-	NET_LOCK_RELEASE();
-	int ret = evt_trigger(cos_spd_id(), ic->data);
-	NET_LOCK_TAKE();
-	/* while(ret == -EINVAL) { */
-	/* 	printc("evt_trigger return -22 (evt_trigger 4 return -22 thd %d)\n", cos_get_thd_id()); */
-	/* 	if (sched_block(cos_spd_id(), 0) < 0) BUG(); */
-	/* 	ret = evt_trigger(cos_spd_id(), ic->data); */
-	/* } */
-	/* assert(ret >= 0); */
-
-	/* if (ret == -EINVAL) { */
-	/* 	printc("evt_trigger return -22 (evt_trigger 4 return -22)\n"); */
-	/* 	if (sched_block(cos_spd_id(), 0) < 0) BUG(); */
-	/* 	/\* cos_net_lwip_tcp_err(arg, ERR_ABRT); *\/ */
-	/* 	/\* return ERR_ABRT; *\/ */
-	/* } */
-	/* tcp_accept_cnt++; */
+	if (evt_trigger(cos_spd_id(), ic->data)) BUG();
 
 	return ERR_OK;
 }
@@ -931,26 +866,11 @@ int net_accept_data(spdid_t spdid, net_connection_t nc, long data)
 	ic->data = data;
 	/* If data has already arrived, but couldn't trigger the event
 	 * because ->data was not set, trigger the event now. */
-	/* printc("trigger event??? (thd %d) \n", cos_get_thd_id()); */
-	/* printc("thd %ld in net_accept_data call trigger evtid %d\n", cos_get_thd_id(), ic->data); */
 	/* printc("(((((((((((evt_trigger 5 -- net_accept_data (thd %d evtid %d))))))))))))))))\n", cos_get_thd_id(), ic->data); */
-	/* if (0 < ic->incoming_size &&  */
-	/*     evt_trigger(cos_spd_id(), data) < 0) goto err; */
-	int test;
-	if (0 < ic->incoming_size) {
-		NET_LOCK_RELEASE();
-		test = evt_trigger(cos_spd_id(), ic->data);
-		NET_LOCK_TAKE();
-	}
-
-	if (test == -EINVAL) {
-		printc("evt_trigger return -22 (evt_trigger 5 return -22)  thd %d\n", cos_get_thd_id());
-		/* cos_net_lwip_tcp_err(ic, ERR_ABRT); */
-		/* return ERR_ABRT; */
-	}
+	if (0 < ic->incoming_size &&
+	    evt_trigger(cos_spd_id(), data)) goto err;
 
 	/* net_accetp_cnt++; */
-
 	//NET_LOCK_RELEASE();
 	return 0;	
 err:
@@ -1742,7 +1662,7 @@ static int init(void)
 			stats_display();
 		}
 #endif
-		printc("tcp timer %d...\n", cos_get_thd_id());
+		/* printc("tcp timer %d...\n", cos_get_thd_id()); */
 		tcp_tmr();
 		NET_LOCK_RELEASE();
 		timed_event_block(cos_spd_id(), 25); /* expressed in ticks currently */

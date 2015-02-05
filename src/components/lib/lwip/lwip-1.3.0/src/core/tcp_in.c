@@ -105,6 +105,33 @@ tcp_input(struct pbuf *p, struct netif *inp)
   iphdr = p->payload;
   tcphdr = (struct tcp_hdr *)((u8_t *)p->payload + IPH_HL(iphdr) * 4);
 
+  /* printc("debugging tcp_input now!!\n"); */
+  /* printc("TCP header:\n"); */
+  /* printc("+-------------------------------+\n"); */
+  /* printc("|    %5""hu""      |    %5""hu""      | (src port, dest port)\n", */
+  /*        ntohs(tcphdr->src), ntohs(tcphdr->dest)); */
+  /* printc("+-------------------------------+\n"); */
+  /* printc("|           %010""lu""          | (seq no)\n", */
+  /*         ntohl(tcphdr->seqno)); */
+  /* printc("+-------------------------------+\n"); */
+  /* printc("|           %010""lu""          | (ack no)\n", */
+  /*        ntohl(tcphdr->ackno)); */
+  /* printc("+-------------------------------+\n"); */
+  /* printc("| %2""hu"" |   |%""hu""%""hu""%""hu""%""hu""%""hu""%""hu""|     %5""hu""     | (hdrlen, flags (", */
+  /* 	 TCPH_HDRLEN(tcphdr), */
+  /*        TCPH_FLAGS(tcphdr) >> 5 & 1, */
+  /*        TCPH_FLAGS(tcphdr) >> 4 & 1, */
+  /*        TCPH_FLAGS(tcphdr) >> 3 & 1, */
+  /*        TCPH_FLAGS(tcphdr) >> 2 & 1, */
+  /*        TCPH_FLAGS(tcphdr) >> 1 & 1, */
+  /*        TCPH_FLAGS(tcphdr) & 1, */
+  /*        ntohs(tcphdr->wnd)); */
+  /* // tcp_debug_print_flags(TCPH_FLAGS(tcphdr)); */
+  /* printc("+-------------------------------+\n"); */
+  /* printc("|    0x%04""hx""     |     %5""hu""     | (chksum, urgp)\n", */
+  /*        ntohs(tcphdr->chksum), ntohs(tcphdr->urgp)); */
+  /* printc("+-------------------------------+\n"); */
+
 #if TCP_INPUT_DEBUG
   tcp_debug_print(tcphdr);
 #endif

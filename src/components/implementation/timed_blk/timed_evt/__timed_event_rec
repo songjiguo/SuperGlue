@@ -350,7 +350,7 @@ redo:
 	wait_ret = evt_wait(cos_spd_id(), te->evt);
 	/* if return from the fault and the time is not expired, keep
 	 * waiting. No need to take lock? */
-	if (unlikely(!wait_ret && !EMPTY_LIST(te, next, prev))) {
+	if (unlikely(wait_ret < 0 && !EMPTY_LIST(te, next, prev))) {
 		printc("thd %d is going to call evt_wait in spd %ld again\n",
 		       cos_get_thd_id(), cos_spd_id());
 		goto redo;  
@@ -715,7 +715,7 @@ int periodic_wake_wait(spdid_t spdinv)
 redo:
 	wait_ret = evt_wait(cos_spd_id(), te->evt);
 	/* if return from the fault and the time is not expired, keep waiting */
-	if (unlikely(!wait_ret && !EMPTY_LIST(te, next, prev))) {
+	if (unlikely(wait_ret < 0 && !EMPTY_LIST(te, next, prev))) {
 		printc("periodic_wake_wait: thd %d calls evt_wait again\n", cos_get_thd_id());
 		goto redo;
 	}

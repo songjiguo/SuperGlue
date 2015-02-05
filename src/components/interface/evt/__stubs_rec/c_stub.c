@@ -104,6 +104,8 @@ struct rec_data_evt {
 	long          p_evtid;  // parent event id (eg needs this)
 	int           grp;      // same as above
 
+	int           fault_triggered;
+
 	struct rec_data_evt *next, *prev;  // track all init events in a group
 	struct rec_data_evt *p_next, *p_prev;  // link all parent event
 
@@ -207,6 +209,7 @@ rd_cons(struct rec_data_evt *rd, spdid_t spdid, long c_evtid,
 
 	rd->state	 = state;
 	rd->fcnt	 = fcounter;
+	rd->fault_triggered = 1;
 
 	if (unlikely(recovery)) goto done;
 	
@@ -262,7 +265,7 @@ rd_recover_state(struct rec_data_evt *rd)
 
 	assert(rd && rd->c_evtid >= 1);
 	
-	printc("calling recover (thd %d)!!!!!!\n", cos_get_thd_id());
+	/* printc("calling recover (thd %d)!!!!!!\n", cos_get_thd_id()); */
 
 	if (!rd->p_evtid) {
 		assert(!rd->grp || rd->grp == 1);
@@ -274,18 +277,16 @@ rd_recover_state(struct rec_data_evt *rd)
 		assert(tmp_evtid >= 1);
 
 		rd->s_evtid = tmp_evtid;      // update the old rd's server side evtid
+		if (!rd->grp) rd->fault_triggered = -1;
 		/* tmp_new->c_evtid = rd->c_evtid; // update the new rd's client side evtid */
 		/* printc("re-split an s_evt %d\n", rd->s_evtid); */
 
-		int tmp_cnt2 = 0;
 		/* rebuild all child events belong to the same group */
 		if (rd->grp == 1) {
 			assert(rd == evts_grp_list_head);
 			for(tmp = FIRST_LIST(rd, next, prev) ;
 			    tmp != rd;
 			    tmp = FIRST_LIST(tmp, next, prev)) {
-				
-				if (tmp_cnt2++ > 20) assert(0);
                                 /* a child update its new re-created parent id */
 				tmp->p_evtid = rd->s_evtid;
                                 /* only re-create this child once */
@@ -297,12 +298,11 @@ rd_recover_state(struct rec_data_evt *rd)
 							 tmp->grp, tmp->c_evtid);
 				assert(tmp_evtid >= 1);
 				
-				printc("evt cli: c3_evt_split(1) returns %d\n", tmp_evtid);
 				tmp_new = rdevt_lookup(&rec_evt_map, tmp_evtid);
 				assert(!tmp_new);
-				printc("evt cli: c3_evt_split(2) returns %d\n", tmp_evtid);
 
 				tmp->s_evtid = tmp_evtid;
+				tmp->fault_triggered = -1;
 				/* tmp_new->c_evtid = tmp->c_evtid; */
 				/* printc("c3_tsplit new evtid %d\n", tmp->s_evtid); */
 			}
@@ -340,8 +340,8 @@ events_replay_all()
 	for(rde = FIRST_LIST(evts_grp_list_head, p_next, p_prev); 
 	    rde!= evts_grp_list_head; 
 	    rde = rde->p_next) {
-		printc("evt cli: rd_recover_state (%d)\n", tmp_cnt);
-		print_rde_info(rde);
+		/* printc("evt cli: rd_recover_state (%d)\n", tmp_cnt); */
+		/* print_rde_info(rde); */
 		if (tmp_cnt++ > 100) assert(0);
 		rd_recover_state(rde);
 	}
@@ -349,7 +349,6 @@ events_replay_all()
 	printc("thd %d in spd %ld interface has recovered all events\n",
 	       cos_get_thd_id(), cos_spd_id());
 
-	/* if (cos_spd_id() == 20) assert(0);	 */
 	return;
 }
 
@@ -640,15 +639,15 @@ CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
 {
 	long fault = 0;
 	long ret;
-
-	int fault_wait = 0;  // used to indicate the return status
-
+	
+	long ret_eid;
         struct rec_data_evt *rd = NULL;
         struct rec_data_evt *rd_cli = NULL;
+        struct rec_data_evt *rd_ret = NULL;
 redo:
         // assume always in the same component as evt_split
         rd = rd_update(extern_evt, EVT_STATE_WAITING);
-	assert(rd);   
+	assert(rd);
 	/* printc("evt cli: evt_wait thd %d (extern_evt %d rd->evt id %ld)\n", */
 	/*        cos_get_thd_id(), extern_evt, rd->s_evtid); */
 
@@ -661,11 +660,11 @@ redo:
 	}
 #endif		
 
+	assert(rd->s_evtid > 0);
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid);
         if (unlikely (fault)){
 		printc("(ret %d)see a fault during evt_wait (thd %d in spd %ld)\n",
 		       ret, cos_get_thd_id(), cos_spd_id());
-		fault_wait = 1;
 #ifdef BENCHMARK_MEAS_WAIT
 		meas_flag = 1;
 		printc("start measuring.....\n");
@@ -686,8 +685,8 @@ redo:
         }
 
 	assert(rd && extern_evt == rd->c_evtid);
-	printc("evt:wait: cli: ret %d passed in extern_evt %d (thd %d)\n",
-	       ret, extern_evt, cos_get_thd_id());
+	/* printc("evt:wait: cli: ret %d passed in extern_evt %d (thd %d)\n", */
+	/*        ret, extern_evt, cos_get_thd_id()); */
 
 	/* Look up the client side id from the returned server side
 	 * id, if there is a re-split one. Here is the issue: a thread
@@ -704,15 +703,16 @@ redo:
 	 * of event id (e.g., no where else in the system will see the
 	 * same id)
 	 */
+	if (rd_cli = rdevt_lookup(&rec_evt_map_inv, ret)) ret_eid = rd_cli->c_evtid;
+	else ret_eid = ret;
 	
-	// test
-	if (unlikely(fault_wait && cos_spd_id() == 16 )) return 0;
-	if (rd_cli = rdevt_lookup(&rec_evt_map_inv, ret)) {
-		printc("evt cli: evt_wait thd %d see inverse (evt id %ld)\n", 
-		       cos_get_thd_id(), rd_cli->c_evtid);
-		return rd_cli->c_evtid;
-	}
-	else        return ret;
+        rd_ret = rdevt_lookup(&rec_evt_map, ret_eid);
+	if (rd_ret) {
+		ret = ret_eid*rd_ret->fault_triggered;
+		rd_ret->fault_triggered = 1;   // reset fault flag
+	} 
+	
+	return ret;
 }
 
 
@@ -752,7 +752,7 @@ redo:
 			CSTUB_FAULT_UPDATE();
 		}
                 /*
-o		  1) fault occurs in evt_trigger (before
+		  1) fault occurs in evt_trigger (before
 		  sched_wakeup).In this case, reflection will wake up
 		  threads in blocking wait and replay. Then new event
 		  will be created for evt_id. Replayed evt_trigger on
@@ -780,7 +780,8 @@ o		  1) fault occurs in evt_trigger (before
 	}
 
 	/* printc("evt cli: evt_trigger thd %d (ret %d)\n", cos_get_thd_id(), ret);	 */
-	return ret;
+	return 0;
+	/* return ret; */
 }
 
 CSTUB_FN(int, evt_free) (struct usr_inv_cap *uc,
@@ -792,7 +793,7 @@ CSTUB_FN(int, evt_free) (struct usr_inv_cap *uc,
         struct rec_data_evt *rd = NULL;
         struct rec_data_evt *rd_cli = NULL;
 redo:
-	printc("evt cli: evt_free(1) %d (evt id %ld)\n", cos_get_thd_id(), extern_evt);
+	/* printc("evt cli: evt_free(1) %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
         rd = rd_update(extern_evt, EVT_STATE_FREE);
 	assert(rd);
 	assert(rd->c_evtid == extern_evt);
@@ -820,17 +821,10 @@ redo:
 	}
 
 
-	printc("evt cli: evt_free(2) %d (evt id %ld)\n", cos_get_thd_id(), rd->s_evtid);
-	int tmp = rd->s_evtid;
+	/* printc("evt cli: evt_free(2) %d (evt id %ld)\n", cos_get_thd_id(), rd->s_evtid); */
+	rd_cli  = rdevt_lookup(&rec_evt_map_inv, rd->s_evtid);
+	if (unlikely(rd_cli)) rdevt_dealloc(&rec_evt_map_inv, rd_cli, rd->s_evtid);
 	rdevt_dealloc(&rec_evt_map, rd, rd->c_evtid);
-	rd_cli  = rdevt_lookup(&rec_evt_map_inv, tmp);
-	if (unlikely(rd_cli)) {
-		printc("evt cli: evt_free(3) %d (evt id %ld)\n", cos_get_thd_id(), rd_cli);
-		rdevt_dealloc(&rec_evt_map_inv, rd_cli, tmp);
-		/* assert(!rd_cli); */
-	}
-	
-	/* assert(!rd); */  // ???
 
 	return ret;
 }

@@ -182,7 +182,7 @@ ip_input(struct pbuf *p, struct netif *inp)
 #if LWIP_DHCP
   int check_ip_src=1;
 #endif /* LWIP_DHCP */
-
+  
   IP_STATS_INC(ip.recv);
   snmp_inc_ipinreceives();
 
