@@ -545,13 +545,14 @@ cos_init(void *arg)
 				accept_new(accept_fd);
 			} else {
 				tc.to = tor_get_to(t, &tc.teid);
-				assert(tc.to > 0);
 				if (unlikely(tmp_evt < 0)) {
 					fault_remove(&tc);
 					printc("[[[conn_mgr flt:goto redo(thd %d)]]]\n",
 					       cos_get_thd_id());
 					goto redo;
 				}
+				/* assert(tc.to > 0); */
+				if (tc.to <= 0) goto redo;
 				/* printc("[[[conn_mgr:from_data_new(thd %d)]]]\n", */
 				/*        cos_get_thd_id()); */
 				from_data_new(&tc);
@@ -561,13 +562,14 @@ cos_init(void *arg)
 			tc.teid = evt;
 			tc.to   = t;
 			tc.from = tor_get_from(t, &tc.feid);
-			assert(tc.from > 0);
 			if (unlikely(tmp_evt < 0)) {
 				fault_remove(&tc);
 				printc("[[[conn_mgr flt:goto redo(thd %d)]]]\n",
 				       cos_get_thd_id());
 				goto redo;
 			}
+			/* assert(tc.from > 0); */
+			if (tc.from <= 0) goto redo;
 			/* printc("[[[conn_mgr:to_data_new(thd %d)]]]\n", cos_get_thd_id()); */
 			to_data_new(&tc);
 		}

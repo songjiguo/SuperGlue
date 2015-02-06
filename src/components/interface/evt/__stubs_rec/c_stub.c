@@ -104,8 +104,6 @@ struct rec_data_evt {
 	long          p_evtid;  // parent event id (eg needs this)
 	int           grp;      // same as above
 
-	int           fault_triggered;
-
 	struct rec_data_evt *next, *prev;  // track all init events in a group
 	struct rec_data_evt *p_next, *p_prev;  // link all parent event
 
@@ -209,7 +207,6 @@ rd_cons(struct rec_data_evt *rd, spdid_t spdid, long c_evtid,
 
 	rd->state	 = state;
 	rd->fcnt	 = fcounter;
-	rd->fault_triggered = 1;
 
 	if (unlikely(recovery)) goto done;
 	
@@ -277,7 +274,6 @@ rd_recover_state(struct rec_data_evt *rd)
 		assert(tmp_evtid >= 1);
 
 		rd->s_evtid = tmp_evtid;      // update the old rd's server side evtid
-		if (!rd->grp) rd->fault_triggered = -1;
 		/* tmp_new->c_evtid = rd->c_evtid; // update the new rd's client side evtid */
 		/* printc("re-split an s_evt %d\n", rd->s_evtid); */
 
@@ -302,7 +298,6 @@ rd_recover_state(struct rec_data_evt *rd)
 				assert(!tmp_new);
 
 				tmp->s_evtid = tmp_evtid;
-				tmp->fault_triggered = -1;
 				/* tmp_new->c_evtid = tmp->c_evtid; */
 				/* printc("c3_tsplit new evtid %d\n", tmp->s_evtid); */
 			}
@@ -686,14 +681,11 @@ redo:
 
 	assert(rd && extern_evt == rd->c_evtid);
 	int tmp_flag = 1;
-	if (ret < 0) {
-		ret *= -1;
-		tmp_flag = -1;
-	}
+	if (ret < 0) tmp_flag = -1;  // woken due to pretended event
 
 	printc("cli: evt_wait ret %d passed in extern_evt %d (thd %d tmp_flag %d)\n",
 	       ret, extern_evt, cos_get_thd_id(), tmp_flag);
-
+	
 	/* Look up the client side id from the returned server side
 	 * id, if there is a re-split one. Here is the issue: a thread
 	 * can wait on an event that belongs to a group. So evt_wait
@@ -709,20 +701,16 @@ redo:
 	 * of event id (e.g., no where else in the system will see the
 	 * same id)
 	 */
-	if (rd_cli = rdevt_lookup(&rec_evt_map_inv, ret)) ret_eid = rd_cli->c_evtid;
-	else ret_eid = ret;
-	
-        rd_ret = rdevt_lookup(&rec_evt_map, ret_eid);
-	assert(rd_ret);
+	if (rd_cli = rdevt_lookup(&rec_evt_map_inv, ret*tmp_flag)) {
+		ret_eid = rd_cli->c_evtid;
+	} else ret_eid = ret*tmp_flag;
 
-	printc("rd->fault_triggered %d tmp_flag %d\n", 
-	       rd_ret->fault_triggered, tmp_flag);
-	if (rd_ret->fault_triggered == -1 && tmp_flag == 1) ret = -ret_eid;
-	else ret = ret_eid;
+	return ret_eid*tmp_flag;
 	
-	rd_ret->fault_triggered = 1;   // reset fault flag
-	
-	return ret;
+        /* rd_ret = rdevt_lookup(&rec_evt_map, ret_eid); */
+	/* assert(rd_ret); */
+	/* if (rd_ret->fault_triggered == -1 && tmp_flag == 1) ret = -ret_eid; */
+	/* else ret = ret_eid; */
 }
 
 

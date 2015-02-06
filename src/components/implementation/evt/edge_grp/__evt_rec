@@ -105,7 +105,7 @@ __evt_alloc(evt_t t, long parent, spdid_t spdid)
 	e->eid = ns_alloc(cos_spd_id(), spdid);
 	assert(e->eid > 0);
 
-	e->fault_triggered = 0;
+	e->fault_triggered = 1;
 
 	cvect_add(&evt_map, e, e->eid);
 done:
@@ -191,13 +191,12 @@ __evt_trigger(spdid_t spdid, long eid, int recovery)
 		
 		printc("__evt_trigger can not find evt %d, now finds evt %d by thd %d\n",
 		       eid, actual_evtid, cos_get_thd_id());
-		
 		e = cvect_lookup(&evt_map, actual_evtid);
-		if (!e->fault_triggered) e->fault_triggered = -1;   // first time see this
-		else if (e->fault_triggered == -1) e->fault_triggered = 1; // changed before
-		printc("e->fault_triggered %d\n", e->fault_triggered);
 	}
 	assert(e);
+	if (likely(!recovery)) e->fault_triggered = 1;
+	printc("e->fault_triggered %d\n", e->fault_triggered);
+
 	if (!recovery && e->type != EVT_NORMAL) {
 		printc("thread %d (from spd %d) is trying to trigger evt %d... but evt type is not EVT_NORMAL\n", cos_get_thd_id(), spdid, eid);
 		return -EINVAL;
@@ -256,7 +255,7 @@ __evt_wait(spdid_t spdid, long eid)
 	/* e = cmap_lookup(&evt_map, eid); */  // Jiguo
 	e = cvect_lookup(&evt_map, eid);
 	
-	printc("__evt_wait: e->fault_triggered %d\n", e->fault_triggered);
+	/* printc("__evt_wait: e->fault_triggered %d\n", e->fault_triggered); */
 
 	if (!e)                  return -EINVAL;
 	if (e->bthd)             return -EAGAIN;
@@ -319,12 +318,13 @@ __evt_wait(spdid_t spdid, long eid)
 	 * client's interface */
 
 	printc("__evt_wait: finally t->fault_triggered %d\n", t->fault_triggered);
-	long tmp_ret = t->eid;
-	if (t->fault_triggered == -1) {
-		tmp_ret = t->eid*t->fault_triggered;
-		t->fault_triggered = 1;
-	}
-	return tmp_ret;
+	/* long tmp_ret = t->eid; */
+	/* if (t->fault_triggered == -1) { */
+	/* 	tmp_ret = t->eid*t->fault_triggered; */
+	/* 	t->fault_triggered = 1; */
+	/* } */
+
+	return t->eid*t->fault_triggered;
 } 
 
 static long 
@@ -375,7 +375,9 @@ __c3_evt_split(spdid_t spdid, long parent, int group, int old_evtid)
 	ret = e->eid;
 	assert(ret > 0);
 	assert(old_evtid && old_evtid != e->eid);
-	
+
+	e->fault_triggered = -1;
+
 	if (ns_update(cos_spd_id(), old_evtid, e->eid, 0)) assert(0);
 	
 	int tmp;
