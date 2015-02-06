@@ -224,8 +224,8 @@ accept_new(int accept_fd)
 
 		teid = evt_get();
 
-		/* printc("conn_mgr: tsplit new teid %d for thd %d\n", teid, cos_get_thd_id()); */
-
+		printc("conn_mgr: tsplit new teid %d for thd %d (fs)\n", 
+		       teid, cos_get_thd_id());
 		assert(teid > 0);
 		to = tsplit(cos_spd_id(), td_root, "", 0, TOR_RW, teid);
 		if (to < 0) {
@@ -235,6 +235,21 @@ accept_new(int accept_fd)
 		connmgr_tsplit_cnt++;
 		mapping_add(from, to, feid, teid);
 	}
+}
+
+
+static void
+fault_remove(struct tor_conn *tc)
+{
+	assert(tc);
+	
+	mapping_remove(tc->from, tc->to, tc->feid, tc->teid);
+	server_trelease(cos_spd_id(), tc->from);
+	trelease(cos_spd_id(), tc->to);
+	assert(tc->feid && tc->teid);
+	evt_put(tc->feid);
+	evt_put(tc->teid);
+	return;
 }
 
 static void 
@@ -481,42 +496,49 @@ cos_init(void *arg)
 		/* printc("thd %d calling evt_wait all\n", cos_get_thd_id()); */
                 /* should check this return value */
 	redo:
-		/* printc("\n---->conn: thd %d evt_wail_all\n", cos_get_thd_id()); */
+		printc("\n---->conn: thd %d evt_wail_all\n", cos_get_thd_id());
 		tmp_evt = evt_wait_all();
-		/* printc("---->conn: thd %d event comes (returned evt %d)\n", */
-		/*        cos_get_thd_id(), tmp_evt); */
+		printc("---->conn: thd %d event comes (returned evt %d)\n",
+		       cos_get_thd_id(), tmp_evt);
 		if (unlikely(tmp_evt < 0)) evt = -tmp_evt;
 		else evt = tmp_evt;
 		
 		rdtscll(start);
 		t   = evt_torrent(evt);
-		/* printc("thd %d find t %d for event %d\n", cos_get_thd_id(), t, evt); */
+		printc("thd %d find t %d for event %d\n", cos_get_thd_id(), t, evt);
 		
-		if (unlikely(tmp_evt < 0)) {
-			if (t == accept_fd) {
-				/* printc("[[[conn_mgr flt:goto redo accept path(thd %d)]]]\n", */
-				/*        cos_get_thd_id()); */
-				goto redo; // accept path
-			}
-			if (t < 0) t *= -1;
-			if (cvect_lookup(&tor_from, t)) {
-				cvect_del(&tor_from, t);
-				server_trelease(cos_spd_id(), t);
-			} else if (cvect_lookup(&tor_to, t)) {
-				cvect_del(&tor_to, t);
-				trelease(cos_spd_id(), t);
-			}
-			if (cvect_lookup(&evts, evt)) cvect_del(&evts, evt);
-			evt_put(evt);
-			/* printc("[[[conn_mgr flt:goto redo(thd %d)]]]\n", */
-			/*        cos_get_thd_id()); */
-			goto redo;
-		}
+		/* if (unlikely(tmp_evt < 0)) { */
+		/* 	if (t == accept_fd) { */
+		/* 		printc("[[[conn_mgr flt:goto redo accept path(thd %d)]]]\n", */
+		/* 		       cos_get_thd_id()); */
+		/* 		goto redo; // accept path */
+		/* 	} */
+		/* 	if (t < 0) t *= -1; */
+		/* 	if (cvect_lookup(&tor_from, t)) { */
+		/* 		printc("conn_mgr: release torrent in cos_net\n"); */
+		/* 		cvect_del(&tor_from, t); */
+		/* 		server_trelease(cos_spd_id(), t); */
+		/* 	} else if (cvect_lookup(&tor_to, t)) { */
+		/* 		printc("conn_mgr: release torrent in https\n"); */
+		/* 		cvect_del(&tor_to, t); */
+		/* 		trelease(cos_spd_id(), t); */
+		/* 	} */
+		/* 	if (cvect_lookup(&evts, evt)) cvect_del(&evts, evt); */
+		/* 	evt_put(evt); */
+		/* 	printc("[[[conn_mgr flt:goto redo(thd %d)]]]\n", */
+		/* 	       cos_get_thd_id()); */
+		/* 	goto redo; */
+		/* } */
 		
 		if (t > 0) {
 			tc.feid = evt;
 			tc.from = t;
 			if (t == accept_fd) {
+				if (unlikely(tmp_evt < 0)) {
+					printc("conn_mgr flt:goto redo accept path(thd %d)\n",
+					       cos_get_thd_id());
+					goto redo;
+				}
 				tc.to = 0;
 				/* printc("[[[conn_mgr:accept_new(thd %d)]]]\n", */
 				/*        cos_get_thd_id()); */
@@ -524,11 +546,12 @@ cos_init(void *arg)
 			} else {
 				tc.to = tor_get_to(t, &tc.teid);
 				assert(tc.to > 0);
-				/* if (tc.to <= 0) { */
-				/* 	printc("andy\n"); */
-				/* 	/\* assert(0); *\/ */
-				/* 	continue; */
-				/* } */
+				if (unlikely(tmp_evt < 0)) {
+					fault_remove(&tc);
+					printc("[[[conn_mgr flt:goto redo(thd %d)]]]\n",
+					       cos_get_thd_id());
+					goto redo;
+				}
 				/* printc("[[[conn_mgr:from_data_new(thd %d)]]]\n", */
 				/*        cos_get_thd_id()); */
 				from_data_new(&tc);
@@ -539,11 +562,12 @@ cos_init(void *arg)
 			tc.to   = t;
 			tc.from = tor_get_from(t, &tc.feid);
 			assert(tc.from > 0);
-			/* if (tc.from <= 0) { */
-			/* 	printc("kevin\n"); */
-			/* 	/\* assert(0); *\/ */
-			/* 	continue; */
-			/* } */
+			if (unlikely(tmp_evt < 0)) {
+				fault_remove(&tc);
+				printc("[[[conn_mgr flt:goto redo(thd %d)]]]\n",
+				       cos_get_thd_id());
+				goto redo;
+			}
 			/* printc("[[[conn_mgr:to_data_new(thd %d)]]]\n", cos_get_thd_id()); */
 			to_data_new(&tc);
 		}

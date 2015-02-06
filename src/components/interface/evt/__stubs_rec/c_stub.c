@@ -685,8 +685,14 @@ redo:
         }
 
 	assert(rd && extern_evt == rd->c_evtid);
-	/* printc("evt:wait: cli: ret %d passed in extern_evt %d (thd %d)\n", */
-	/*        ret, extern_evt, cos_get_thd_id()); */
+	int tmp_flag = 1;
+	if (ret < 0) {
+		ret *= -1;
+		tmp_flag = -1;
+	}
+
+	printc("cli: evt_wait ret %d passed in extern_evt %d (thd %d tmp_flag %d)\n",
+	       ret, extern_evt, cos_get_thd_id(), tmp_flag);
 
 	/* Look up the client side id from the returned server side
 	 * id, if there is a re-split one. Here is the issue: a thread
@@ -707,10 +713,14 @@ redo:
 	else ret_eid = ret;
 	
         rd_ret = rdevt_lookup(&rec_evt_map, ret_eid);
-	if (rd_ret) {
-		ret = ret_eid*rd_ret->fault_triggered;
-		rd_ret->fault_triggered = 1;   // reset fault flag
-	} 
+	assert(rd_ret);
+
+	printc("rd->fault_triggered %d tmp_flag %d\n", 
+	       rd_ret->fault_triggered, tmp_flag);
+	if (rd_ret->fault_triggered == -1 && tmp_flag == 1) ret = -ret_eid;
+	else ret = ret_eid;
+	
+	rd_ret->fault_triggered = 1;   // reset fault flag
 	
 	return ret;
 }

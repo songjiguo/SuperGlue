@@ -54,6 +54,8 @@ struct evt {
 	struct evt *next, *prev;
 	u16_t bthd;	                    /* blocked thread */
 	spdid_t creator;
+
+	int fault_triggered;
 };
 
 #define CSLAB_ALLOC(sz)   alloc_page()
@@ -102,6 +104,9 @@ __evt_alloc(evt_t t, long parent, spdid_t spdid)
 	/* e->eid = cmap_add(&evt_map, e); */   //Jiguo
 	e->eid = ns_alloc(cos_spd_id(), spdid);
 	assert(e->eid > 0);
+
+	e->fault_triggered = 0;
+
 	cvect_add(&evt_map, e, e->eid);
 done:
 	return e;
@@ -184,14 +189,17 @@ __evt_trigger(spdid_t spdid, long eid, int recovery)
 		lock_take(&evt_lock);
 		assert(actual_evtid >= 1);  // the event has been freed by the woken thread ?
 		
-		/* printc("__evt_trigger now finds evt %d by thd %d\n", */
-		/*        actual_evtid, cos_get_thd_id()); */
+		printc("__evt_trigger can not find evt %d, now finds evt %d by thd %d\n",
+		       eid, actual_evtid, cos_get_thd_id());
 		
 		e = cvect_lookup(&evt_map, actual_evtid);
+		if (!e->fault_triggered) e->fault_triggered = -1;   // first time see this
+		else if (e->fault_triggered == -1) e->fault_triggered = 1; // changed before
+		printc("e->fault_triggered %d\n", e->fault_triggered);
 	}
 	assert(e);
 	if (!recovery && e->type != EVT_NORMAL) {
-		/* printc("thread %d (from spd %d) is trying to trigger evt %d... but evt type is not EVT_NORMAL\n", cos_get_thd_id(), spdid, eid); */
+		printc("thread %d (from spd %d) is trying to trigger evt %d... but evt type is not EVT_NORMAL\n", cos_get_thd_id(), spdid, eid);
 		return -EINVAL;
 	}
 	/* go up the tree toward the root... */
@@ -215,13 +223,13 @@ __evt_trigger(spdid_t spdid, long eid, int recovery)
 
 		t->status &= ~EVT_BLOCKED;
 		t->bthd    = 0;
-		/* printc("thread %d (from spd %d) has triggered blocked thd %d\n", */
-		/*        cos_get_thd_id(), spdid, tid); */
+		printc("thread %d (from spd %d) has found blocked thd %d to trigger\n",
+		       cos_get_thd_id(), spdid, tid);
 		return tid;
 	}
 	assert(!t->bthd);
 	
-	/* printc("thread %d (from spd %d) is trying to trigger evt %d... and return 0\n", cos_get_thd_id(), spdid, eid); */
+	printc("thread %d (from spd %d) is trying to trigger evt %d... and return 0\n", cos_get_thd_id(), spdid, eid);
 	return 0;
 }
 
@@ -247,6 +255,8 @@ __evt_wait(spdid_t spdid, long eid)
 
 	/* e = cmap_lookup(&evt_map, eid); */  // Jiguo
 	e = cvect_lookup(&evt_map, eid);
+	
+	printc("__evt_wait: e->fault_triggered %d\n", e->fault_triggered);
 
 	if (!e)                  return -EINVAL;
 	if (e->bthd)             return -EAGAIN;
@@ -301,7 +311,6 @@ __evt_wait(spdid_t spdid, long eid)
 		}
 		if (!more) break;
 	}
-	/* printc("evt_wait successfully return an event id %d\n", t->eid); */
 
 	/* Due to the client protocol (e.eg., web server uses the evt
 	 * id to find torrent id), we need find the actual old client
@@ -309,7 +318,13 @@ __evt_wait(spdid_t spdid, long eid)
 	 * not associated with any torrent), or we can track over
 	 * client's interface */
 
-	return t->eid;
+	printc("__evt_wait: finally t->fault_triggered %d\n", t->fault_triggered);
+	long tmp_ret = t->eid;
+	if (t->fault_triggered == -1) {
+		tmp_ret = t->eid*t->fault_triggered;
+		t->fault_triggered = 1;
+	}
+	return tmp_ret;
 } 
 
 static long 
@@ -505,8 +520,8 @@ evt_trigger(spdid_t spdid, long evt_id)
 	/* printc("evt_trigger: ns_lookup return actual id %d (passed in evt_id %d ret from __evt_trigger is %d)\n", actual_evtid, evt_id, ret); */
 	
 	if (ret > 0) {
-		/* printc("evt_trigger: thd %d is trying to wake up thread ret %d (evt %d)\n",  */
-		/*        cos_get_thd_id(), ret, evt_id); */
+		printc("evt_trigger: thd %d is trying to wake up thread ret %d (evt %d)\n",
+		       cos_get_thd_id(), ret, evt_id);
 		sched_wakeup(cos_spd_id(), ret);
 	}
 	/*  The reflection might have waoken up the blocked thread, so
