@@ -1022,7 +1022,7 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 	if (thd->wake_cnt) {
 		assert(thd->wake_cnt == 1);
 		cos_sched_lock_release();
-		printc("we already got a wakeup call for this thread %d\n", thd->id);
+		/* printc("we already got a wakeup call for this thread %d\n", thd->id); */
 		return 0;
 	}
 	/* dependency thread blocked??? */
@@ -1111,7 +1111,7 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 	 * the blocked threads over scheduler interface on stack. So
 	 * when the reflection over the scheduler server interface
 	 * might wake up thd again, the tracked thread is still on the
-	 * list. So the wake_cnt could be 2 in this special case. */
+	 * list. The wake_cnt could be 2 in this special case. */
 	/* assert(thd->wake_cnt == 1); */
 	if (unlikely(thd->wake_cnt == 2)) thd->wake_cnt--;   // Jiguo: special case
 	assert(thd->wake_cnt == 1);

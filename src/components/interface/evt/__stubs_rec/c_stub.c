@@ -683,8 +683,8 @@ redo:
 	int tmp_flag = 1;
 	if (ret < 0) tmp_flag = -1;  // woken due to pretended event
 
-	printc("cli: evt_wait ret %d passed in extern_evt %d (thd %d tmp_flag %d)\n",
-	       ret, extern_evt, cos_get_thd_id(), tmp_flag);
+	/* printc("cli: evt_wait ret %d passed in extern_evt %d (thd %d tmp_flag %d)\n", */
+	/*        ret, extern_evt, cos_get_thd_id(), tmp_flag); */
 	
 	/* Look up the client side id from the returned server side
 	 * id, if there is a re-split one. Here is the issue: a thread
@@ -791,8 +791,10 @@ CSTUB_FN(int, evt_free) (struct usr_inv_cap *uc,
         struct rec_data_evt *rd = NULL;
         struct rec_data_evt *rd_cli = NULL;
 redo:
-	/* printc("evt cli: evt_free(1) %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
+	/* printc("evt cli: evt_free(1) %d (evt id %ld in spd %ld)\n",  */
+	/*        cos_get_thd_id(), extern_evt, cos_spd_id()); */
         rd = rd_update(extern_evt, EVT_STATE_FREE);
+	if (!rd) return 0;  // test
 	assert(rd);
 	assert(rd->c_evtid == extern_evt);
 
