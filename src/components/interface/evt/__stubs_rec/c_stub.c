@@ -268,13 +268,13 @@ rd_recover_state(struct rec_data_evt *rd)
 		assert(!rd->grp || rd->grp == 1);
 		/* printc("has no parent\n"); */
 		/* printc("re-split an event in spd %d interface\n", rd->spdid); */
-		/* printc("re-split an c_evt %d\n", rd->c_evtid); */
 
 		tmp_evtid = c3_evt_split(cos_spd_id(), rd->p_evtid, rd->grp, rd->c_evtid);
 		assert(tmp_evtid >= 1);
 
 		rd->s_evtid = tmp_evtid;      // update the old rd's server side evtid
 		/* tmp_new->c_evtid = rd->c_evtid; // update the new rd's client side evtid */
+		/* printc("re-split an c_evt %d\n", rd->c_evtid); */
 		/* printc("re-split an s_evt %d\n", rd->s_evtid); */
 
 		/* rebuild all child events belong to the same group */
@@ -300,6 +300,8 @@ rd_recover_state(struct rec_data_evt *rd)
 				tmp->s_evtid = tmp_evtid;
 				/* tmp_new->c_evtid = tmp->c_evtid; */
 				/* printc("c3_tsplit new evtid %d\n", tmp->s_evtid); */
+				/* printc("re-split an c_evt %d\n", tmp->c_evtid); */
+				/* printc("re-split an s_evt %d\n", tmp->s_evtid);		 */
 			}
 		}
 	} else {
@@ -704,13 +706,9 @@ redo:
 	if (rd_cli = rdevt_lookup(&rec_evt_map_inv, ret*tmp_flag)) {
 		ret_eid = rd_cli->c_evtid;
 	} else ret_eid = ret*tmp_flag;
-
-	return ret_eid*tmp_flag;
 	
-        /* rd_ret = rdevt_lookup(&rec_evt_map, ret_eid); */
-	/* assert(rd_ret); */
-	/* if (rd_ret->fault_triggered == -1 && tmp_flag == 1) ret = -ret_eid; */
-	/* else ret = ret_eid; */
+	assert(ret_eid > 0);
+	return ret_eid*tmp_flag;
 }
 
 

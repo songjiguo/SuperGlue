@@ -140,13 +140,13 @@ static inline void
 evt_put(long evtid)
 {
 	// if we do not cache, it is faster? (8000 reqs/sec)
-	/* evt_free(cos_spd_id(), evtid); */
+	evt_free(cos_spd_id(), evtid);  // test
 	
-	if (ncached >= EVT_CACHE_SZ) {
-		evt_free(cos_spd_id(), evtid);
-	} else {
-		evt_cache[ncached++] = evtid;
-	}
+	/* if (ncached >= EVT_CACHE_SZ) { */
+	/* 	evt_free(cos_spd_id(), evtid); */
+	/* } else { */
+	/* 	evt_cache[ncached++] = evtid; */
+	/* } */
 }
 
 /* positive return value == "from", negative == "to" */
@@ -196,7 +196,7 @@ static cbuf_t debug_to;
 static int print_once = 0;
 
 static void 
-accept_new(int accept_fd)
+accept_new(int accept_fd, int test)
 {
 	int from, to, feid, teid;
 
@@ -244,20 +244,22 @@ fault_close(struct tor_conn *tc)
 	assert(tc);
 	
 	mapping_remove(tc->from, tc->to, tc->feid, tc->teid);
-	if (tc->from) server_trelease(cos_spd_id(), tc->from);
-	/* if (tc->to) trelease(cos_spd_id(), tc->to); */
-	if (tc->feid) evt_put(tc->feid);
-	if (tc->teid) evt_put(tc->teid);
+	server_trelease(cos_spd_id(), tc->from);
+	trelease(cos_spd_id(), tc->to);
+	evt_put(tc->feid);
+	evt_put(tc->teid);
 
 	return;
 }
 
-static void 
-from_data_new(struct tor_conn *tc)
+static int
+from_data_new(struct tor_conn *tc, int test)
 {
 	int from, to, amnt;
 	char *buf;
 	cbuf_t cb;
+
+	int ret = 0;
 
 	from = tc->from;
 	to   = tc->to;
@@ -269,7 +271,8 @@ from_data_new(struct tor_conn *tc)
 		/* printc("connmgr reads net (thd %d)\n", cos_get_thd_id()); */
 		amnt = server_tread(cos_spd_id(), from, cb, BUFF_SZ-1);
 		connmgr_from_tread_cnt++;
-		/* printc("from data new reads net amnt %d\n", amnt); */
+		if (test < 0) printc("from data new reads net amnt %d\n", amnt);
+		if (test < 0 && amnt == 0) goto close; // Jiguo: after a fault and pretend
 		if (0 == amnt) break;
 		else if (-EPIPE == amnt) {
 			goto close;
@@ -280,7 +283,7 @@ from_data_new(struct tor_conn *tc)
 		
 		assert(amnt <= BUFF_SZ);
 		if (amnt != (ret = twrite(cos_spd_id(), to, cb, amnt))) {
-			/* printc("conn_mgr: write failed w/ %d on fd %d\n", ret, to); */
+			printc("conn_mgr: write failed w/ %d on fd %d\n", ret, to);
 			goto close;
 		}
 		connmgr_twrite_cnt++;
@@ -289,7 +292,7 @@ from_data_new(struct tor_conn *tc)
 	}
 done:
 	cbuf_free(cb);
-	return;
+	return ret;
 close:
 	mapping_remove(from, to, tc->feid, tc->teid);
 	/* printc("net_close from_data_new (in trelease) (thd %d, from %d)\n", */
@@ -310,12 +313,14 @@ char *debug_buf_to = NULL;
 static int debug_amnt_to = 0;
 static cbuf_t debug_cb_to; 
 
-static void 
-to_data_new(struct tor_conn *tc)
+static int
+to_data_new(struct tor_conn *tc, int test)
 {
 	int from, to, amnt;
 	char *buf;
 	cbuf_t cb;
+
+	int ret = 0;
 
 	from = tc->from;
 	to   = tc->to;
@@ -327,7 +332,8 @@ to_data_new(struct tor_conn *tc)
 		/* printc("connmgr reads https\n"); */
 		amnt = tread(cos_spd_id(), to, cb, BUFF_SZ-1);
 		connmgr_tread_cnt++;
-		/* printc("to data new reads amnt %d\n", amnt); */
+		if (test < 0) printc("to data new reads amnt %d\n", amnt);
+		if (test < 0 && amnt == 0) goto close; // Jiguo: after a fault and pretend
 		if (0 == amnt) {
 			amnt_0_break_cnt++;
 			break;
@@ -351,7 +357,7 @@ to_data_new(struct tor_conn *tc)
 
 done:
 	cbuf_free(cb);
-	return;
+	return ret;
 close:
 	mapping_remove(from, to, tc->feid, tc->teid);
 	/* printc("net_close to_data_new (in trelease) (thd %d, from %d)\n",  */
@@ -483,19 +489,18 @@ cos_init(void *arg)
 	rdtscll(start);
 	int i, tmp_t;
 	static int tmp_first = 0;
-	long tmp_evt = 0;
 	/* event loop... */
 	while (1) {
 		struct tor_conn tc;
 		int t;
 		long evt;
-		
+		long tmp_evt = 0;
+
 		memset(&tc, 0, sizeof(struct tor_conn));
 		rdtscll(end);
 		meas_record(end-start);
 		/* printc("thd %d calling evt_wait all\n", cos_get_thd_id()); */
                 /* should check this return value */
-	redo:
 		/* printc("\n---->conn: thd %d evt_wail_all\n", cos_get_thd_id()); */
 		tmp_evt = evt_wait_all();
 		/* printc("---->conn: thd %d event comes (returned evt %d)\n", */
@@ -505,33 +510,39 @@ cos_init(void *arg)
 		
 		rdtscll(start);
 		t   = evt_torrent(evt);
-		/* printc("thd %d find t %d for event %d\n", cos_get_thd_id(), t, evt); */
+		if (!t) {
+			printc("---->conn: thd %d event comes (returned evt %d)\n",
+			       cos_get_thd_id(), tmp_evt);
+			printc("thd %d find t %d for event %d\n", cos_get_thd_id(), t, evt);
+			continue;
+		}
 		
 		if (t > 0) {
 			tc.feid = evt;
 			tc.from = t;
 			if (t == accept_fd) {
-				if (unlikely(tmp_evt < 0)) goto redo;
 				tc.to = 0;
 				/* printc("[[[conn_mgr:accept_new(thd %d)]]]\n", */
 				/*        cos_get_thd_id()); */
-				accept_new(accept_fd);
+				accept_new(accept_fd, tmp_evt);
 			} else {
 				tc.to = tor_get_to(t, &tc.teid);
-				if (unlikely(tmp_evt < 0 || tc.to <= 0)) goto redo;
+				/* if (unlikely(tmp_evt < 0)) goto redo; */
+				assert(tc.to > 0);
 				/* printc("[[[conn_mgr:from_data_new(thd %d)]]]\n", */
 				/*        cos_get_thd_id()); */
-				from_data_new(&tc);
+				from_data_new(&tc, tmp_evt);
 			}
 		} else {
 			t *= -1;
 			tc.teid = evt;
 			tc.to   = t;
 			tc.from = tor_get_from(t, &tc.feid);
-			if (unlikely(tmp_evt < 0 || tc.from <= 0)) goto redo;
+			/* if (unlikely(tmp_evt < 0)) goto redo; */
+			assert(tc.from > 0);
 			/* printc("[[[conn_mgr:to_data_new(thd %d)]]]\n", */
 			/*         cos_get_thd_id()); */
-			to_data_new(&tc);
+			to_data_new(&tc, tmp_evt);
 		}
 		cos_mpd_update();
 	}

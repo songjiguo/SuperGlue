@@ -194,8 +194,6 @@ __evt_trigger(spdid_t spdid, long eid, int recovery)
 		e = cvect_lookup(&evt_map, actual_evtid);
 	}
 	assert(e);
-	if (likely(!recovery)) e->fault_triggered = 1;
-	/* printc("e->fault_triggered %d\n", e->fault_triggered); */
 
 	if (!recovery && e->type != EVT_NORMAL) {
 		printc("thread %d (from spd %d) is trying to trigger evt %d... but evt type is not EVT_NORMAL\n", cos_get_thd_id(), spdid, eid);
@@ -204,6 +202,7 @@ __evt_trigger(spdid_t spdid, long eid, int recovery)
 	/* go up the tree toward the root... */
 	for (g = e ; g ; g = g->grp) {
 		g->status |= EVT_TRIGGERED;
+		if (likely(!recovery)) g->fault_triggered = 1;  // Jiguo
 		/* add ourselves to the triggered list of our parent,
 		 * and propagate the event up. */
 		if (g->grp) {
@@ -216,6 +215,7 @@ __evt_trigger(spdid_t spdid, long eid, int recovery)
 	}
 	assert(t);
 	t->status |= EVT_TRIGGERED;
+	if (likely(!recovery)) t->fault_triggered = 1; // Jiguo
 	if (t->status & EVT_BLOCKED) {
 		u16_t tid = t->bthd;
 		assert(tid);
