@@ -165,7 +165,7 @@ int __sg_sched_reflect(spdid_t spd, int src_spd, int cnt)
 		for (blk_thd = FIRST_LIST(&rd->blkthd, next, prev);
 		     blk_thd != &rd->blkthd;
 		     blk_thd = FIRST_LIST(blk_thd, next, prev)){
-			printc("(cnt)blocked thds %d\n", blk_thd->id);
+			/* printc("(cnt)blocked thds %d\n", blk_thd->id); */
 			ret++;
 		}
 	} else {

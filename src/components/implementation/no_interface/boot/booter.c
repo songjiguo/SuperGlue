@@ -436,17 +436,19 @@ failure_notif_fail(spdid_t caller, spdid_t failed)
 	struct spd_local_md *md;
 
 	LOCK();
-	printc("failed! booter: starting..... failed spd %d\n", failed);
+
+	/* printc("failed! booter: starting..... failed spd %d\n", failed); */
+
 //	boot_spd_caps_chg_activation(failed, 0);
 	md = &local_md[failed];
 	assert(md);
 	if (boot_spd_map_populate(md->h, failed, md->comp_info, 0)) BUG();
 	/* can fail if component had no boot threads: */
-	printc("failed! booter: boot_spd_thd\n");
+	/* printc("failed! booter: boot_spd_thd\n"); */
 	if (md->h->flags & COBJ_INIT_THD) boot_spd_thd(failed, 1);
 	if (boot_spd_caps(md->h, failed)) BUG();
 //	boot_spd_caps_chg_activation(failed, 1);
-	printc("booter: failure_notif_fail done\n\n");
+	/* printc("booter: failure_notif_fail done\n\n"); */
 	UNLOCK();
 }
 

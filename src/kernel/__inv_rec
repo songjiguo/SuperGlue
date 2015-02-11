@@ -562,7 +562,7 @@ cos_syscall_fault_cntl(int spdid, int option, spdid_t d_spdid, unsigned int cap_
 static vaddr_t
 thd_ipc_fault_notif(struct thread *thd, struct spd *dest_spd)
 {
-	printk("\n[[[[[[ cos: Fault is detected on INVOCATION ]]]]]]\n\n");
+	/* printk("\n[[[[[[ cos: Fault is detected on INVOCATION ]]]]]]\n\n"); */
 
 	return __fault_ipc_invoke(thd, 0, 0, &thd->regs, COS_FLT_FLT_NOTIF, dest_spd);
 }
@@ -570,7 +570,7 @@ thd_ipc_fault_notif(struct thread *thd, struct spd *dest_spd)
 static struct pt_regs *
 thd_pop_fault_notif(struct thread *thd, struct spd *dest_spd)
 {
-	printk("\n[[[[[[ cos: Fault is detected on POP ]]]]]]\n\n");
+	/* printk("\n[[[[[[ cos: Fault is detected on POP ]]]]]]\n\n"); */
 	__fault_ipc_invoke(thd, 0, 0, &thd->regs, COS_FLT_FLT_NOTIF, dest_spd);
 	return &thd->regs;
 }
@@ -579,7 +579,7 @@ static void
 thd_switch_fault_notif(struct thread *thd)
 {
 	struct thd_invocation_frame *thd_frame;
-	printk("\n[[[[[[ cos: Fault is detected on CONTEXT SWITCH to thread %d]]]]]]\n\n", thd_get_id(thd));
+	/* printk("\n[[[[[[ cos: Fault is detected on CONTEXT SWITCH to thread %d]]]]]]\n\n", thd_get_id(thd)); */
 	thd_frame = thd_invstk_top(thd);
 
 	__fault_ipc_invoke(thd, 0, 0, &thd->regs, COS_FLT_FLT_NOTIF, NULL);
@@ -590,7 +590,7 @@ thd_switch_fault_notif(struct thread *thd)
 void
 fault_int_notif(struct thread *thd)
 {
-	printk("\n[[[[[[ cos: Fault is detected on INTERRUPT thread %d]]]]]]\n\n", thd_get_id(thd));
+	/* printk("\n[[[[[[ cos: Fault is detected on INTERRUPT thread %d]]]]]]\n\n", thd_get_id(thd)); */
 	__fault_ipc_invoke(thd, 0, 0, &thd->regs, COS_FLT_FLT_NOTIF, NULL);
 	return;
 }
@@ -795,8 +795,7 @@ cos_syscall_thd_cntl(int spd_id, int op_thdid, long arg1, long arg2)
 	printk("cos: non-scheduler attempted to manipulate thread.\n");
 	return -1;
 	}
-*/
-	
+*/	
 	switch (op) {
 	case COS_THD_INV_FRAME:
 	{
@@ -809,19 +808,12 @@ cos_syscall_thd_cntl(int spd_id, int op_thdid, long arg1, long arg2)
 		i_spd = tif->spd;
 		return spd_get_index(i_spd);
 	}
-	case COS_SPD_FAULT_UPDATE_FRAME:
-	{
-		/* curr_spd->fault.cnt */
-		/* inv_frame->fault.cnt = spd->fault.cnt; */
-
-		return 0;
-	}
 	case COS_THD_INV_FRAME_REM:
 	{
 		int frame_offset = arg1;
 
-		printk("cos: remove frame....thd %d curr %d frame offset %d ",thd_get_id(thd), thd_get_id(curr), frame_offset);
-		printk("spd %d\n", spd_id);
+		/* printk("cos: remove frame....thd %d curr %d frame offset %d ",thd_get_id(thd), thd_get_id(curr), frame_offset); */
+		/* printk("spd %d\n", spd_id); */
 
 		if (frame_offset < 1) return -1;
 		/* if (thd == curr)       { */

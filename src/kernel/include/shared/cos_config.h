@@ -9,7 +9,7 @@
 #define RUNTIME                15 // seconds
 
 // After how many seconds should schedulers print out their information?
-#define SCHED_PRINTOUT_PERIOD  61
+#define SCHED_PRINTOUT_PERIOD  1
 #define COMPONENT_ASSERTIONS   1 // activate assertions in components?
 
 //#define LINUX_ON_IDLE          1 // should Linux be activated on Composite idle (set this if you want to stop Composite)
@@ -71,8 +71,7 @@
 
 /* For now, set INITONCE in cos_laoder and comment out boot_spd_caps in booter/fail function */
 /* to avoid the overhead of re-capability. Need fix later */
-#define LAZY_RECOVERY   1               // 1 will enable the lazy recovery, 0 for eager recovery
-#define SWIFI_ENABLE    0		// 1 enable the fault injection (swifi component), 0 disable
+#define LAZY_RECOVERY   1               // 1 enables the lazy recovery, 0 for eager recovery
 
 //#define LOG_MONITOR   1// Macro for low level log monitor 
 

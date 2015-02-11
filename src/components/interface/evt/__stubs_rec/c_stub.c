@@ -134,11 +134,11 @@ print_rde_info(struct rec_data_evt *rde)
 {
 	assert(rde);
 
-	printc("rde->spdid %d\n", rde->spdid);
-	printc("rde->c_evtid %d\n", rde->c_evtid);
-	printc("rde->s_evtid %d\n", rde->s_evtid);
+	printc("rde->spdid %d ", rde->spdid);
 	printc("rde->p_evtid %d\n", rde->p_evtid);
-	printc("rde->grp %d\n", rde->grp);
+	printc("rde->c_evtid %d ", rde->c_evtid);
+	printc("rde->s_evtid %d\n", rde->s_evtid);
+	/* printc("rde->grp %d\n", rde->grp); */
 
 	return;
 }
@@ -258,6 +258,7 @@ static void
 rd_recover_state(struct rec_data_evt *rd)
 {
 	struct rec_data_evt *prd = NULL, *tmp = NULL, *tmp_new = NULL;
+	struct rec_data_evt *inv_rd; // remove existing inverse rd
 	long tmp_evtid;
 
 	assert(rd && rd->c_evtid >= 1);
@@ -269,13 +270,21 @@ rd_recover_state(struct rec_data_evt *rd)
 		/* printc("has no parent\n"); */
 		/* printc("re-split an event in spd %d interface\n", rd->spdid); */
 
+		/* If there is any inverse record tracked, remove it
+		 * before create a new inverse record (guarantee
+		 * uniqueness when lookup client evt_id when return
+		 * evt_wait) */
+		inv_rd = rdevt_lookup(&rec_evt_map_inv, rd->s_evtid);
+		if (unlikely(inv_rd)) rdevt_dealloc(&rec_evt_map_inv, inv_rd, rd->s_evtid);
+		
+		/* create a new event for old rd->c_evtid */
 		tmp_evtid = c3_evt_split(cos_spd_id(), rd->p_evtid, rd->grp, rd->c_evtid);
 		assert(tmp_evtid >= 1);
 
 		rd->s_evtid = tmp_evtid;      // update the old rd's server side evtid
 		/* tmp_new->c_evtid = rd->c_evtid; // update the new rd's client side evtid */
-		/* printc("re-split an c_evt %d\n", rd->c_evtid); */
-		/* printc("re-split an s_evt %d\n", rd->s_evtid); */
+		/* print_rde_info(rd); */
+		/* printc("\n-----------------\n"); */
 
 		/* rebuild all child events belong to the same group */
 		if (rd->grp == 1) {
@@ -290,6 +299,11 @@ rd_recover_state(struct rec_data_evt *rd)
 				/* printc("\n>>found an evt %d (thd %d)\n", */
 				/*        tmp->c_evtid, cos_get_thd_id()); */
 				/* printc("its parent evt %d\n", tmp->p_evtid); */
+				inv_rd = rdevt_lookup(&rec_evt_map_inv, tmp->s_evtid);
+				if (unlikely(inv_rd)) {
+					rdevt_dealloc(&rec_evt_map_inv, inv_rd, tmp->s_evtid);
+				}
+
 				tmp_evtid = c3_evt_split(cos_spd_id(), tmp->p_evtid,
 							 tmp->grp, tmp->c_evtid);
 				assert(tmp_evtid >= 1);
@@ -300,8 +314,7 @@ rd_recover_state(struct rec_data_evt *rd)
 				tmp->s_evtid = tmp_evtid;
 				/* tmp_new->c_evtid = tmp->c_evtid; */
 				/* printc("c3_tsplit new evtid %d\n", tmp->s_evtid); */
-				/* printc("re-split an c_evt %d\n", tmp->c_evtid); */
-				/* printc("re-split an s_evt %d\n", tmp->s_evtid);		 */
+				/* print_rde_info(tmp); */
 			}
 		}
 	} else {
@@ -323,8 +336,8 @@ rd_recover_state(struct rec_data_evt *rd)
 void 
 events_replay_all()
 {
-	printc("now thd %d is in spd %ld interface and ready to recover all events\n",
-	       cos_get_thd_id(), cos_spd_id());
+	/* printc("now thd %d is in spd %ld interface and ready to recover all events\n", */
+	/*        cos_get_thd_id(), cos_spd_id()); */
 	
 	recover_all = 1;
 
@@ -343,8 +356,8 @@ events_replay_all()
 		rd_recover_state(rde);
 	}
 
-	printc("thd %d in spd %ld interface has recovered all events\n",
-	       cos_get_thd_id(), cos_spd_id());
+	/* printc("thd %d in spd %ld interface has recovered all events\n", */
+	/*        cos_get_thd_id(), cos_spd_id()); */
 
 	return;
 }
@@ -503,8 +516,8 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
-		printc("see a fault during evt_create (thd %d in spd %ld)\n",
-		       cos_get_thd_id(), cos_spd_id());
+		/* printc("see a fault during evt_create (thd %d in spd %ld)\n", */
+		/*        cos_get_thd_id(), cos_spd_id()); */
 #ifdef BENCHMARK_MEAS_CREATE
 		meas_flag = 1;
 		printc("start measuring.....\n");
@@ -604,8 +617,8 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, p_evt, grp);
 	if (unlikely (fault)){
-		printc("see a fault during evt_split (thd %d in spd %ld)\n",
-		       cos_get_thd_id(), cos_spd_id());
+		/* printc("see a fault during evt_split (thd %d in spd %ld)\n", */
+		/*        cos_get_thd_id(), cos_spd_id()); */
 #ifdef BENCHMARK_MEAS_SPLIT
 		meas_flag = 1;
 		printc("start measuring.....\n");
@@ -631,6 +644,8 @@ redo:
 	return ret;
 }
 
+
+int last_evt = 0;
 CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
 			  spdid_t spdid, long extern_evt)
 {
@@ -660,8 +675,8 @@ redo:
 	assert(rd->s_evtid > 0);
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid);
         if (unlikely (fault)){
-		printc("(ret %d)see a fault during evt_wait (thd %d in spd %ld)\n",
-		       ret, cos_get_thd_id(), cos_spd_id());
+		/* printc("(ret %d)see a fault during evt_wait (thd %d in spd %ld)\n", */
+		/*        ret, cos_get_thd_id(), cos_spd_id()); */
 #ifdef BENCHMARK_MEAS_WAIT
 		meas_flag = 1;
 		printc("start measuring.....\n");
@@ -704,6 +719,11 @@ redo:
 	 * same id)
 	 */
 	if (rd_cli = rdevt_lookup(&rec_evt_map_inv, ret*tmp_flag)) {
+		/* if (last_evt != ret*tmp_flag) { */
+		/* 	last_evt = ret*tmp_flag; */
+		/* 	printc("cli wait ret %d (tmp_flag %d thd %d rd_cli->cid %d rd_cli->sid %d)\n", */
+		/* 	       ret, tmp_flag, cos_get_thd_id(), rd_cli->c_evtid, rd_cli->s_evtid); */
+		/* } */
 		ret_eid = rd_cli->c_evtid;
 	} else ret_eid = ret*tmp_flag;
 	
@@ -734,8 +754,8 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
 	if (unlikely(fault)){
-		printc("see a fault during evt_trigger (thd %d in spd %ld)\n",
-		       cos_get_thd_id(), cos_spd_id());
+		/* printc("see a fault during evt_trigger (thd %d in spd %ld)\n", */
+		/*        cos_get_thd_id(), cos_spd_id()); */
 #ifdef BENCHMARK_MEAS_TRIGGER
 		meas_flag = 1;
 		printc("start measuring.....\n");
@@ -743,8 +763,8 @@ redo:
 #endif		
 		struct rec_data_evt *tmp = rdevt_lookup(&rec_evt_map, extern_evt);
 		if (unlikely(!tmp)) {
-			printc("evt_trigger cli: (thd %d spd %ld) evt %d is not tracked\n",
-			       cos_get_thd_id(), cos_spd_id(), extern_evt);
+			/* printc("evt_trigger cli: (thd %d spd %ld) evt %d is not tracked\n", */
+			/*        cos_get_thd_id(), cos_spd_id(), extern_evt); */
 			CSTUB_FAULT_UPDATE();
 		}
                 /*
@@ -807,8 +827,8 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid);
 	if (unlikely (fault)) {
-		printc("see a fault during evt_free (thd %d in spd %ld)\n",
-		       cos_get_thd_id(), cos_spd_id());
+		/* printc("see a fault during evt_free (thd %d in spd %ld)\n", */
+		/*        cos_get_thd_id(), cos_spd_id()); */
 #ifdef BENCHMARK_MEAS_FREE
 		meas_flag = 1;
 		printc("start measuring.....\n");

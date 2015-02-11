@@ -34,7 +34,7 @@ static inline int cos_switch_thread(unsigned short int thd_id, unsigned short in
 	cos_next->next_thd_id = thd_id;
 	cos_next->next_thd_flags = flags;
 
-	printc("cos_switch_thread -- thd_id %d\n", thd_id);
+	/* printc("cos_switch_thread -- thd_id %d\n", thd_id); */
 	
 	/* kernel will read next thread information from cos_next */
 	return cos___switch_thread(thd_id, flags); 

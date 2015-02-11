@@ -238,9 +238,9 @@ pop_fault_detect(struct thd_invocation_frame *frame)
 	/* 	/\* print_regs(&curr->regs); *\/ */
 	/* } */
 	if (frame->fault.cnt < frame->spd->fault.cnt) {
-		printk("cos: pop_frame spd %d spd fault cnt %d frame fault cnt %d\n", 
-		       spd_get_index(frame->spd), frame->spd->fault.cnt,
-		       frame->fault.cnt);
+		/* printk("cos: pop_frame spd %d spd fault cnt %d frame fault cnt %d\n",  */
+		/*        spd_get_index(frame->spd), frame->spd->fault.cnt, */
+		/*        frame->fault.cnt); */
 		frame->fault.cnt = frame->spd->fault.cnt;
 		return 1;
 	}
@@ -367,6 +367,24 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 		printk("cos: invalid fault cnt  call for spd %d or spd %d\n",
 		       spdid, d_spdid);
 		return -1;
+	}
+
+	if (option == COS_SPD_FAULT_UPDATE_FRAME) {
+		struct thread *thd, *curr;
+		struct spd *i_spd;
+		struct spd *curr_spd;
+		struct thd_invocation_frame *tif;
+
+		curr = core_get_curr_thd();
+		tif = thd_invstk_base(curr);
+		if (NULL == tif) return -1;
+		i_spd = tif->spd;
+		assert(d_spdid == spd_get_index(i_spd));
+		printk("thd %d home spd %d fault_cnt %d -- frame fault_cnt %d\n",
+		       curr->thread_id, spd_get_index(i_spd),
+		       d_spd->fault.cnt, tif->fault.cnt);
+		tif->fault.cnt = d_spd->fault.cnt;
+		return 0;
 	}
 
 	cap_no >>= 20;

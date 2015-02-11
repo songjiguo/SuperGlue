@@ -80,8 +80,8 @@ void events_replay_all();
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
 	static int init_first = 0;
-	printc("upcall type %d, core %ld, thd %d, args %p %p %p\n",
-	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
+	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p\n", */
+	/*        t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3); */
 
 	static int first = 1;
 	if (first) { 
@@ -100,8 +100,8 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		break;
 	}
 	case COS_UPCALL_RECEVT:
-		printc("popcgi: upcall to recover the event (thd %d, spd %ld)\n",
-		       cos_get_thd_id(), cos_spd_id());
+		/* printc("popcgi: upcall to recover the event (thd %d, spd %ld)\n", */
+		/*        cos_get_thd_id(), cos_spd_id()); */
 #ifdef EVT_C3
 		events_replay_all();
 #endif

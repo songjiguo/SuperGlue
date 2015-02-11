@@ -271,8 +271,13 @@ from_data_new(struct tor_conn *tc, int test)
 		/* printc("connmgr reads net (thd %d)\n", cos_get_thd_id()); */
 		amnt = server_tread(cos_spd_id(), from, cb, BUFF_SZ-1);
 		connmgr_from_tread_cnt++;
-		if (test < 0) printc("from data new reads net amnt %d\n", amnt);
-		if (test < 0 && amnt == 0) goto close; // Jiguo: after a fault and pretend
+		/* if (test < 0) printc("from data new reads net amnt %d\n", amnt); */
+		if (test < 0 && amnt == 0) {
+			mapping_remove(from, to, tc->feid, tc->teid);
+			server_trelease(cos_spd_id(), from);
+			trelease(cos_spd_id(), to);
+			goto done; // Jiguo: after a fault and pretend
+		}
 		if (0 == amnt) break;
 		else if (-EPIPE == amnt) {
 			goto close;
@@ -332,8 +337,14 @@ to_data_new(struct tor_conn *tc, int test)
 		/* printc("connmgr reads https\n"); */
 		amnt = tread(cos_spd_id(), to, cb, BUFF_SZ-1);
 		connmgr_tread_cnt++;
-		if (test < 0) printc("to data new reads amnt %d\n", amnt);
-		if (test < 0 && amnt == 0) goto close; // Jiguo: after a fault and pretend
+		/* if (test < 0) printc("to data new reads amnt %d\n", amnt); */
+		/* should not delete event !!!! see explanation in loop */
+		if (test < 0 && amnt == 0) {
+			mapping_remove(from, to, tc->feid, tc->teid);
+			server_trelease(cos_spd_id(), from);
+			trelease(cos_spd_id(), to);
+			goto done; // Jiguo: after a fault and pretend
+		}
 		if (0 == amnt) {
 			amnt_0_break_cnt++;
 			break;
@@ -490,6 +501,7 @@ cos_init(void *arg)
 	int i, tmp_t;
 	static int tmp_first = 0;
 	/* event loop... */
+	/* int last_evt = 0; */
 	while (1) {
 		struct tor_conn tc;
 		int t;
@@ -500,7 +512,6 @@ cos_init(void *arg)
 		rdtscll(end);
 		meas_record(end-start);
 		/* printc("thd %d calling evt_wait all\n", cos_get_thd_id()); */
-                /* should check this return value */
 		/* printc("\n---->conn: thd %d evt_wail_all\n", cos_get_thd_id()); */
 		tmp_evt = evt_wait_all();
 		/* printc("---->conn: thd %d event comes (returned evt %d)\n", */
@@ -511,9 +522,35 @@ cos_init(void *arg)
 		rdtscll(start);
 		t   = evt_torrent(evt);
 		if (!t) {
-			printc("---->conn: thd %d event comes (returned evt %d)\n",
-			       cos_get_thd_id(), tmp_evt);
-			printc("thd %d find t %d for event %d\n", cos_get_thd_id(), t, evt);
+			/* printc("---->conn: thd %d event comes (returned evt %d)\n", */
+			/*        cos_get_thd_id(), tmp_evt); */
+
+			/* if (last_evt != evt) { */
+			/* 	printc("thd %d find t %d for event %d\n",  */
+			/* 	       cos_get_thd_id(), t, evt); */
+			/* 	last_evt = evt; */
+			/* } */
+
+			/* When even t manager fails, the mapping
+			 * between event and torrent might have not
+			 * been set or has been removed. For example,
+			 * current thread has created a new event
+			 * (evt_get()), but before evt_put is called
+			 * in from_data or to_data, the fault occurs
+			 * when network thread calls
+			 * event_trigger. When upcall recovery thread
+			 * finishes rebuilding events, and "pretended
+			 * triggered". If we detect this is pretended
+			 * trigger, we will return and evt_wait
+			 * again. Now when the event is truly
+			 * triggered, we do not have a torrent
+			 * associated since it has been treleased.
+			 * ....but thread resume and remove event
+			 * anyway? So we do not evt_put here?
+			 *
+			 *
+			 */
+			/* evt_put(evt); */
 			continue;
 		}
 		
@@ -609,8 +646,8 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		return;
 	}
 	case COS_UPCALL_RECEVT:
-		printc("conn_mgr: upcall to recover the event (thd %d, spd %ld)\n",
-		       cos_get_thd_id(), cos_spd_id());
+		/* printc("conn_mgr: upcall to recover the event (thd %d, spd %ld)\n", */
+		/*        cos_get_thd_id(), cos_spd_id()); */
 #ifdef EVT_C3
 		events_replay_all();
 #endif

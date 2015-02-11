@@ -12,7 +12,7 @@
 !sm.o,a1;!mpool.o, ;!buf.o,a5;!bufp.o, ;!va.o,a2;!vm.o,a1;!tif.o,a2;!tip.o, ;\
 !port.o, ;!l.o,a4;!te.o,a3;!tnet.o, ;!eg.o,a5;!evtns.o, ;\
 !stconnmt.o, '1:10:200:/bind:0:%d/listen:255';\
-!pfr.o, ;!httpt.o,a8;!rfs.o, ;!initfs.o,a3;!unique_map.o, ;!popcgi.o, :\
+!pfr.o, ;!httpt.o,a8;!rfs.o, ;!initfs.o,a3;!unique_map.o, ;!popcgi.o, ;!fi.o, :\
 \
 c0.o-llboot.o;\
 fprr.o-print.o|[parent_]mm.o|[faulthndlr_]llboot.o;\
@@ -20,7 +20,7 @@ mm.o-print.o|[parent_]llboot.o|[faulthndlr_]llboot.o;\
 boot.o-print.o|fprr.o|mm.o|llboot.o;\
 \
 l.o-fprr.o|mm.o|print.o|pfr.o;\
-te.o-sm.o|print.o|fprr.o|mm.o|va.o|eg.o;\
+te.o-sm.o|print.o|fprr.o|mm.o|va.o|eg.o|pfr.o;\
 sm.o-print.o|fprr.o|mm.o|boot.o|va.o|l.o|mpool.o;\
 pfr.o-fprr.o|mm.o|print.o|boot.o;\
 buf.o-boot.o|sm.o|fprr.o|print.o|l.o|mm.o|va.o|mpool.o;\
@@ -28,6 +28,7 @@ bufp.o-sm.o|fprr.o|print.o|l.o|mm.o|va.o|mpool.o|buf.o;\
 mpool.o-print.o|fprr.o|mm.o|boot.o|va.o|l.o;\
 vm.o-fprr.o|print.o|mm.o|l.o|boot.o;\
 va.o-fprr.o|print.o|mm.o|l.o|boot.o|vm.o;\
+fi.o-sm.o|va.o|fprr.o|print.o|mm.o|te.o|eg.o;\
 \
 stconnmt.o-sm.o|print.o|fprr.o|mm.o|va.o|l.o|httpt.o|te.o|[server_]tnet.o|buf.o|bufp.o|eg.o|pfr.o;\
 \

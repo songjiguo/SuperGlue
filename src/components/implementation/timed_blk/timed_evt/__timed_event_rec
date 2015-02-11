@@ -35,7 +35,7 @@
 #define TAKE(spdid) 	if (sched_component_take(spdid)) return -1;
 #define RELEASE(spdid)	if (sched_component_release(spdid)) return -1;
 
-static int test_control = 0;
+static int test_num = 0;
 
 extern int sched_cs_state(spdid_t spdid);
 
@@ -351,8 +351,8 @@ redo:
 	/* if return from the fault and the time is not expired, keep
 	 * waiting. No need to take lock? */
 	if (unlikely(wait_ret < 0 && !EMPTY_LIST(te, next, prev))) {
-		printc("thd %d is going to call evt_wait in spd %ld again\n",
-		       cos_get_thd_id(), cos_spd_id());
+		/* printc("thd %d is going to call evt_wait in spd %ld again\n", */
+		/*        cos_get_thd_id(), cos_spd_id()); */
 		goto redo;  
 	}
 
@@ -571,8 +571,9 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_CREATE_BEFORE)
 	/* printc("in periodic_wake_create: thd %d spd %d\n",  */
 	/*        cos_get_thd_id(), spdinv);		 */
-	test_control++;
-	if (spdinv == 16 && cos_get_thd_id() == 13 && test_control == 1) {
+	/* test_num++; */
+	/* if (spdinv == 16 && cos_get_thd_id() == 13 && test_num == 1) { */
+	if (test_num++ > 1000)
 		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
@@ -608,10 +609,11 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 	RELEASE(spdid);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_CREATE_AFTER)
-	test_control++;
-	/* printc("in periodic_wake_create: thd %d spd %d, test_control %d\n", */
-	/*        cos_get_thd_id(), spdinv, test_control); */
-	if (spdinv == 16 && cos_get_thd_id() == 13 && test_control == 1) {
+	/* test_num++; */
+	/* /\* printc("in periodic_wake_create: thd %d spd %d, test_num %d\n", *\/ */
+	/* /\*        cos_get_thd_id(), spdinv, test_num); *\/ */
+	/* if (spdinv == 16 && cos_get_thd_id() == 13 && test_num == 1) { */
+	if (test_num++ > 1000)
 		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
@@ -672,10 +674,11 @@ int periodic_wake_wait(spdid_t spdinv)
 	rdtscll(t);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_WAIT_BEFORE)
-	test_control++;
-	printc("in periodic_wake_wait: thd %d spd %d, test_control %d\n",
-	       cos_get_thd_id(), spdinv, test_control);
-	if (spdinv == 16 && cos_get_thd_id() == 13 && test_control >= 2) {
+	/* test_num++; */
+	/* printc("in periodic_wake_wait: thd %d spd %d, test_num %d\n", */
+	/*        cos_get_thd_id(), spdinv, test_num); */
+	/* if (spdinv == 16 && cos_get_thd_id() == 13 && test_num >= 2) { */
+	if (test_num++ > 1000)
 		printc("trigger fault in periodic_wake_wait: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
@@ -716,7 +719,7 @@ redo:
 	wait_ret = evt_wait(cos_spd_id(), te->evt);
 	/* if return from the fault and the time is not expired, keep waiting */
 	if (unlikely(wait_ret < 0 && !EMPTY_LIST(te, next, prev))) {
-		printc("periodic_wake_wait: thd %d calls evt_wait again\n", cos_get_thd_id());
+		/* printc("periodic_wake_wait: thd %d calls evt_wait again\n", cos_get_thd_id()); */
 		goto redo;
 	}
 
@@ -727,10 +730,11 @@ redo:
 	/* printc("leaving the periodic wake wait\n"); */
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_WAIT_AFTER)
-	test_control++;
-	/* printc("in periodic_wake_wait: thd %d spd %d, test_control %d\n", */
-	/*        cos_get_thd_id(), spdinv, test_control); */
-	if (spdinv == 16 && cos_get_thd_id() == 13 && test_control >= 2) {
+	/* test_num++; */
+	/* /\* printc("in periodic_wake_wait: thd %d spd %d, test_num %d\n", *\/ */
+	/* /\*        cos_get_thd_id(), spdinv, test_num); *\/ */
+	/* if (spdinv == 16 && cos_get_thd_id() == 13 && test_num >= 2) { */
+	if (test_num++ > 1000)
 		printc("trigger fault in periodic_wake_wait: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
@@ -775,8 +779,7 @@ static void start_timer_thread(void)
 	sched_block(spdid, 0);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_TIMER_THD_BEFORE)
-	test_control++;
-	if (test_control == 1) {
+	if (test_num++ > 5) {
 		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
@@ -823,9 +826,8 @@ static void start_timer_thread(void)
 			sched_timeout(spdid, wakeup);
 			
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_TIMER_THD_AFTER)
-			test_control++;
-			if (test_control == 5) {
-				printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
+			if (test_num++ > 5) {
+				printc("trigger fault in timer: thd %d spd %d\n", 
 				       cos_get_thd_id(), spdid);
 				assert(0);
 			}
@@ -900,8 +902,8 @@ void events_replay_all();
 
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
-	printc("upcall type %d, core %ld, thd %d, args %p %p %p\n",
-	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
+	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p\n", */
+	/*        t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3); */
 	switch (t) {
 	case COS_UPCALL_THD_CREATE:
 	{
@@ -912,8 +914,8 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		break;
 	}
 	case COS_UPCALL_RECEVT:
-		printc("time_event: upcall to recover the event (thd %d, spd %ld)\n",
-		       cos_get_thd_id(), cos_spd_id());
+		/* printc("time_event: upcall to recover the event (thd %d, spd %ld)\n", */
+		/*        cos_get_thd_id(), cos_spd_id()); */
 #ifdef EVT_C3
 		events_replay_all();
 #endif

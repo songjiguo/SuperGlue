@@ -30,10 +30,9 @@ static int test_num = 0;
 /* Jiguo: A thread might trigger an event that has not been re-created
  * by a different thread. So if an event is not found when trigger,
  * the thread will block and woken later by the thread that re-create
- * that event. For now, use link list for simplicity and a thread can
- * at most block due one missing event -- Not good!!! Unbounded !!!*/
-
-volatile unsigned long long test_timestamp;
+ * * that event. For now, use link list for simplicity and a thread
+ * can * at most block due one missing event -- Not good!!! Unbounded
+ * !!!  This has been changed. See interface explanation */
 
 typedef enum {
 	EVT_GROUP, 
@@ -90,16 +89,8 @@ __evt_alloc(evt_t t, long parent, spdid_t spdid)
 	e->grp  = p;
 	e->creator = spdid;
 	if (p) {
-		if (p->iachildren) {
-			/* printc("(2) thd %d add alloced new evt %d grp evt %d\n",  */
-			/*        cos_get_thd_id(), e->eid, p->eid);			 */
-			ADD_LIST(p->iachildren, e, next, prev);
-		}
-		else {
-			/* printc("(6) thd %d set evt %d grp evt %d's iachildren\n",  */
-			/*        cos_get_thd_id(), e->eid, p->eid);			 */
-			p->iachildren = e;
-		}
+		if (p->iachildren) ADD_LIST(p->iachildren, e, next, prev);
+		else p->iachildren = e;
 	}
 	/* e->eid = cmap_add(&evt_map, e); */   //Jiguo
 	e->eid = ns_alloc(cos_spd_id(), spdid);
@@ -196,7 +187,7 @@ __evt_trigger(spdid_t spdid, long eid, int recovery)
 	assert(e);
 
 	if (!recovery && e->type != EVT_NORMAL) {
-		printc("thread %d (from spd %d) is trying to trigger evt %d... but evt type is not EVT_NORMAL\n", cos_get_thd_id(), spdid, eid);
+		/* printc("thread %d (from spd %d) is trying to trigger evt %d... but evt type is not EVT_NORMAL\n", cos_get_thd_id(), spdid, eid); */
 		return -EINVAL;
 	}
 	/* go up the tree toward the root... */
@@ -455,8 +446,6 @@ long evt_wait(spdid_t spdid, long evt_id)
 		/* if (spdid == 20 && cos_get_thd_id() == 15 && test_num++ > 50) { */
 		if (test_num++ > 100000) {
 			printc("trigger fault in evt_wait before (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
-			rdtscll(test_timestamp);
-			printc("trigger time stamp is %lld\n", test_timestamp);
 			assert(0);
 		}
 #endif
@@ -486,6 +475,7 @@ long evt_wait(spdid_t spdid, long evt_id)
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_AFTER)
 		/* printc("trigger fault in evt_wait after (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
 		/* if (spdid == 20 && cos_get_thd_id() == 15 && test_num++ > 50) { */
+
 		if (test_num++ > 100000) {
 			printc("trigger fault in evt_wait after (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
 			assert(0);
@@ -509,6 +499,7 @@ evt_trigger(spdid_t spdid, long evt_id)
 	/* printc("trigger fault in evt_trigger before: thd %d passed spd %d (evt %d)\n", */
 	/*        cos_get_thd_id(), spdid, evt_id); */
 	/* if (spdid == 17 && cos_get_thd_id() == 10 && test_num++ > 5000) { */
+
 	if (test_num++ > 100000) {
 		printc("trigger fault in evt_trigger before: thd %d passed spd %d (evt %d)\n",
 		       cos_get_thd_id(), spdid, evt_id);
@@ -535,8 +526,6 @@ evt_trigger(spdid_t spdid, long evt_id)
 	if (test_num++ > 100000) {
 		printc("trigger fault in evt_trigger after: thd %d passed spd %d (evt %d)\n",
 		       cos_get_thd_id(), spdid, evt_id);
-		rdtscll(test_timestamp);
-		printc("trigger time stamp is %lld\n", test_timestamp);
 		assert(0);
 	}
 #endif
@@ -577,7 +566,7 @@ rd_reflection()
 	/* printc("evt relfects on sched: %d objs\n", count_obj); */
 	while (count_obj--) {
 		wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0);
-		printc("thread %d wake_thd %d\n", cos_get_thd_id(), wake_thd);
+		/* printc("thread %d wake_thd %d\n", cos_get_thd_id(), wake_thd); */
 		sched_wakeup(cos_spd_id(), wake_thd);
 	}
 
@@ -673,8 +662,8 @@ int evt_trigger_all(spdid_t spdid) {return 0;}
 
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
-	printc("upcall type %d, core %ld, thd %d, args %p %p %p\n",
-	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
+	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p\n", */
+	/*        t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3); */
 	switch (t) {
 	case COS_UPCALL_THD_CREATE:
 	{

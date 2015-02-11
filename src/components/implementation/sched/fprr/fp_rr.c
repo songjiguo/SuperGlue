@@ -386,7 +386,7 @@ thread_param_set(struct sched_thd *t, struct sched_param_s *ps)
 			break;
 		case SCHEDP_PRIO:
 			/* absolute priority */
-			printc("SCHEDP_PRIO ps->value %d\n", ps->value);
+			/* printc("SCHEDP_PRIO ps->value %d\n", ps->value); */
 			prio = ps->value;
 			break;
 		case SCHEDP_IDLE:
