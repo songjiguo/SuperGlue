@@ -29,6 +29,7 @@ lock_take_contention(cos_lock_t *l, union cos_lock_atomic_struct *result,
 	spdid_t spdid   = cos_spd_id();
 	int ret;
 
+	
 	if (lock_component_pretake(spdid, lock_id, owner)) return -1;
 
 	/* Must access memory (be volatile) as we want

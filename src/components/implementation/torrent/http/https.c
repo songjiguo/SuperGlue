@@ -1012,7 +1012,7 @@ void cos_init(void *arg)
 	if (periodic_wake_create(cos_spd_id(), HTTP_REPORT_FREQ) < 0) BUG();
 	while (1) {
 		periodic_wake_wait(cos_spd_id());
-		/* printc("HTTP conns %ld, reqs %ld\n", http_conn_cnt, http_req_cnt); */
+		printc("HTTP conns %ld, reqs %ld\n", http_conn_cnt, http_req_cnt);
 
 		/* printc("HTTP conns_ts %lld, reqs_ts %lld\n",  */
 		/*        http_conn_cnt_ts, http_req_cnt_ts); */

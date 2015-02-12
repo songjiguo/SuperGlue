@@ -414,14 +414,15 @@ void evt_free(spdid_t spdid, long evt_id)
 	ret = __evt_free(spdid, evt_id);
 
 	// Jiguo: free must be in the same spd as split
-	if (!ret) {
-		lock_release(&evt_lock);
-		ns_free(cos_spd_id(), spdid, evt_id);
-		/* ns_free(cos_spd_id(), evt_id); */
-		return;
-	}
+	/* if (!ret) { */
+	/* 	lock_release(&evt_lock); */
+	/* 	ns_free(cos_spd_id(), spdid, evt_id); */
+	/* 	/\* ns_free(cos_spd_id(), evt_id); *\/ */
+	/* 	return; */
+	/* } */
 	
 	lock_release(&evt_lock);
+	if (!ret) ns_free(cos_spd_id(), spdid, evt_id);
 	return;
 }
 

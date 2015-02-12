@@ -76,7 +76,8 @@ restart:
 		 * needed.  */
 		if (unlikely(owner)) {
 			int ret;
-
+			/* printc("thd %d in spd %ld is contending lock %d (owner %d)\n", */
+			/*        cos_get_thd_id(), cos_spd_id(), l->lock_id, owner); */
 			ret = lock_take_contention(l, &result, &prev_val, owner);
 			if (ret < 0) return ret;
 			/* try to take the lock again */
@@ -168,6 +169,10 @@ lock_static_init(cos_lock_t *l)
 {
 	lock_init(l);
 	l->lock_id = lock_id_get();
+	if (cos_spd_id() != 22) {
+		printc("thd %d in spd %ld static init lock %d\n",
+		       cos_get_thd_id(), cos_spd_id(), l->lock_id);
+	}
 
 	return l->lock_id;
 }

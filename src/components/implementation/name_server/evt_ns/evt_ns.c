@@ -134,12 +134,16 @@ ns_free(spdid_t spdid, spdid_t cli_spdid, int id)
 		/* printc("(2) evt name server delete tmp id %d m->next id %d\n",  */
 		/*        tmp->id, m->actual_id); */
 		mapping_free(tmp->id);
+		tmp->actual_id = 0;
+		tmp->id = 0;
 		cslab_free_evt(tmp);
 		spd_evts_cnt[cli_spdid]--;
 	}
 	/* printc("(3) evt name server delete id %d\n", m->id); */
 	mapping_free(m->id);	
 	/* m->status = 0; // ensure that the event status is not "triggered"  */
+	m->actual_id = 0;
+	m->id = 0;
 	cslab_free_evt(m);
 	spd_evts_cnt[cli_spdid]--;
 	assert(spd_evts_cnt[cli_spdid] >= 0);
@@ -173,12 +177,14 @@ ns_update(spdid_t spdid, int cli_id, int cur_id, long par)
 	
 	assert(en_cur->actual_id == en_cur->id);
 	
-	// ??
+	// remove the previous pointed one if it is not itself
 	if ((tmp = mapping_find(en_cli->actual_id)) && tmp != en_cli) {
 		mapping_free(tmp->id);
+		tmp->actual_id = 0;
+		tmp->id = 0;
 		cslab_free_evt(tmp);
 	}
-	// point to each other
+	// point to each other (current to the new created one)
 	en_cli->actual_id = en_cur->id;
 	en_cur->actual_id = en_cli->id;
 	/* printc("evt_ns: ns_setid done\n"); */

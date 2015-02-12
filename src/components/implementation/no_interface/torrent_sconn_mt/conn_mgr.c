@@ -44,6 +44,7 @@ static volatile unsigned long num_connection = 0;
 static volatile int debug_thd = 0;
 
 static cos_lock_t sc_lock;
+cos_lock_t cbuf_lock;
 #define LOCK() if (lock_take(&sc_lock)) BUG();
 #define UNLOCK() if (lock_release(&sc_lock)) BUG();
 
@@ -168,7 +169,19 @@ mapping_add(int from, int to, long feid, long teid)
 
 	LOCK();
 	tor_add_pair(from, to, feid, teid);
+
+	if (cvect_lookup(&evts, feid)) {
+		printc("thd %d adds id %ld in spd %ld, already exist(mapping_add feid)\n", 
+		       cos_get_thd_id(), feid, cos_spd_id());
+	}
+
 	evt_add(from,    feid);
+
+	if (cvect_lookup(&evts, teid)) {
+		printc("thd %d adds id %ld in spd %ld, already exist(mapping_add teid)\n", 
+		       cos_get_thd_id(), teid, cos_spd_id());
+	}
+
 	evt_add(to * -1, teid);
 	assert(tor_get_to(from, &tt) == to);
 	assert(tor_get_from(to, &tf) == from);
@@ -235,21 +248,6 @@ accept_new(int accept_fd, int test)
 		connmgr_tsplit_cnt++;
 		mapping_add(from, to, feid, teid);
 	}
-}
-
-
-static void
-fault_close(struct tor_conn *tc)
-{
-	assert(tc);
-	
-	mapping_remove(tc->from, tc->to, tc->feid, tc->teid);
-	server_trelease(cos_spd_id(), tc->from);
-	trelease(cos_spd_id(), tc->to);
-	evt_put(tc->feid);
-	evt_put(tc->teid);
-
-	return;
 }
 
 static int
@@ -395,9 +393,11 @@ static void init(char *init_str)
 	cvect_init_static(&tor_from);
 	cvect_init_static(&tor_to);
 	lock_static_init(&sc_lock);
+	
+	lock_static_init(&cbuf_lock); // Jiguo: test
 		
 	sscanf(init_str, "%d:%d:%d", &nthds, &__prio, &__port);
-	/* printc("nthds:%d, prio:%d, port %d\n", nthds, __prio, __port); */
+	printc("nthds:%d, prio:%d, port %d\n", nthds, __prio, __port);
 	create_str = strstr(init_str, "/");
 	assert(create_str);
 

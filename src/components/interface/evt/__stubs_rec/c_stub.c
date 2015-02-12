@@ -107,6 +107,16 @@ struct rec_data_evt {
 	struct rec_data_evt *next, *prev;  // track all init events in a group
 	struct rec_data_evt *p_next, *p_prev;  // link all parent event
 
+	/* Here is the issue: evt_free is called and the id is deleted
+	 * from evt_ns, but it can be preempted before rdevt_dealloc
+	 * in interface evt_free function. Then a new evt_id (but with
+	 * same id) is recreated in ns_alloc and returned here. Now
+	 * the entry of the same id still exist and not rdevt_dealloc
+	 * yet.  Solution: for rdevt_alloc, set this flag if we see an
+	 * entry already exists, indicating we are going to reuse
+	 * it */
+	unsigned int reuse;
+
 	unsigned int  state;
 	unsigned long fcnt;
 };
@@ -117,7 +127,7 @@ struct rec_data_evt {
  * recovery. All rd without parent will be linked. Each rd can be the
  * parent of a group and each group can include multiple child rds.
  */
-struct rec_data_evt *evts_grp_list_head = NULL;
+struct rec_data_evt *evts_grp_list_head[MAX_NUM_THREADS] = {NULL,};
 
 /* the state of an event object (each operation expects to change) */
 enum {
@@ -164,7 +174,7 @@ rdevt_alloc(cvect_t *vect, int id)
 	assert(id >= 1);
 	
 	rd = cslab_alloc_rdevt();
-	assert(rd);	
+	assert(rd);
 	cvect_add(vect, rd, id);   // this must be greater than 1
 
 	INIT_LIST(rd, next, prev);
@@ -187,6 +197,8 @@ rdevt_dealloc(cvect_t *vect, struct rec_data_evt *rd, int id)
 	rd->grp	         = 0;
 	rd->state	 = 0;
 	rd->fcnt	 = 0;
+
+	rd->reuse	 = 0;
 	
 	cslab_free_rdevt(rd);
 
@@ -218,24 +230,24 @@ rd_cons(struct rec_data_evt *rd, spdid_t spdid, long c_evtid,
 		INIT_LIST(rd, p_next, p_prev);
 		/* printc("(thd %d spd %ld) create a parent event(%d) here\n", */
 		/*        cos_get_thd_id(), cos_spd_id(), c_evtid); */
-		if (unlikely(!evts_grp_list_head)) {
-			evts_grp_list_head = rd;
+		if (unlikely(!evts_grp_list_head[cos_get_thd_id()])) {
+			evts_grp_list_head[cos_get_thd_id()] = rd;
 		} else {
-			ADD_LIST(evts_grp_list_head, rd, p_next, p_prev);
+			ADD_LIST(evts_grp_list_head[cos_get_thd_id()], rd, p_next, p_prev);
 		}
 	} else if (parent > 0 && !grp) {     // child evt
-		assert(evts_grp_list_head);
+		assert(evts_grp_list_head[cos_get_thd_id()]);
 		struct rec_data_evt *tmp;
 		/* printc("(thd %d spd %ld) create a child event(%d, parent %d) here\n", */
 		/*        cos_get_thd_id(), cos_spd_id(), c_evtid, parent); */
 		/* printc("evts_grp_list_head->c_evtid %d s_evtid %d parent %d\n",  */
 		/*        evts_grp_list_head->c_evtid, evts_grp_list_head->c_evtid, parent); */
-		if (evts_grp_list_head->s_evtid == parent) {
-			ADD_LIST(evts_grp_list_head, rd, next, prev);
+		if (evts_grp_list_head[cos_get_thd_id()]->s_evtid == parent) {
+			ADD_LIST(evts_grp_list_head[cos_get_thd_id()], rd, next, prev);
 			goto done;
 		} else {
-			for(tmp = FIRST_LIST(evts_grp_list_head, next, prev); 
-			    tmp!= evts_grp_list_head; 
+			for(tmp = FIRST_LIST(evts_grp_list_head[cos_get_thd_id()], next, prev); 
+			    tmp!= evts_grp_list_head[cos_get_thd_id()]; 
 			    tmp = tmp->next) {
 				if (tmp->s_evtid == parent) {
 					/* printc("evts_tmp->c_evtid %d parent %d\n",  */
@@ -255,7 +267,7 @@ done:
  * connection manager) 
 */
 static void
-rd_recover_state(struct rec_data_evt *rd)
+rd_recover_state(struct rec_data_evt *rd, int thd)
 {
 	struct rec_data_evt *prd = NULL, *tmp = NULL, *tmp_new = NULL;
 	struct rec_data_evt *inv_rd; // remove existing inverse rd
@@ -288,7 +300,7 @@ rd_recover_state(struct rec_data_evt *rd)
 
 		/* rebuild all child events belong to the same group */
 		if (rd->grp == 1) {
-			assert(rd == evts_grp_list_head);
+			assert(rd == evts_grp_list_head[thd]);
 			for(tmp = FIRST_LIST(rd, next, prev) ;
 			    tmp != rd;
 			    tmp = FIRST_LIST(tmp, next, prev)) {
@@ -318,12 +330,7 @@ rd_recover_state(struct rec_data_evt *rd)
 			}
 		}
 	} else {
-		assert(0);  // for eager, we should not be here
-		prd = rdevt_lookup(&rec_evt_map, rd->c_evtid);
-                /* assume parent event is in the same component and
-		 * only one level */
-		assert(prd);  
-		rd_recover_state(prd);
+		assert(0);
 	}
 	
 	return;
@@ -341,19 +348,23 @@ events_replay_all()
 	
 	recover_all = 1;
 
-	struct rec_data_evt *rde = evts_grp_list_head;
-	assert(rde && !rde->p_evtid); // there must be some events (therefore upcall)
-	rd_recover_state(rde);
+	int i;
+	for (i = 0; i < MAX_NUM_THREADS; i++) {
+		struct rec_data_evt *rde = evts_grp_list_head[i];
+		if(!rde) continue;
+		assert(rde && !rde->p_evtid); // otherwise, there must be some events
+		rd_recover_state(rde, i);
 
-	int tmp_cnt = 0;
-	// rest parent rd
-	for(rde = FIRST_LIST(evts_grp_list_head, p_next, p_prev); 
-	    rde!= evts_grp_list_head; 
-	    rde = rde->p_next) {
-		/* printc("evt cli: rd_recover_state (%d)\n", tmp_cnt); */
-		/* print_rde_info(rde); */
-		if (tmp_cnt++ > 100) assert(0);
-		rd_recover_state(rde);
+		int tmp_cnt = 0;
+		// rest parent rd
+		for(rde = FIRST_LIST(evts_grp_list_head[i], p_next, p_prev); 
+		    rde!= evts_grp_list_head[i];
+		    rde = rde->p_next) {
+			/* printc("evt cli: rd_recover_state (%d)\n", tmp_cnt); */
+			/* print_rde_info(rde); */
+			if (tmp_cnt++ > 100) assert(0);
+			rd_recover_state(rde, i);
+		}
 	}
 
 	/* printc("thd %d in spd %ld interface has recovered all events\n", */
@@ -424,7 +435,8 @@ rd_update(int evtid, int state)
 		 * entry, so it does not matter. Do we still need lock
 		 * here???? Maybe not....*/
 		printc("rd_recovery is in state %d\n", state);
-		rd_recover_state(rd);
+		assert(0);
+		rd_recover_state(rd, 0);
 		break;
 	case EVT_STATE_TRIGGER:
 		/* Generally there are two rules to follow when
@@ -531,7 +543,11 @@ redo:
 	assert(ret > 0);
 	/* printc("cli: evt_create create a new rd in spd %ld (server id %d)\n",  */
 	/*        cos_spd_id(), ret); */
-	rd = rdevt_alloc(&rec_evt_map, ret);
+	if ((rd = cvect_lookup(&rec_evt_map, ret))) {
+		printc("thd %d is adding id %ld in spd %ld, but already exist (evt_create)\n", 
+		       cos_get_thd_id(), ret, cos_spd_id());
+		rd->reuse = 1;
+	} else rd = rdevt_alloc(&rec_evt_map, ret);
 	assert(rd);
 	rd_cons(rd, cos_spd_id(), ret, ret, 0, 0, EVT_STATE_CREATE, 0);
 	
@@ -637,7 +653,11 @@ redo:
 	/* printc("cli: evt_create create a new rd in spd %ld (server id %d)\n",  */
 	/*        cos_spd_id(), ret); */
 
-	rd = rdevt_alloc(&rec_evt_map, ret);
+	if ((rd = cvect_lookup(&rec_evt_map, ret))) {
+		printc("thd %d is adding id %ld in spd %ld, but already exist (evt_split)\n", 
+		       cos_get_thd_id(), ret, cos_spd_id());
+		rd->reuse = 1;   // being reused
+	} else rd = rdevt_alloc(&rec_evt_map, ret);
 	assert(rd);
 	rd_cons(rd, cos_spd_id(), ret, ret, p_evt, grp, EVT_STATE_CREATE, 0);
 
@@ -812,10 +832,10 @@ redo:
 	/* printc("evt cli: evt_free(1) %d (evt id %ld in spd %ld)\n",  */
 	/*        cos_get_thd_id(), extern_evt, cos_spd_id()); */
         rd = rd_update(extern_evt, EVT_STATE_FREE);
-	if (!rd) return 0;  // test
 	assert(rd);
 	assert(rd->c_evtid == extern_evt);
-
+	rd->reuse = 0;  // reused is done
+	
 #ifdef BENCHMARK_MEAS_FREE
 	rdtscll(meas_end);
 	printc("end measuring.....\n");
@@ -838,11 +858,12 @@ redo:
 		goto redo;
 	}
 
-
-	/* printc("evt cli: evt_free(2) %d (evt id %ld)\n", cos_get_thd_id(), rd->s_evtid); */
-	rd_cli  = rdevt_lookup(&rec_evt_map_inv, rd->s_evtid);
-	if (unlikely(rd_cli)) rdevt_dealloc(&rec_evt_map_inv, rd_cli, rd->s_evtid);
-	rdevt_dealloc(&rec_evt_map, rd, rd->c_evtid);
+	/* /\* printc("evt cli: evt_free(2) %d (evt id %ld)\n", cos_get_thd_id(), rd->s_evtid); *\/ */
+	if ((rd = rdevt_lookup(&rec_evt_map, extern_evt)) && rd->reuse == 0) {
+		rd_cli  = rdevt_lookup(&rec_evt_map_inv, rd->s_evtid);
+		if (unlikely(rd_cli)) rdevt_dealloc(&rec_evt_map_inv, rd_cli, rd->s_evtid);
+		rdevt_dealloc(&rec_evt_map, rd, rd->c_evtid);
+	}
 
 	return ret;
 }

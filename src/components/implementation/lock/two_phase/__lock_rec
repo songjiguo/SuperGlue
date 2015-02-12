@@ -225,7 +225,8 @@ int lock_component_pretake(spdid_t spd, unsigned long lock_id, unsigned short in
 //	lock_print_all();
 	ml = lock_find(lock_id, spd);
 	if (NULL == ml) {
-		printc("can not find ml for lock %ld spd %d\n", lock_id, spd);
+		printc("thd %d can not find ml for lock %ld spd %d\n", 
+		       cos_get_thd_id(), lock_id, spd);
 		ret = -1;
 		goto done;
 	}
