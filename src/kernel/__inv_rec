@@ -3606,7 +3606,10 @@ cos_syscall_mmap_cntl(int spdid, long op_flags_dspd, vaddr_t daddr, unsigned lon
 			printk("cos: mmap grant -- could not get a physical page.\n");
 			return -EINVAL;
 		}
-		/* printk("cos mmap_cntl grant page(%lu): spd %d -- base %d pfn %d\n", page, spdid, this_spd->pfn_base, this_spd->pfn_extent); */
+		/* printk("cos mmap_cntl grant page(%p): spd %d -- base %d pfn %d\n", page, spdid, this_spd->pfn_base, this_spd->pfn_extent); */
+		/* printk("cos: mmap cntl call for spd %d for spd %d @ vaddr %x\n", */
+		/*        spdid, dspd_id, (unsigned int)daddr); */
+
 		/*
 		 * Demand paging could mess this up as the entry might
 		 * not be in the page table, and we map in our cos

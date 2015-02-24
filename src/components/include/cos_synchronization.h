@@ -169,10 +169,6 @@ lock_static_init(cos_lock_t *l)
 {
 	lock_init(l);
 	l->lock_id = lock_id_get();
-	if (cos_spd_id() != 22) {
-		printc("thd %d in spd %ld static init lock %d\n",
-		       cos_get_thd_id(), cos_spd_id(), l->lock_id);
-	}
 
 	return l->lock_id;
 }

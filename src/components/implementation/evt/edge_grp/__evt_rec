@@ -25,6 +25,12 @@
 
 #include <name_server.h>
 
+
+unsigned long long evt_alloc_cnt = 0;
+unsigned long long evt_free_cnt = 0;
+
+#define COS_MEM (92*1024*1024)
+void *mem_addr = (void *)0x80000000;
 static int test_num = 0;
 
 /* Jiguo: A thread might trigger an event that has not been re-created
@@ -80,7 +86,12 @@ __evt_alloc(evt_t t, long parent, spdid_t spdid)
 		if (p->creator != spdid)  goto done;
 		if (p->type != EVT_GROUP) goto done;
 	}
-	e = cslab_alloc_evt();
+
+	/* printc("AAAAAAA\n"); */
+	e = cslab_alloc_evt();    // ????
+	/* printc("evt: cslab_alloc_evt return %p\n", e); */
+
+	/* printc("BBBBBBB (e %p)\n", e); */
 	if (!e) goto done;
 	memset(e, 0, sizeof(struct evt));
 
@@ -88,17 +99,31 @@ __evt_alloc(evt_t t, long parent, spdid_t spdid)
 	INIT_LIST(e, next, prev);
 	e->grp  = p;
 	e->creator = spdid;
+
 	if (p) {
 		if (p->iachildren) ADD_LIST(p->iachildren, e, next, prev);
 		else p->iachildren = e;
 	}
+
 	/* e->eid = cmap_add(&evt_map, e); */   //Jiguo
 	e->eid = ns_alloc(cos_spd_id(), spdid);
 	assert(e->eid > 0);
 
 	e->fault_triggered = 1;
 
+	// Jiguo added this:
+	/* if (!cvect_lookup(&evt_map, e->eid)) cvect_add(&evt_map, e, e->eid); */
+
+	if (cvect_lookup(&evt_map, e->eid)) cvect_del(&evt_map, e->eid);
+	// old
 	cvect_add(&evt_map, e, e->eid);
+
+	/* evt_alloc_cnt++; */
+	/* if (cos_get_thd_id() != 2) { */
+	/* 	printc("evt_alloc_cnt %llu\n", evt_alloc_cnt); */
+	/* 	printc("evt_free_cnt %llu\n", evt_free_cnt); */
+	/* } */
+
 done:
 	return e;
 }
@@ -144,6 +169,12 @@ __evt_free(spdid_t spdid, long eid)
 	cvect_del(&evt_map, eid);
 
 	cslab_free_evt(e);
+
+	/* evt_free_cnt++; */
+	/* if (cos_get_thd_id() != 2) { */
+	/* 	printc("evt_alloc_cnt %llu\n", evt_alloc_cnt); */
+	/* 	printc("evt_free_cnt %llu\n", evt_free_cnt); */
+	/* } */
 
 	return 0;
 }
@@ -360,17 +391,17 @@ __c3_evt_split(spdid_t spdid, long parent, int group, int old_evtid)
 
 	/* lock_take(&evt_lock); */  // no need to take the lock
 	assert(cos_get_thd_id() == 2); // only recovery thread calls (eager)
-	
+
 	e = __evt_alloc((group == 1) ? EVT_GROUP : EVT_NORMAL, parent, spdid);
+
 	if (!e) goto done;
 	ret = e->eid;
 	assert(ret > 0);
 	assert(old_evtid && old_evtid != e->eid);
-
 	e->fault_triggered = -1;
 
 	if (ns_update(cos_spd_id(), old_evtid, e->eid, 0)) assert(0);
-	
+
 	int tmp;
 	if (!group) {  // only trigger events in a group
 		tmp = __evt_trigger(spdid, ret, 1); 
@@ -501,7 +532,7 @@ evt_trigger(spdid_t spdid, long evt_id)
 	/*        cos_get_thd_id(), spdid, evt_id); */
 	/* if (spdid == 17 && cos_get_thd_id() == 10 && test_num++ > 5000) { */
 
-	if (test_num++ > 100000) {
+	if (test_num++ > 300000) {
 		printc("trigger fault in evt_trigger before: thd %d passed spd %d (evt %d)\n",
 		       cos_get_thd_id(), spdid, evt_id);
 		assert(0);
@@ -592,50 +623,109 @@ rd_reflection()
 	return;
 }
 
-void 
+static int rec_thd = 0;
+static int first = 0;
+
+void
 cos_init(void)
 {
-	lock_static_init(&evt_lock);
+	union sched_param sp;
 
-	/* cmap_init_static(&evt_map); */  // Jiguo
-	/* assert(0 == cmap_add(&evt_map, (void*)1)); */  // Jiguo
-	cvect_init_static(&evt_map);
+	if (cos_get_thd_id() == rec_thd) {
 
-	/* Jiguo: switch to upcall thread and do rdreflection and
-	 * other recovery. This will end up with the eager style
-	 * recovery for all events. The reason is as following: the
-	 * higher prio thread might block on an event if that even has
-	 * not been rebuilt since the fault. One approach is to block
-	 * the thread in evt_trigger when the event is not
-	 * found. However, it is not predictable, and even unbounded
-	 * if the thread that created the event has lower prio and
-	 * never call event manager again. In order to achieve the
-	 * predictable recovery, we need upcall into each component
-	 * and rebuild the event, using recovery thread to maintain
-	 * the proper priority inheritance.
-	 *
-	 * However, here is the issue: event manager is loaded by the
-	 * booter, not llbooter. Therefore, we need call the llbooter
-	 * to switch to the recovery thread after the component is
-	 * u-rebooted (via normal pgfault handler). Then the thread is
-	 * actually the thread that is trapped by the fault. It is the
-	 * default thread used to recreate the component. However,
-	 * this does not matter as long as we ensure that the thread
-	 * always switches to/from the recovery thread (which has the
-	 * highest prio). Another reason to do here is because we know
-	 * this is special upcall + normal booter only for event
-	 * manager and we can reflect on evt_ns. It is kind between
-	 * the sched/mm and other services, and can not use on-demand.
-	 *
-	 * Remember that the recovery thread can not do sched_wakeup
-	 
-	 */
-	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
-		/* recovery_upcall(cos_spd_id(), COS_UPCALL_REFLECTION, cos_spd_id(), 0); */
+		/* // remove the mapped page for evt spd */
+		/* int count_obj = 0; // reflected objects */
+		/* int dest_spd = cos_spd_id(); */
+		/* vaddr_t addr; */
+		/* count_obj = mman_reflect(cos_spd_id(), dest_spd, 1); */
+		/* /\* printc("evt relfects on mmgr: %d objs\n", count_obj); *\/ */
+		/* while (count_obj--) { */
+		/* 	addr = mman_reflect(cos_spd_id(), dest_spd, 0); */
+		/* 	/\* printc("evt mman_release: %p addr\n", (void *)addr); *\/ */
+		/* 	assert(addr); */
+		/* 	memset(addr, 0, PAGE_SIZE);  // zero out anything on this page before release */
+			
+		/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
+		/* } */
+		/* assert(!valloc_reset_hp(cos_spd_id(), cos_spd_id())); */
+		/* printc("back from valloc_reset_hp thd %d\n", cos_get_thd_id()); */
+
+		evt_free_cnt = 0;
+		evt_alloc_cnt = 0;
+
 		ns_upcall(cos_spd_id());
-		/* printc("back from ns_upcall thd %d\n", cos_get_thd_id());		 */
-		rd_reflection();  // recovery thread can not call sched_wakeup
-		/* printc("back from reflection thd %d\n", cos_get_thd_id()); */
+		printc("back from ns_upcall thd %d\n", cos_get_thd_id());
+		rd_reflection();
+		printc("back from reflection thd %d\n", cos_get_thd_id());
+		return;
+	}
+	
+	if (first == 0) {
+		first = 1;
+
+		/* struct evt tmp; */
+		/* printc("evt: size of evt %d\n", sizeof(tmp)); */  //--> 40
+		/* // test memory expansion */
+		/* int i = 0; */
+		/* struct evt *tmp; */
+		/* for (i = 0; i< 1024; i++) { */
+		/* 	tmp = cslab_alloc_evt(); */
+		/* 	printc("evt: cslab_alloc_evt return %p (i %d)\n", */
+		/* 	       tmp, i); */
+		/* } */
+		/* return; */
+
+
+
+		/* int ret; */
+		/* if ((ret = cos_vas_cntl(COS_VAS_SPD_EXPAND, cos_spd_id(), */
+		/* 			(long)cos_get_heap_ptr(), COS_MEM))) { */
+		/* 	printc("ERROR: vas cntl returned %d\n", ret); */
+		/* } */
+
+		/* printc("spd %d heap pointer %p\n", cos_spd_id(), cos_get_heap_ptr()); */
+
+		lock_static_init(&evt_lock);
+
+		/* cmap_init_static(&evt_map); */  // Jiguo
+		/* assert(0 == cmap_add(&evt_map, (void*)1)); */  // Jiguo
+		cvect_init_static(&evt_map);
+
+		/* Jiguo: switch to upcall thread and do rdreflection and
+		 * other recovery. This will end up with the eager style
+		 * recovery for all events. The reason is as following: the
+		 * higher prio thread might block on an event if that even has
+		 * not been rebuilt since the fault. One approach is to block
+		 * the thread in evt_trigger when the event is not
+		 * found. However, it is not predictable, and even unbounded
+		 * if the thread that created the event has lower prio and
+		 * never call event manager again. In order to achieve the
+		 * predictable recovery, we need upcall into each component
+		 * and rebuild the event, using recovery thread to maintain
+		 * the proper priority inheritance.
+		 *
+		 * However, here is the issue: event manager is loaded by the
+		 * booter, not llbooter. Therefore, we need call the llbooter
+		 * to switch to the recovery thread after the component is
+		 * u-rebooted (via normal pgfault handler). Then the thread is
+		 * actually the thread that is trapped by the fault. It is the
+		 * default thread used to recreate the component. However,
+		 * this does not matter as long as we ensure that the thread
+		 * always switches to/from the recovery thread (which has the
+		 * highest prio). Another reason to do here is because we know
+		 * this is special upcall + normal booter only for event
+		 * manager and we can reflect on evt_ns. It is kind between
+		 * the sched/mm and other services, and can not use on-demand.
+		 *
+		 * Remember that the recovery thread can not do sched_wakeup
+	 
+		 */
+		if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
+			sp.c.type = SCHEDP_PRIO;
+			sp.c.value = 3;
+			rec_thd = sched_create_thd(cos_spd_id(), sp.v, 0, 0);
+			printc("creates a recovery thread %d @ prio 3\n", rec_thd);
+		}
 	}
 }
 
@@ -671,10 +761,6 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		cos_init();
 		break;
 	}
-	case COS_UPCALL_REFLECTION:
-		printc("evt: cos_upcall here to do reflection\n");
-		rd_reflection();
-		break;
 	default:
 		return;
 	}

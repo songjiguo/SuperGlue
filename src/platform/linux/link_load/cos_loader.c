@@ -76,6 +76,8 @@ const char *LLBOOT_COMP    = "llboot.o";
 const char *INIT_FILE      = "initfs.o";
 const char *INIT_FILE_NAME = "init.tar";
 
+const char *EVT_COMP      = "eg.o";  // Jiguo: hack for evt
+
 typedef enum {
 	LLBOOT_COMPN = 1,
 	LLBOOT_SCHED = 2,
@@ -710,7 +712,9 @@ load_service(struct service_symbs *ret_data, unsigned long lower_addr, unsigned 
 		} else {
 			offset = round_up_to_page(offset + sect_sz);
 		}
-		printl(PRINT_DEBUG, "\tSect %d, addr %lx, sz %lx, offset %x\n", 
+		/* printl(PRINT_DEBUG, "\tSect %d, addr %lx, sz %lx, offset %x\n",  */
+		/*        i, csg(i)->start_addr, csg(i)->len, offset); */
+		printl(PRINT_HIGH, "\tSect %d, addr %lx, sz %lx, offset %x\n", 
 		       i, csg(i)->start_addr, csg(i)->len, offset);
 	}
 
@@ -808,7 +812,8 @@ load_service(struct service_symbs *ret_data, unsigned long lower_addr, unsigned 
 	bfd_map_over_sections(objout, findsections_ldobj, section_info);
 
 	for (i = 0 ; csg(i)->secid < MAXSEC_S ; i++) {
-		printl(PRINT_DEBUG, "\tRetreiving section %d of size %lx @ %lx.\n", i, csg(i)->len, csg(i)->start_addr);
+		/* printl(PRINT_DEBUG, "\tRetreiving section %d of size %lx @ %lx.\n", i, csg(i)->len, csg(i)->start_addr); */
+		printl(PRINT_HIGH, "\tRetreiving section %d of size %lx @ %lx.\n", i, csg(i)->len, csg(i)->start_addr);
 
 		if (!is_booter_loaded(ret_data)) {
 			if (csg(i)->ldobj.s) {
@@ -842,7 +847,13 @@ load_service(struct service_symbs *ret_data, unsigned long lower_addr, unsigned 
 	ret_data->size       = size;
 	ret_data->allocated  = round_up_to_page((csg(MAXSEC_S-1)->start_addr - csg(0)->start_addr) + csg(MAXSEC_S-1)->len);
 	ret_data->heap_top   = csg(0)->start_addr + ret_data->allocated;
-	
+
+	printf("services obj %s\n", ret_data->obj);
+	printf("size %d\n", ret_data->size);
+	printf("lower_addr %p\n", ret_data->lower_addr);
+	printf("allocated %d\n", ret_data->allocated);
+	printf("heap %p\n", ret_data->heap_top);
+
 	if (is_booter_loaded(ret_data)) {
 		if (make_cobj_symbols(ret_data, h)) {
 			printl(PRINT_HIGH, "Could not create symbols in cobj for %s\n", service_name);
@@ -1709,6 +1720,9 @@ static void gen_stubs_and_link(char *gen_stub_prog, struct service_symbs *servic
 	return;
 }
 
+/* Jiguo: give some spd more vas (x Mb) -- hack*/
+#define VAS_SIZE 1
+
 /*
  * Load into the current address space all of the services.  
  *
@@ -1727,7 +1741,12 @@ static int load_all_services(struct service_symbs *services)
 //	service_addr += DEFAULT_SERVICE_SIZE;
 
 	while (services) {
-		sz = load_service(services, service_addr, DEFAULT_SERVICE_SIZE);
+		if (strstr(services->obj, EVT_COMP)) {  // hack
+			sz = load_service(services, service_addr, 
+					  VAS_SIZE*DEFAULT_SERVICE_SIZE);
+		} else {
+			sz = load_service(services, service_addr, DEFAULT_SERVICE_SIZE);
+		}
 		if (!sz) return -1;
 
 		service_addr += DEFAULT_SERVICE_SIZE;
@@ -1736,6 +1755,8 @@ static int load_all_services(struct service_symbs *services)
 			service_addr += 15*DEFAULT_SERVICE_SIZE;
 		} else if (strstr(services->obj, INITMM) || sz > DEFAULT_SERVICE_SIZE) {
 			service_addr += 3*DEFAULT_SERVICE_SIZE;
+		} else if (strstr(services->obj, EVT_COMP)) {   // Jiguo: hack evt vas
+			service_addr += (VAS_SIZE - 1)*DEFAULT_SERVICE_SIZE;
 		}
 
 		printl(PRINT_DEBUG, "\n");
@@ -2069,6 +2090,7 @@ struct spd_info *create_spd(int cos_fd, struct service_symbs *s,
 	spdid_inc++;
 	spd->spd_handle = cos_create_spd(cos_fd, spd);
 	assert(spdid_inc == spd->spd_handle);
+
 	if (spd->spd_handle < 0) {
 		printl(PRINT_DEBUG, "Could not create spd %s\n", s->obj);
 		free(spd);
@@ -2427,7 +2449,7 @@ make_spd_boot(struct service_symbs *boot, struct service_symbs *all)
 			exit(-1);
 		}
 	}
-
+	
 	all_obj_sz = 0;
 	/* Find the cobj's size */
 	for (all = first ; NULL != all ; all = all->next) {
@@ -2435,7 +2457,7 @@ make_spd_boot(struct service_symbs *boot, struct service_symbs *all)
 
 		if (!is_hl_booter_loaded(all)) continue;
 		printl(PRINT_HIGH, "booter found %s:%d with len %d\n", 
-		       all->obj, service_get_spdid(all), all->cobj->size)
+		       all->obj, service_get_spdid(all), all->cobj->size);
 		n++;
 
 		assert(is_hl_booter_loaded(all));

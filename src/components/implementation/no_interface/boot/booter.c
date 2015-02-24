@@ -382,11 +382,11 @@ boot_create_system(void)
 
 		if (tot > SERVICE_SIZE) {
 			if (cos_vas_cntl(COS_VAS_SPD_EXPAND, h->id, sect->vaddr + SERVICE_SIZE, 
-					 (NREGIONS-1) * round_up_to_pgd_page(1))) {
+					 (8-1) * round_up_to_pgd_page(1))) {
 				printc("cos: booter could not expand VAS for component %d\n", h->id);
 				BUG();
 			}
-			if (hs[i + 1] != NULL && cobj_sect_get(hs[i + 1], 0)->vaddr != sect->vaddr + SERVICE_SIZE * 4) {
+			if (hs[i + 1] != NULL && cobj_sect_get(hs[i + 1], 0)->vaddr != sect->vaddr + SERVICE_SIZE * 8) {
 				/* We only need to expand to the next 4MB
 				 * region for now. The start address of the
 				 * next component should have no overlap with

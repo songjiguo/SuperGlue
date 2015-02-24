@@ -87,6 +87,9 @@ extern void free_page(void *ptr);
 #define CVECT_FREE(x) free_page(x)
 #include <cvect.h>
 
+unsigned int total_add_evts = 0;
+unsigned int total_rem_evts = 0;
+
 static unsigned long long meas_start, meas_end;
 static int meas_flag = 0;
 
@@ -97,7 +100,8 @@ static unsigned int recover_all = 0;  // only tested/changed by the recovery thr
 
 /* recovery data structure for evt */
 struct rec_data_evt {
-	spdid_t       spdid;
+	spdid_t       spdid;   // where the event is created
+	spdid_t       thdid;   // which thread creates this event
 	long          c_evtid;
 	long          s_evtid;
 
@@ -106,16 +110,6 @@ struct rec_data_evt {
 
 	struct rec_data_evt *next, *prev;  // track all init events in a group
 	struct rec_data_evt *p_next, *p_prev;  // link all parent event
-
-	/* Here is the issue: evt_free is called and the id is deleted
-	 * from evt_ns, but it can be preempted before rdevt_dealloc
-	 * in interface evt_free function. Then a new evt_id (but with
-	 * same id) is recreated in ns_alloc and returned here. Now
-	 * the entry of the same id still exist and not rdevt_dealloc
-	 * yet.  Solution: for rdevt_alloc, set this flag if we see an
-	 * entry already exists, indicating we are going to reuse
-	 * it */
-	unsigned int reuse;
 
 	unsigned int  state;
 	unsigned long fcnt;
@@ -145,6 +139,7 @@ print_rde_info(struct rec_data_evt *rde)
 	assert(rde);
 
 	printc("rde->spdid %d ", rde->spdid);
+	printc("rde->thdid %d ", rde->thdid);
 	printc("rde->p_evtid %d\n", rde->p_evtid);
 	printc("rde->c_evtid %d ", rde->c_evtid);
 	printc("rde->s_evtid %d\n", rde->s_evtid);
@@ -188,17 +183,14 @@ rdevt_dealloc(cvect_t *vect, struct rec_data_evt *rd, int id)
 	assert(rd);
 	if (cvect_del(vect, id)) BUG();
 
-	REM_LIST(rd, next, prev);  // remove tracked event
-
 	rd->spdid	 = 0;
+	rd->thdid	 = 0;
 	rd->c_evtid	 = 0;
 	rd->s_evtid	 = 0;
 	rd->p_evtid	 = 0;
 	rd->grp	         = 0;
 	rd->state	 = 0;
 	rd->fcnt	 = 0;
-
-	rd->reuse	 = 0;
 	
 	cslab_free_rdevt(rd);
 
@@ -206,12 +198,17 @@ rdevt_dealloc(cvect_t *vect, struct rec_data_evt *rd, int id)
 }
 
 static void 
-rd_cons(struct rec_data_evt *rd, spdid_t spdid, long c_evtid, 
+rd_cons(struct rec_data_evt *rd, long c_evtid, 
 	long s_evtid, long parent, int grp, int state, int recovery)
 {
 	assert(rd);
 	
-	rd->spdid	 = spdid;
+	assert((!parent && grp) ||     // create a group
+	       (parent && !grp) ||     // create a child in a group
+	       ((!parent && !grp)));   // create a event
+	
+	rd->spdid	 = cos_spd_id();
+	rd->thdid	 = cos_get_thd_id();
 	rd->c_evtid	 = c_evtid;
 	rd->s_evtid	 = s_evtid;
 	rd->p_evtid	 = parent;
@@ -232,8 +229,10 @@ rd_cons(struct rec_data_evt *rd, spdid_t spdid, long c_evtid,
 		/*        cos_get_thd_id(), cos_spd_id(), c_evtid); */
 		if (unlikely(!evts_grp_list_head[cos_get_thd_id()])) {
 			evts_grp_list_head[cos_get_thd_id()] = rd;
+			assert(rd->thdid == cos_get_thd_id());
 		} else {
 			ADD_LIST(evts_grp_list_head[cos_get_thd_id()], rd, p_next, p_prev);
+			assert(rd->thdid == cos_get_thd_id());
 		}
 	} else if (parent > 0 && !grp) {     // child evt
 		assert(evts_grp_list_head[cos_get_thd_id()]);
@@ -243,16 +242,22 @@ rd_cons(struct rec_data_evt *rd, spdid_t spdid, long c_evtid,
 		/* printc("evts_grp_list_head->c_evtid %d s_evtid %d parent %d\n",  */
 		/*        evts_grp_list_head->c_evtid, evts_grp_list_head->c_evtid, parent); */
 		if (evts_grp_list_head[cos_get_thd_id()]->s_evtid == parent) {
+			total_add_evts++;
 			ADD_LIST(evts_grp_list_head[cos_get_thd_id()], rd, next, prev);
+			assert(rd->thdid == cos_get_thd_id());
 			goto done;
 		} else {
-			for(tmp = FIRST_LIST(evts_grp_list_head[cos_get_thd_id()], next, prev); 
+			for(tmp = FIRST_LIST(evts_grp_list_head[cos_get_thd_id()], 
+					     p_next, p_prev); 
 			    tmp!= evts_grp_list_head[cos_get_thd_id()]; 
 			    tmp = tmp->next) {
 				if (tmp->s_evtid == parent) {
 					/* printc("evts_tmp->c_evtid %d parent %d\n",  */
 					/*        tmp->c_evtid, parent); */
+					total_add_evts++;
 					ADD_LIST(tmp, rd, next, prev);
+					assert(tmp->thdid == cos_get_thd_id());
+					assert(rd->thdid == cos_get_thd_id());
 					goto done;
 				}
 			}
@@ -272,8 +277,11 @@ rd_recover_state(struct rec_data_evt *rd, int thd)
 	struct rec_data_evt *prd = NULL, *tmp = NULL, *tmp_new = NULL;
 	struct rec_data_evt *inv_rd; // remove existing inverse rd
 	long tmp_evtid;
+	long old_rd_sid = 0;
 
 	assert(rd && rd->c_evtid >= 1);
+
+	assert(rd->thdid == thd);
 	
 	/* printc("calling recover (thd %d)!!!!!!\n", cos_get_thd_id()); */
 
@@ -293,17 +301,41 @@ rd_recover_state(struct rec_data_evt *rd, int thd)
 		tmp_evtid = c3_evt_split(cos_spd_id(), rd->p_evtid, rd->grp, rd->c_evtid);
 		assert(tmp_evtid >= 1);
 
+		old_rd_sid = rd->s_evtid;
+
 		rd->s_evtid = tmp_evtid;      // update the old rd's server side evtid
 		/* tmp_new->c_evtid = rd->c_evtid; // update the new rd's client side evtid */
 		/* print_rde_info(rd); */
 		/* printc("\n-----------------\n"); */
 
 		/* rebuild all child events belong to the same group */
+		unsigned int num_c_evts = 0;
 		if (rd->grp == 1) {
 			assert(rd == evts_grp_list_head[thd]);
+			assert(rd->thdid == thd);
 			for(tmp = FIRST_LIST(rd, next, prev) ;
 			    tmp != rd;
 			    tmp = FIRST_LIST(tmp, next, prev)) {
+				num_c_evts++;
+				/* printc("\nnum_c_evts %d\n", num_c_evts); */
+				/* print_rde_info(rd); */
+				/* print_rde_info(tmp); */
+				if (num_c_evts > 10000) assert(0);
+				assert(tmp->thdid == thd);
+			}
+			
+			num_c_evts = 0;
+			for(tmp = FIRST_LIST(rd, next, prev) ;
+			    tmp != rd;
+			    tmp = FIRST_LIST(tmp, next, prev)) {
+
+				/* num_c_evts++; */
+				/* printc("in spd %ld num_c_evts %d (rd->c_evtid %d)\n",  */
+				/*        cos_spd_id(), num_c_evts, rd->c_evtid); */
+				/* printc("in spd %ld total_add %d total_rem %d\n",  */
+				/*        cos_spd_id(), total_add_evts, total_rem_evts); */
+				/* if (num_c_evts > 5000) assert(0); */
+
                                 /* a child update its new re-created parent id */
 				tmp->p_evtid = rd->s_evtid;
                                 /* only re-create this child once */
@@ -319,10 +351,8 @@ rd_recover_state(struct rec_data_evt *rd, int thd)
 				tmp_evtid = c3_evt_split(cos_spd_id(), tmp->p_evtid,
 							 tmp->grp, tmp->c_evtid);
 				assert(tmp_evtid >= 1);
-				
 				tmp_new = rdevt_lookup(&rec_evt_map, tmp_evtid);
 				assert(!tmp_new);
-
 				tmp->s_evtid = tmp_evtid;
 				/* tmp_new->c_evtid = tmp->c_evtid; */
 				/* printc("c3_tsplit new evtid %d\n", tmp->s_evtid); */
@@ -352,17 +382,25 @@ events_replay_all()
 	for (i = 0; i < MAX_NUM_THREADS; i++) {
 		struct rec_data_evt *rde = evts_grp_list_head[i];
 		if(!rde) continue;
-		assert(rde && !rde->p_evtid); // otherwise, there must be some events
+		/* print_rde_info(rde); */
+		/* printc("1\n"); */
+		assert(!rde->p_evtid); // otherwise, there must be some events
+		assert(rde->thdid == i);
 		rd_recover_state(rde, i);
 
-		int tmp_cnt = 0;
+		/* printc("2\n"); */
 		// rest parent rd
+		unsigned int num_p_evts = 0;
 		for(rde = FIRST_LIST(evts_grp_list_head[i], p_next, p_prev); 
 		    rde!= evts_grp_list_head[i];
-		    rde = rde->p_next) {
-			/* printc("evt cli: rd_recover_state (%d)\n", tmp_cnt); */
+		    rde = FIRST_LIST(rde, p_next, p_prev)) {
+			num_p_evts++;
+			/* printc("in spd %ld num_p_evts %d (rde->c_evtid %d)\n",  */
+			/*        cos_spd_id(), num_p_evts, rde->c_evtid); */
+			/* printc("in spd %ld total_add %d total_rem %d\n",  */
+			/*        cos_spd_id(), total_add_evts, total_rem_evts); */
 			/* print_rde_info(rde); */
-			if (tmp_cnt++ > 100) assert(0);
+			assert(rde->thdid == i);
 			rd_recover_state(rde, i);
 		}
 	}
@@ -373,12 +411,11 @@ events_replay_all()
 	return;
 }
 
+/* use eager recovery now */
 static struct rec_data_evt *
 rd_update(int evtid, int state)
 {
         struct rec_data_evt *rd = NULL;
-
-	/* TAKE(cos_spd_id()); */
 
         rd = rdevt_lookup(&rec_evt_map, evtid);
 	if (unlikely(!rd)) goto done;
@@ -386,119 +423,8 @@ rd_update(int evtid, int state)
 	
 	rd->fcnt = fcounter;
 
-	goto done;  // for eager recovery only
-
-	/* Jiguo: if evt is created in a different component, do we
-	 * need switch to recovery thread and upcall to the creator? I
-	 * think we can just recreate a new event within in this
-	 * component, name_server will be updated anyway. The original
-	 * creator component will still see the old cli_id and the new
-	 * one will be cached in evt between faults.  
-	 
-	 * However, based on the state machine, if this is
-	 * evt_trigger, then the event should be in wait state
-	 * first. If this is evt_wait, then the event should be in
-	 * created state. (e.g, trigger sees a fault has occurred
-	 * before, if the event is already in the waiting state (say
-	 * after replay evt_wait, then no need to )
-	 */
-	
-	/* STATE MACHINE */
-	switch (state) {
-	case EVT_STATE_CREATE:
-                /* for create, if failed, just redo, should not be here */
-		assert(0);  
-		break;
-	case EVT_STATE_SPLIT_PARENT:
-	case EVT_STATE_SPLIT:
-                /* for split, if failed, need restore any parent */
-	case EVT_STATE_FREE:
-                /* here is one issue: if fault happens in evt_free
-		 * (after delid in mapping_free in evt manager), the
-		 * original id will be removed in the name server,
-		 * then when replay evt_free, how to remove the
-		 * re-created id? We can check if the entry is still
-		 * presented in name_space. If not, which means that
-		 * fault must happens after all related ids have been
-		 * removed No need to replay. Otherwise, we can just
-		 * create a new event and replay evt_free. This is
-		 * basically a reflection on name_server
-		 */
-	case EVT_STATE_WAITING:
-		/* preempted by other thread here? This only becomes
-		 * issue if the preemption occurs when the same object
-		 * is being accessed. However, there are 2 situation:
-		 * if the preempting thread is in the same component,
-		 * they should wait since lock is taken. If the
-		 * preemption thread is in the different component,
-		 * name server look up will only see the last added
-		 * entry, so it does not matter. Do we still need lock
-		 * here???? Maybe not....*/
-		printc("rd_recovery is in state %d\n", state);
-		assert(0);
-		rd_recover_state(rd, 0);
-		break;
-	case EVT_STATE_TRIGGER:
-		/* Generally there are two rules to follow when
-		   recover an object state:
-		   A) follow the protocol of service
-		   B) follow the priority of threads
-		   
-		   In the evt_trigger case, this needs to be careful
-		   because two reasons: 1) to follow the protocol, an
-		   event should be in wait state before evt_trigger is
-		   invoked (e.g, assert(n_received <= n_wait)). 2)
-		   to follow threads priorities, if the triggering
-		   thread is at higher priority, then reflection on
-		   scheduler might not be able to put the waiting
-		   thread back to the wait state. So we can not
-		   account on that the woken up thread from reflection
-		   will definitely create the new event before us.
-
-		   Solution: For simplicity now, always assume the
-		   evt_trigger must follow rule A), not necessary to
-		   rule B). Otherwise, we either need switch to other
-		   thread to get to wait state first, or we need to
-		   ignore the event. Or we can think this should be
-		   ensured by state machine.
-
-		   However, in evt_trigger thd A calls sched_wakeup to
-		   wake up thd B that wait-blocked on the event. Say
-		   if B is woken up, then later calls evt_free to free
-		   the event. Then switch back A and if the fault
-		   occurs at this point (after sched_wakeup), then the
-		   event has been removed. Therefore, we need check if
-		   the event is already removed. But the event with
-		   the same id might be just created again (say,
-		   evt_create -> wevt_wait -> evt_free is a loop).
-
-		   Solution: check if the event is has been
-		   freed. However, we can also need check if the event
-		   is the same one after the fault occurs (this can
-		   happen if evt_trigger triggers the new event with
-		   the same id, for now we just assume it is ok with
-		   protocol). One solution is to use server side fault
-		   counter to differentiate the event with the same
-		   id. Or we can update name server after sched_wakeup
-		*/
-		
-		/* No state here. We will look up the actual_evtid on the
-		 * server side. Should not be here */
-		/* rd_recover_state(rd); */
-		assert(0);
-		break;
-	default:
-		assert(0);
-		break;
-	}
-
-	/* if (cos_get_thd_id() == 13) { */
-	/* 	printc("evt rec: thread 13 is waking up thread 10\n"); */
-	/* 	sched_wakeup(cos_spd_id(), 10);  // test */
-	/* } */
-
 done:	
-	/* RELEASE(cos_spd_id());   // have to release the lock before block somewhere above */
+
 	return rd;
 }
 
@@ -543,58 +469,15 @@ redo:
 	assert(ret > 0);
 	/* printc("cli: evt_create create a new rd in spd %ld (server id %d)\n",  */
 	/*        cos_spd_id(), ret); */
-	if ((rd = cvect_lookup(&rec_evt_map, ret))) {
-		printc("thd %d is adding id %ld in spd %ld, but already exist (evt_create)\n", 
-		       cos_get_thd_id(), ret, cos_spd_id());
-		rd->reuse = 1;
-	} else rd = rdevt_alloc(&rec_evt_map, ret);
+	if (!(rd = cvect_lookup(&rec_evt_map, ret))) {
+		rd = rdevt_alloc(&rec_evt_map, ret);
+	}
 	assert(rd);
-	rd_cons(rd, cos_spd_id(), ret, ret, 0, 0, EVT_STATE_CREATE, 0);
+
+	rd_cons(rd, ret, ret, 0, 0, EVT_STATE_CREATE, 0);
 	
 	return ret;
 }
-
-/* There is no need to track a re-split server side evt. Also
- * ns_update will be called due to the evt_trigger cab called from
- * some component that is not tracked (try to avoid the overhead of
- * each evt_trigger) */
-CSTUB_FN(long, c3_evt_split) (struct usr_inv_cap *uc,
-			      spdid_t spdid, long parent_evt, int grp, int old_evtid)
-{
-	long fault = 0;
-	long ret;
-	
-	// update the fault counter and cap.fcnt only once after the fault (eagerly)
-	if (recover_all) {
-		recover_all = 0;
-		CSTUB_FAULT_UPDATE();
-	}
-redo:
-	CSTUB_INVOKE(ret, fault, uc, 4, spdid, parent_evt, grp, old_evtid);
-	if (unlikely (fault)){
-		/* recovery thread should have updated this above */
-		/* CSTUB_FAULT_UPDATE(); */
-		goto redo;
-	}
-	
-	assert(ret > 0);
-	/* printc("cli: c3_evt_split create a new rd in spd %ld (server id %d)\n", */
-	/*        cos_spd_id(), ret); */
-	
-	/* The new created event should not be presented. evt_ns
-	 * should guarantee this */
-	struct rec_data_evt *rd = rdevt_lookup(&rec_evt_map, ret);
-	assert(!rd);
-	rd = rdevt_lookup(&rec_evt_map_inv, ret);
-	if (!rd) rd = rdevt_alloc(&rec_evt_map_inv, ret);
-	assert(rd);
-	rd_cons(rd, cos_spd_id(), old_evtid, ret, 0, 0, EVT_STATE_CREATE, 1);
-
-	/* printc("evt cli: c3_evt_split returns a new evtid %d for old evtid %d\n", */
-	/*        ret, old_evtid); */
-	return ret;
-}
-
 
 static int first = 0;
 
@@ -615,6 +498,10 @@ CSTUB_FN(long, evt_split) (struct usr_inv_cap *uc,
 	}
 redo:
         /* printc("evt cli: evt_split %d\n", cos_get_thd_id()); */
+	assert((!parent_evt && grp) ||     // create a group
+	       (parent_evt && !grp) ||     // create a child in a group
+	       ((!parent_evt && !grp)));   // create a event
+
 	if (parent_evt && !grp) {
 		/* printc("evt cli: evt_split found parent evt %d\n", p_evt); */
 		rd_parent = rd_update(parent_evt, EVT_STATE_SPLIT_PARENT);
@@ -653,17 +540,59 @@ redo:
 	/* printc("cli: evt_create create a new rd in spd %ld (server id %d)\n",  */
 	/*        cos_spd_id(), ret); */
 
-	if ((rd = cvect_lookup(&rec_evt_map, ret))) {
-		printc("thd %d is adding id %ld in spd %ld, but already exist (evt_split)\n", 
-		       cos_get_thd_id(), ret, cos_spd_id());
-		rd->reuse = 1;   // being reused
-	} else rd = rdevt_alloc(&rec_evt_map, ret);
+	if (!(rd = cvect_lookup(&rec_evt_map, ret))) {
+		rd = rdevt_alloc(&rec_evt_map, ret);
+	} else {  // if a rde is reused, we need take it off its original list
+		if (!rd->p_evtid) REM_LIST(rd, p_next, p_prev);
+		else REM_LIST(rd, next, prev);
+	}
+
 	assert(rd);
-	rd_cons(rd, cos_spd_id(), ret, ret, p_evt, grp, EVT_STATE_CREATE, 0);
+	rd_cons(rd, ret, ret, p_evt, grp, EVT_STATE_CREATE, 0);
 
 	return ret;
 }
 
+/* There is no need to track a re-split server side evt. Also
+ * ns_update will be called due to the evt_trigger cab called from
+ * some component that is not tracked (try to avoid the overhead of
+ * each evt_trigger) */
+CSTUB_FN(long, c3_evt_split) (struct usr_inv_cap *uc,
+			      spdid_t spdid, long parent_evt, int grp, int old_evtid)
+{
+	long fault = 0;
+	long ret;
+	
+	// update the fault counter and cap.fcnt only once after the fault (eagerly)
+	if (recover_all) {
+		recover_all = 0;
+		CSTUB_FAULT_UPDATE();
+	}
+redo:
+	CSTUB_INVOKE(ret, fault, uc, 4, spdid, parent_evt, grp, old_evtid);
+	if (unlikely (fault)){
+		/* recovery thread should have updated this above */
+		/* CSTUB_FAULT_UPDATE(); */
+		goto redo;
+	}
+	
+	assert(ret > 0);
+	/* printc("cli: c3_evt_split create a new rd in spd %ld (server id %d)\n", */
+	/*        cos_spd_id(), ret); */
+	
+	/* The new created event should not be presented. evt_ns
+	 * should guarantee this */
+	struct rec_data_evt *rd = rdevt_lookup(&rec_evt_map, ret);
+	assert(!rd);
+	rd = rdevt_lookup(&rec_evt_map_inv, ret);  // reverse only
+	if (!rd) rd = rdevt_alloc(&rec_evt_map_inv, ret);
+	assert(rd);
+	rd_cons(rd, old_evtid, ret, 0, 0, EVT_STATE_CREATE, 1);
+
+	/* printc("evt cli: c3_evt_split returns a new evtid %d for old evtid %d\n", */
+	/*        ret, old_evtid); */
+	return ret;
+}
 
 int last_evt = 0;
 CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
@@ -834,7 +763,6 @@ redo:
         rd = rd_update(extern_evt, EVT_STATE_FREE);
 	assert(rd);
 	assert(rd->c_evtid == extern_evt);
-	rd->reuse = 0;  // reused is done
 	
 #ifdef BENCHMARK_MEAS_FREE
 	rdtscll(meas_end);
@@ -858,12 +786,22 @@ redo:
 		goto redo;
 	}
 
-	/* /\* printc("evt cli: evt_free(2) %d (evt id %ld)\n", cos_get_thd_id(), rd->s_evtid); *\/ */
-	if ((rd = rdevt_lookup(&rec_evt_map, extern_evt)) && rd->reuse == 0) {
-		rd_cli  = rdevt_lookup(&rec_evt_map_inv, rd->s_evtid);
-		if (unlikely(rd_cli)) rdevt_dealloc(&rec_evt_map_inv, rd_cli, rd->s_evtid);
+	/* Here is the issue: evt_free is called and the id is deleted
+	 * from evt_ns, but it can be preempted before rdevt_dealloc
+	 * in interface evt_free function. Then a new evt_id (but with
+	 * same id) is recreated in ns_alloc and returned here. Now
+	 * the entry of the same id still exist and not rdevt_dealloc
+	 * yet.  Solution: only the owner can do rdevt_alloc */
+	if ((rd = rdevt_lookup(&rec_evt_map, extern_evt)) && 
+	    rd->thdid == cos_get_thd_id()) {  // we are the owner
+		if (unlikely(rd_cli = rdevt_lookup(&rec_evt_map_inv, rd->s_evtid))) {
+			rdevt_dealloc(&rec_evt_map_inv, rd_cli, rd->s_evtid);
+		}
+		total_rem_evts++;
+		if (!rd->p_evtid) REM_LIST(rd, p_next, p_prev);
+		else REM_LIST(rd, next, prev);
 		rdevt_dealloc(&rec_evt_map, rd, rd->c_evtid);
 	}
-
+	
 	return ret;
 }

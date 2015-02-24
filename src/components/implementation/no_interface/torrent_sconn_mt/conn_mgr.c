@@ -141,13 +141,13 @@ static inline void
 evt_put(long evtid)
 {
 	// if we do not cache, it is faster? (8000 reqs/sec)
-	evt_free(cos_spd_id(), evtid);  // test
+	/* evt_free(cos_spd_id(), evtid);  // test */
 	
-	/* if (ncached >= EVT_CACHE_SZ) { */
-	/* 	evt_free(cos_spd_id(), evtid); */
-	/* } else { */
-	/* 	evt_cache[ncached++] = evtid; */
-	/* } */
+	if (ncached >= EVT_CACHE_SZ) {
+		evt_free(cos_spd_id(), evtid);
+	} else {
+		evt_cache[ncached++] = evtid;
+	}
 }
 
 /* positive return value == "from", negative == "to" */
@@ -632,6 +632,9 @@ void events_replay_all();
 
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
+	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p\n", */
+	/*        t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3); */
+	
 	switch (t) {
 	case COS_UPCALL_THD_CREATE:
 	{
@@ -646,8 +649,8 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		return;
 	}
 	case COS_UPCALL_RECEVT:
-		/* printc("conn_mgr: upcall to recover the event (thd %d, spd %ld)\n", */
-		/*        cos_get_thd_id(), cos_spd_id()); */
+		printc("conn_mgr: upcall to recover the event (thd %d, spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 #ifdef EVT_C3
 		events_replay_all();
 #endif

@@ -92,7 +92,8 @@ ns_alloc(spdid_t server_spd, spdid_t cli_spdid)
 	int ret = -1;
 	struct evt_node *en;
 
-	LOCK();
+	if (cos_get_thd_id() != 2) LOCK();
+	/* LOCK(); */
 
 	en = cslab_alloc_evt();
 	assert(en);	
@@ -106,7 +107,8 @@ ns_alloc(spdid_t server_spd, spdid_t cli_spdid)
 	spd_evts_cnt[cli_spdid]++;
 	/* printc("evt name server getting id %d (from spd %d)\n", ret, cli_spdid); */
 
-	UNLOCK();
+	if (cos_get_thd_id() != 2) UNLOCK();
+	/* UNLOCK(); */
 
 	return ret;
 }

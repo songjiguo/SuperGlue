@@ -445,9 +445,9 @@ static inline struct sched_thd *sched_take_crit_sect(spdid_t spdid, struct sched
 		assert(!sched_thd_blocked(cs->holding_thd));
 		/* no recursive lock taking allowed */
 		
-		printc("cs->holding_thd %d\n", cs->holding_thd->id);
-		printc("curr %d\n", curr->id);
-		printc("spdid %d\n", spdid);
+		/* printc("cs->holding_thd %d\n", cs->holding_thd->id); */
+		/* printc("curr %d\n", curr->id); */
+		/* printc("spdid %d\n", spdid); */
 
 		assert(curr != cs->holding_thd);
 		curr->contended_component = spdid;

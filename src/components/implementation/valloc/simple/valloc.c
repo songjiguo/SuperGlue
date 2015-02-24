@@ -84,10 +84,10 @@ static int __valloc_init(spdid_t spdid)
         trac->ci               = ci;
         trac->map              = occ;
         trac->extents[0].start = (void*)round_to_pgd_page(hp);
-        trac->extents[0].end   = (void*)round_up_to_pgd_page(hp);
-        trac->extents[0].map   = occ;
-        page_off = ((unsigned long)hp - (unsigned long)round_to_pgd_page(hp))/PAGE_SIZE;
-        bitmap_set_contig(&occ->pgd_occupied[0], page_off, (PGD_SIZE/PAGE_SIZE)-page_off, 1);
+	trac->extents[0].end   = (void*)round_up_to_pgd_page(hp);
+	trac->extents[0].map   = occ;
+	page_off = ((unsigned long)hp - (unsigned long)round_to_pgd_page(hp))/PAGE_SIZE;
+	bitmap_set_contig(&occ->pgd_occupied[0], page_off, (PGD_SIZE/PAGE_SIZE)-page_off, 1);
 
 	cos_vect_add_id(&spd_vect, trac, spdid);
 	assert(cos_vect_lookup(&spd_vect, spdid));
@@ -128,18 +128,18 @@ void *valloc_alloc(spdid_t spdid, spdid_t dest, unsigned long npages)
                 if (trac->extents[i].map) {
                         occ = trac->extents[i].map;
                         ext_size = (trac->extents[i].end - trac->extents[i].start) / PAGE_SIZE;
-                        off = bitmap_extent_find_set(&occ->pgd_occupied[0], 0, npages, MAP_MAX);
-                        if (off < 0) continue;
+			off = bitmap_extent_find_set(&occ->pgd_occupied[0], 0, npages, MAP_MAX);
+			if (off < 0) continue;
                         ret = (void *)((char *)trac->extents[i].start + off * PAGE_SIZE);
                         goto done;
                 }
-
+		
                 if (npages > EXTENT_SIZE) ext_size = npages;
                 trac->extents[i].map = alloc_page();
                 occ = trac->extents[i].map;
                 assert(occ);
-                trac->extents[i].start = (void*)vas_mgr_expand(spdid, dest, ext_size * PAGE_SIZE);
-                trac->extents[i].end = (void *)(trac->extents[i].start + ext_size * PAGE_SIZE);
+		trac->extents[i].start = (void*)vas_mgr_expand(spdid, dest, ext_size * PAGE_SIZE);
+		trac->extents[i].end = (void *)(trac->extents[i].start + ext_size * PAGE_SIZE);
                 bitmap_set_contig(&occ->pgd_occupied[0], 0, ext_size, 1);
                 bitmap_set_contig(&occ->pgd_occupied[0], 0, npages, 0);
                 ret = trac->extents[i].start;
@@ -173,6 +173,40 @@ int valloc_free(spdid_t spdid, spdid_t dest, void *addr, unsigned long npages)
                 ret = 0;
                 goto done;
         }
+done:	
+	UNLOCK();
+	return ret;
+}
+
+
+/* Jiguo: reset heap pointer back to the begin for a dest spd */
+int valloc_reset_hp(spdid_t spdid, spdid_t dest)
+{
+	int ret = -1;
+	struct spd_vas_tracker *trac;
+	struct spd_vas_occupied *occ;
+
+	LOCK();
+	trac = cos_vect_lookup(&spd_vect, dest);
+	if (!trac || !trac->ci || !trac->map) goto done;
+
+	printc("[[[valloc_reset_hp for spd %ld]]]\n", dest);
+	
+	cos_release_vas_page(trac->ci);
+
+	int i;
+        for (i = 0; i < MAX_SPD_VAS_LOCATIONS; i++) {
+                occ = trac->extents[i].map;
+		if (occ) free_page(occ);
+        }
+	free_page(trac->map);
+	free(trac);
+	
+	cos_vect_del(&spd_vect, dest);
+
+	__valloc_init(dest);
+
+	ret = 0;
 done:	
 	UNLOCK();
 	return ret;
