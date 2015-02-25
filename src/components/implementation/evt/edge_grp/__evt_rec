@@ -365,7 +365,7 @@ __evt_split(spdid_t spdid, long parent, int group)
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_SPLIT)
 	/* printc("trigger fault in evt_split: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid); */
 	/* if (spdid == 16 && cos_get_thd_id() == 12 && test_num++ > 5) { */
-	if (test_num++ > 100000) {
+	if (test_num++ > 300000) {
 		printc("trigger fault in evt_split: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -425,7 +425,7 @@ void evt_free(spdid_t spdid, long evt_id)
 	lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_FREE)
-	if (spdid == 16 && cos_get_thd_id() == 12 && test_num++ > 5) {
+	if (test_num++ > 300000) {
 		printc("trigger fault in evt_free: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -476,7 +476,7 @@ long evt_wait(spdid_t spdid, long evt_id)
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_BEFORE)
 		/* printc("trigger fault in evt_wait before (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
 		/* if (spdid == 20 && cos_get_thd_id() == 15 && test_num++ > 50) { */
-		if (test_num++ > 100000) {
+		if (test_num++ > 500000) {
 			printc("trigger fault in evt_wait before (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
 			assert(0);
 		}
@@ -508,7 +508,7 @@ long evt_wait(spdid_t spdid, long evt_id)
 		/* printc("trigger fault in evt_wait after (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
 		/* if (spdid == 20 && cos_get_thd_id() == 15 && test_num++ > 50) { */
 
-		if (test_num++ > 100000) {
+		if (test_num++ > 500000) {
 			printc("trigger fault in evt_wait after (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
 			assert(0);
 		}
@@ -532,7 +532,7 @@ evt_trigger(spdid_t spdid, long evt_id)
 	/*        cos_get_thd_id(), spdid, evt_id); */
 	/* if (spdid == 17 && cos_get_thd_id() == 10 && test_num++ > 5000) { */
 
-	if (test_num++ > 300000) {
+	if (test_num++ > 500000) {
 		printc("trigger fault in evt_trigger before: thd %d passed spd %d (evt %d)\n",
 		       cos_get_thd_id(), spdid, evt_id);
 		assert(0);
@@ -555,7 +555,7 @@ evt_trigger(spdid_t spdid, long evt_id)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_AFTER)
 	/* if (spdid == 17 && cos_get_thd_id() == 10 && test_num++ > 20000) { */
-	if (test_num++ > 100000) {
+	if (test_num++ > 500000) {
 		printc("trigger fault in evt_trigger after: thd %d passed spd %d (evt %d)\n",
 		       cos_get_thd_id(), spdid, evt_id);
 		assert(0);

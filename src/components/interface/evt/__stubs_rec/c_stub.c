@@ -241,7 +241,7 @@ rd_cons(struct rec_data_evt *rd, long c_evtid,
 		/*        cos_get_thd_id(), cos_spd_id(), c_evtid, parent); */
 		/* printc("evts_grp_list_head->c_evtid %d s_evtid %d parent %d\n",  */
 		/*        evts_grp_list_head->c_evtid, evts_grp_list_head->c_evtid, parent); */
-		if (evts_grp_list_head[cos_get_thd_id()]->s_evtid == parent) {
+		if (evts_grp_list_head[cos_get_thd_id()]->c_evtid == parent) {
 			total_add_evts++;
 			ADD_LIST(evts_grp_list_head[cos_get_thd_id()], rd, next, prev);
 			assert(rd->thdid == cos_get_thd_id());
@@ -251,7 +251,7 @@ rd_cons(struct rec_data_evt *rd, long c_evtid,
 					     p_next, p_prev); 
 			    tmp!= evts_grp_list_head[cos_get_thd_id()]; 
 			    tmp = tmp->next) {
-				if (tmp->s_evtid == parent) {
+				if (tmp->c_evtid == parent) {
 					/* printc("evts_tmp->c_evtid %d parent %d\n",  */
 					/*        tmp->c_evtid, parent); */
 					total_add_evts++;
@@ -313,16 +313,16 @@ rd_recover_state(struct rec_data_evt *rd, int thd)
 		if (rd->grp == 1) {
 			assert(rd == evts_grp_list_head[thd]);
 			assert(rd->thdid == thd);
-			for(tmp = FIRST_LIST(rd, next, prev) ;
-			    tmp != rd;
-			    tmp = FIRST_LIST(tmp, next, prev)) {
-				num_c_evts++;
-				/* printc("\nnum_c_evts %d\n", num_c_evts); */
-				/* print_rde_info(rd); */
-				/* print_rde_info(tmp); */
-				if (num_c_evts > 10000) assert(0);
-				assert(tmp->thdid == thd);
-			}
+			/* for(tmp = FIRST_LIST(rd, next, prev) ; */
+			/*     tmp != rd; */
+			/*     tmp = FIRST_LIST(tmp, next, prev)) { */
+			/* 	num_c_evts++; */
+			/* 	/\* printc("\nnum_c_evts %d\n", num_c_evts); *\/ */
+			/* 	/\* print_rde_info(rd); *\/ */
+			/* 	/\* print_rde_info(tmp); *\/ */
+			/* 	if (num_c_evts > 10000) assert(0); */
+			/* 	assert(tmp->thdid == thd); */
+			/* } */
 			
 			num_c_evts = 0;
 			for(tmp = FIRST_LIST(rd, next, prev) ;
@@ -548,7 +548,8 @@ redo:
 	}
 
 	assert(rd);
-	rd_cons(rd, ret, ret, p_evt, grp, EVT_STATE_CREATE, 0);
+	/* rd_cons(rd, ret, ret, p_evt, grp, EVT_STATE_CREATE, 0); */
+	rd_cons(rd, ret, ret, parent_evt, grp, EVT_STATE_CREATE, 0);
 
 	return ret;
 }
@@ -761,8 +762,13 @@ redo:
 	/* printc("evt cli: evt_free(1) %d (evt id %ld in spd %ld)\n",  */
 	/*        cos_get_thd_id(), extern_evt, cos_spd_id()); */
         rd = rd_update(extern_evt, EVT_STATE_FREE);
-	assert(rd);
-	assert(rd->c_evtid == extern_evt);
+
+	/* This is possible: 1) first the event is reused by another
+	 * thrad. 2) after the fault, the current thread tries redo
+	 * and the event might have been freed */
+	if (!rd) return 0;
+	/* assert(rd); */
+	/* assert(rd->c_evtid == extern_evt); */
 	
 #ifdef BENCHMARK_MEAS_FREE
 	rdtscll(meas_end);
