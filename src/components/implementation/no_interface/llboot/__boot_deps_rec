@@ -203,6 +203,12 @@ recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 		sched_exit();
 	}
 
+	if(op == COS_UPCALL_HOMEAGAIN) {
+		/* printc("Restart execution in home spd\n"); */
+		cos_upcall_args(op, dest, arg);
+		sched_exit();		
+	}
+
 	struct llbooter_per_core *llboot = PERCPU_GET(llbooter);
 	
 	assert(llboot);
@@ -226,7 +232,6 @@ recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 
 	return 0;
 }
-
 
 void failure_notif_fail(spdid_t caller, spdid_t failed);
 static int first = 0;

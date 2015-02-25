@@ -22,7 +22,7 @@ boot.o-print.o|fprr.o|mm.o|llboot.o;\
 l.o-fprr.o|mm.o|print.o|pfr.o;\
 te.o-sm.o|print.o|fprr.o|mm.o|va.o|eg.o|pfr.o;\
 sm.o-print.o|fprr.o|mm.o|boot.o|va.o|l.o|mpool.o;\
-pfr.o-fprr.o|mm.o|print.o|boot.o;\
+pfr.o-fprr.o|mm.o|print.o|boot.o|[home_]llboot.o;\
 buf.o-boot.o|sm.o|fprr.o|print.o|l.o|mm.o|va.o|mpool.o;\
 bufp.o-sm.o|fprr.o|print.o|l.o|mm.o|va.o|mpool.o|buf.o;\
 mpool.o-print.o|fprr.o|mm.o|boot.o|va.o|l.o;\

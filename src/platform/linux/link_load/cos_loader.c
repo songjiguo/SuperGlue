@@ -712,9 +712,7 @@ load_service(struct service_symbs *ret_data, unsigned long lower_addr, unsigned 
 		} else {
 			offset = round_up_to_page(offset + sect_sz);
 		}
-		/* printl(PRINT_DEBUG, "\tSect %d, addr %lx, sz %lx, offset %x\n",  */
-		/*        i, csg(i)->start_addr, csg(i)->len, offset); */
-		printl(PRINT_HIGH, "\tSect %d, addr %lx, sz %lx, offset %x\n", 
+		printl(PRINT_DEBUG, "\tSect %d, addr %lx, sz %lx, offset %x\n",
 		       i, csg(i)->start_addr, csg(i)->len, offset);
 	}
 
@@ -812,8 +810,7 @@ load_service(struct service_symbs *ret_data, unsigned long lower_addr, unsigned 
 	bfd_map_over_sections(objout, findsections_ldobj, section_info);
 
 	for (i = 0 ; csg(i)->secid < MAXSEC_S ; i++) {
-		/* printl(PRINT_DEBUG, "\tRetreiving section %d of size %lx @ %lx.\n", i, csg(i)->len, csg(i)->start_addr); */
-		printl(PRINT_HIGH, "\tRetreiving section %d of size %lx @ %lx.\n", i, csg(i)->len, csg(i)->start_addr);
+		printl(PRINT_DEBUG, "\tRetrieving section %d of size %lx @ %lx.\n", i, csg(i)->len, csg(i)->start_addr);
 
 		if (!is_booter_loaded(ret_data)) {
 			if (csg(i)->ldobj.s) {
@@ -847,12 +844,6 @@ load_service(struct service_symbs *ret_data, unsigned long lower_addr, unsigned 
 	ret_data->size       = size;
 	ret_data->allocated  = round_up_to_page((csg(MAXSEC_S-1)->start_addr - csg(0)->start_addr) + csg(MAXSEC_S-1)->len);
 	ret_data->heap_top   = csg(0)->start_addr + ret_data->allocated;
-
-	printf("services obj %s\n", ret_data->obj);
-	printf("size %d\n", ret_data->size);
-	printf("lower_addr %p\n", ret_data->lower_addr);
-	printf("allocated %d\n", ret_data->allocated);
-	printf("heap %p\n", ret_data->heap_top);
 
 	if (is_booter_loaded(ret_data)) {
 		if (make_cobj_symbols(ret_data, h)) {

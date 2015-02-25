@@ -245,9 +245,7 @@ redo:
 		 * holds the component lock. */
 		int dest = cap_to_dest(uc->cap_no);
 		int tmp_owner = sched_reflection_component_owner(dest);
-		if (tmp_owner == cos_get_thd_id()) {
-			sched_component_release(cap_to_dest(uc->cap_no));
-		}
+		if (tmp_owner == cos_get_thd_id()) sched_component_release(dest);
 
 		goto redo;
 	}
@@ -307,11 +305,9 @@ redo:
 
 		int dest = cap_to_dest(uc->cap_no);
 		int tmp_owner = sched_reflection_component_owner(dest);
-		printc("found a fault in periodic_wake_wait, owner is %d (curr %d)\n", 
-		       tmp_owner, cos_get_thd_id());
-		if (tmp_owner == cos_get_thd_id()) {
-			sched_component_release(cap_to_dest(uc->cap_no));
-		}
+		/* printc("found a fault in periodic_wake_wait, owner is %d (curr %d)\n",  */
+		/*        tmp_owner, cos_get_thd_id()); */
+		if (tmp_owner == cos_get_thd_id()) sched_component_release(dest);
 
 		goto redo;
 	}

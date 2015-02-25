@@ -16,36 +16,35 @@
 #include <failure_notif.h>
 
 /* Here is the special case: when a thread faults in its home
- * component or when a thread returns/switches back to the faulty
  * component, it can not do the replay by removing the current
  * invocation frame (and minus ip by 8) since the current invocation
- * frame is the last one. Current solution is to block that thread
- * after re-initialize the faulty component and run the regenerated
- * thread in the rebooted (since the home spd will create a
- * thread). TODO: kill this thread instead */
+ * frame is the last one. 
+ *
+ * Solution: see below. A upcall is made into the home spd and restart
+ * the execution. Need be careful with the initialization process in
+ * the home spd, such as sched_block, initialize the data structure
+ * once, etc..... Currently this is a reasonable solution. See how the
+ * time event thread is recovered....
+ */
 
 int fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 {
 	unsigned long r_ip; 	/* the ip to return to */
-	/* printc("pgfault notifier: spdid %d fault_addr %p flags %d ip %p (thd %d)\n", spdid, fault_addr, flags, ip, cos_get_thd_id()); */
+	printc("pgfault notifier: spdid %d fault_addr %p flags %d ip %p (thd %d)\n", spdid, fault_addr, flags, ip, cos_get_thd_id());
 	
 	int tid = cos_get_thd_id();
 	
-	/* if (spdid != cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) { */
-		/* assert(!cos_fault_cntl(COS_SPD_FAULT_UPDATE_FRAME, spdid, 0)); */
+	if (spdid == cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) {
+		printc("thd %d is in its homespd %d\n", tid, spdid);
+		recovery_upcall(cos_spd_id(), COS_UPCALL_HOMEAGAIN, spdid, 0);
+		assert(0);
+	} else {
 		assert(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0));
 		assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));
 		assert(!cos_thd_cntl(COS_THD_INVFRM_SET_IP, tid, 1, r_ip-8));
-	/* } */
-
-	/* } else { */
-
-	/* if (spdid == cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) { */
-	/* 	printc("set thd %d 's eip (find next)\n", tid); */
-	/* 	sched_block(cos_spd_id(), 0); */
-	/* } */
-
-	/* printc("pgfault notifier returning...: spdid %d (thd %d)\n", spdid, cos_get_thd_id()); */
+		printc("pgfault notifier returning...spdid %d (thd %d)\n", 
+		       spdid, cos_get_thd_id());
+	}
 
 	return 0;
 }
@@ -58,7 +57,7 @@ int fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *i
 	int tid = cos_get_thd_id();
 	//int i;
 
-	/* printc("pgfault parameters: spdid %d fault_addr %p flags %d ip %p (thd %d)\n", spdid, fault_addr, flags, ip, cos_get_thd_id()); */
+	printc("pgfault parameters: spdid %d fault_addr %p flags %d ip %p (thd %d)\n", spdid, fault_addr, flags, ip, cos_get_thd_id());
 	
 	if (test_num++ > 100) {
 		printc("has failed %d times\n", test_num);
@@ -93,5 +92,13 @@ int fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *i
 	if ((int)ip == 1) failure_notif_wait(cos_spd_id(), spdid);
 	else         failure_notif_fail(cos_spd_id(), spdid);
 
+	/* If the current thread's home spd crashes, upcall into that
+	 * component to restart the execution -- need be careful */
+	if (spdid == cos_thd_cntl(COS_THD_HOME_SPD, tid, 0, 0)) {
+		printc("thd %d is in its homespd %d\n", tid, spdid);
+		recovery_upcall(cos_spd_id(), COS_UPCALL_HOMEAGAIN, spdid, 0);
+		assert(0);
+	}
+	
 	return 0;
 }

@@ -2182,12 +2182,12 @@ int sched_root_init()
 
 	sched_init_create_threads(initialized[INIT_CORE] == 0);
 
-	printc("<<< to create timeer....>>>\n");
+	printc("<<< to create timer....>>>\n");
 
 	/* Create the clock tick (timer) thread */
 	fp_create_timer();
 
-	printc("<<< to create timeer....done>>>\n");
+	printc("<<< to create timer....done>>>\n");
 	/* Create the IPI handling thread for the current core */
 	fp_create_IPI_handler();
 

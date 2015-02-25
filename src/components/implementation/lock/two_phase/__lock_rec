@@ -214,9 +214,9 @@ int lock_component_pretake(spdid_t spd, unsigned long lock_id, unsigned short in
 	TAKE(spdid);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_PRETAKE)
-	printc("trigger fault in lock pre_take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
+	/* printc("trigger fault in lock pre_take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
 	/* if (spd == 16 && cos_get_thd_id() == 13 && test_num++ == 2) { */
-	if (test_num++ == 10) {
+	if (test_num++ > 600) {
 		printc("trigger fault in lock pre_take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}
@@ -256,8 +256,8 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_TAKE_BEFORE)	
 	/* printc("trigger fault in lock take before: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
 	/* if (spd == 17 && cos_get_thd_id() == 10 && test_num++ == 2) { */
-	if (test_num++ == 10) {
-		printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
+	if (test_num++ > 600) {
+		printc("trigger fault in lock take before: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}
 #endif
@@ -300,18 +300,20 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	/* printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
 		
 	/* if (spd == 17 && cos_get_thd_id() == 10 && test_num++ >= 0)  */
-	if (test_num++ == 10) {
-		printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
+	if (test_num++ > 600) {
+		printc("trigger fault in lock take after: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}
 #endif
 
-	/* what if net thread is blocked, and another thread is woken
-	 * up back to here? Will see a non-empty list? -- Jiguo */
 	if (!EMPTY_LIST(&blocked_desc, next, prev)) {
 		printc("lock_component_take: from spd %d thd %d found not empty blocked list\n",
 		       spd, cos_get_thd_id());
-		BUG();
+
+		/* what if net thread is blocked, and another thread is woken
+		 * up back to here? Will see a non-empty list? -- Jiguo */
+
+		/* BUG(); */
 	}
 
 	/* 
@@ -355,8 +357,8 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 	/* printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n", */
 	/*        cos_get_thd_id(), cos_spd_id(), spd); */
 	/* if (spd == 16 && cos_get_thd_id() == 13 && test_num++ == 2) { */
-	if (test_num++ == 10) {
-		printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
+	if (test_num++ > 600) {
+		printc("trigger fault in lock release before: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}
@@ -411,8 +413,8 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 		/* printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n", */
 		/*        cos_get_thd_id(), cos_spd_id(), spd); */
 		/* if (spd == 16 && cos_get_thd_id() == 13 && test_num++ == 2) { */
-		if (test_num++ == 10) {
-			printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n",
+		if (test_num++ > 600) {
+			printc("trigger fault in lock release after: thd %d spd %ld passed spd %d\n",
 			       cos_get_thd_id(), cos_spd_id(), spd);
 			assert(0);
 		}
@@ -491,17 +493,40 @@ int lock_stats_len(spdid_t spdid) { return 0; }
 
 #endif
 
+static int rec_thd = 0;
+static int first = 0;
+
 static void rd_reflection();
 
-void cos_init(void *arg)
+void cos_init()
 {
-	cos_vect_init_static(&bthds);
+	union sched_param sp;
 
-	// Jiguo: rdreflection
-	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
-		printc("\n\nneed do reflection now!!!!\n");
-		rd_reflection();
-		printc("\nreflection done!!!\n\n");
+	if (cos_get_thd_id() == rec_thd) {
+		printc("rec thread %d is in spd %ld\n", cos_get_thd_id(), cos_spd_id());
+		return;
+	}
+	
+	if (first == 0) {
+		first = 1;
+		/* printc("before init_static thd %d\n", cos_get_thd_id()); */
+		cos_vect_init_static(&bthds);
+		/* printc("after init_static thd %d\n", cos_get_thd_id()); */
+
+		// Jiguo: rdreflection
+		if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
+			/* printc("to create a recovery thread\n"); */
+			/* sp.c.type = SCHEDP_PRIO; */
+			/* printc("2\n"); */
+			/* sp.c.value = 3; */
+			/* printc("3\n"); */
+			/* rec_thd = sched_create_thd(cos_spd_id(), sp.v, 0, 0); */
+			/* printc("creates a recovery thread %d @ prio 3\n", rec_thd); */
+			
+			/* printc("\nneed do reflection now!!!!\n"); */
+			rd_reflection();
+			/* printc("\nreflection done!!!\n\n"); */
+		}
 	}
 }
 
@@ -519,10 +544,10 @@ rd_reflection()
 	// remove the mapped page for lock spd
 	vaddr_t addr;
 	count_obj = mman_reflect(cos_spd_id(), dest_spd, 1);
-	printc("lock relfects on mmgr: %d objs\n", count_obj);
+	/* printc("lock relfects on mmgr: %d objs\n", count_obj); */
 	while (count_obj--) {
 		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
-		printc("lock mman_release: %p addr\n", (void *)addr);
+		/* printc("lock mman_release: %p addr\n", (void *)addr); */
 		assert(addr);
 		memset((void *)addr, 0, PAGE_SIZE);  // zero out anything on this page before release
 		mman_release_page(cos_spd_id(), addr, dest_spd);
@@ -531,15 +556,31 @@ rd_reflection()
 	// to reflect all threads blocked from lock component
 	int wake_thd;
 	count_obj = sched_reflect(cos_spd_id(), dest_spd, 1);
-	printc("lock relfects on sched: %d objs\n", count_obj);
+	/* printc("lock relfects on sched: %d objs\n", count_obj); */
 	while (count_obj--) {
 		wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0);
-		printc("wake_thd %d\n", wake_thd);
+		/* printc("wake_thd %d\n", wake_thd); */
 		sched_wakeup(cos_spd_id(), wake_thd);
 	}
-	printc("lock reflection done (thd %d)\n\n", cos_get_thd_id());
+	/* printc("lock reflection done (thd %d)\n\n", cos_get_thd_id()); */
 
 	return;
 }
 
 int lock_trigger_all(spdid_t spdid, int dest) {return 0;}
+
+void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
+{
+	printc("upcall type %d, core %ld, thd %d, args %p %p %p\n",
+	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
+	switch (t) {
+	case COS_UPCALL_THD_CREATE:
+	{
+		cos_init();
+		break;
+	}
+	default:
+		return;
+	}
+	return;
+}

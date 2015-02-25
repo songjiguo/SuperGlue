@@ -1646,6 +1646,8 @@ static int init(void)
 	init_lwip();
 
 	NET_LOCK_RELEASE();
+
+	periodic_wake_create(cos_spd_id(), 25); // Jiguo: create tcp timer
 	/* Start the tcp timer */
 	while (1) {
 		/* Sleep for a quarter of seconds as prescribed by lwip */
@@ -1665,7 +1667,8 @@ static int init(void)
 		/* printc("tcp timer %d...\n", cos_get_thd_id()); */
 		tcp_tmr();
 		NET_LOCK_RELEASE();
-		timed_event_block(cos_spd_id(), 25); /* expressed in ticks currently */
+		/* timed_event_block(cos_spd_id(), 25); /\* expressed in ticks currently *\/ */
+		periodic_wake_wait(cos_spd_id());
 		cos_mpd_update();
 	}
 

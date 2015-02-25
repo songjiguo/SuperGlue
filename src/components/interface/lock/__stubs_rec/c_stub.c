@@ -257,7 +257,7 @@ redo:
 		int dest = cap_to_dest(uc->cap_no);
 		int tmp_owner = sched_reflection_component_owner(dest);
 		if (tmp_owner == cos_get_thd_id()) {
-			sched_component_release(cap_to_dest(uc->cap_no));
+			sched_component_release(cap_to_dest(dest));
 		}
 		goto redo;
 	}
@@ -314,7 +314,7 @@ redo:
 		int dest = cap_to_dest(uc->cap_no);
 		int tmp_owner = sched_reflection_component_owner(dest);
 		if (tmp_owner == cos_get_thd_id()) {
-			sched_component_release(cap_to_dest(uc->cap_no));
+			sched_component_release(dest);
 		}
 		goto redo;  // update the generation number
 	}
@@ -360,7 +360,7 @@ CSTUB_FN(int, lock_component_take) (struct usr_inv_cap *uc,
 		int dest = cap_to_dest(uc->cap_no);
 		int tmp_owner = sched_reflection_component_owner(dest);
 		if (tmp_owner == cos_get_thd_id()) {
-			sched_component_release(cap_to_dest(uc->cap_no));
+			sched_component_release(dest);
 		}
 		/* this will force contending the lock again */
 		ret = 0; 
@@ -392,7 +392,7 @@ CSTUB_FN(int, lock_component_release) (struct usr_inv_cap *uc,
 		int dest = cap_to_dest(uc->cap_no);
 		int tmp_owner = sched_reflection_component_owner(dest);
 		if (tmp_owner == cos_get_thd_id()) {
-			sched_component_release(cap_to_dest(uc->cap_no));
+			sched_component_release(dest);
 		}
 	}
 	

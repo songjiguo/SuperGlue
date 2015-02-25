@@ -343,6 +343,7 @@ typedef enum {
 	COS_UPCALL_RECOVERY,	   /* for mm recovery */
 	COS_UPCALL_REBOOT,	   /* for sched recovery */
 	COS_UPCALL_RECEVT,	   /* for event recovery */
+	COS_UPCALL_HOMEAGAIN,	   /* for home component crashes */
 	COS_UPCALL_REFLECTION,	   /* for reflection purpose. Now only used by evt */
 	COS_UPCALL_EAGER_RECOVERY, /* for compare lazy and eager */
 	COS_UPCALL_LOG_PROCESS,    /* for log monitor process*/
@@ -360,6 +361,7 @@ enum {
 	COS_THD_INVFRM_SP,	/* get the stack pointer in an inv frame  */
 	COS_THD_INVFRM_SET_SP,
 	COS_THD_HOME_SPD,  //Jiguo: used to find home spd
+	COS_THD_RESET_HOME_SPD,  //Jiguo: used to restart execution in home spd
 	COS_THD_CLEAR_PENDING_UPCALL,  // Jiguo: clear any pending upcall
 	COS_SPD_FAULT_UPDATE_FRAME, // Jiguo: update pgfault fault counter from frame
 	/* 

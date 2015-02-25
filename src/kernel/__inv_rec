@@ -570,7 +570,7 @@ thd_ipc_fault_notif(struct thread *thd, struct spd *dest_spd)
 static struct pt_regs *
 thd_pop_fault_notif(struct thread *thd, struct spd *dest_spd)
 {
-	/* printk("\n[[[[[[ cos: Fault is detected on POP ]]]]]]\n\n"); */
+	printk("\n[[[[[[ cos: Fault is detected on POP ]]]]]]\n\n");
 	__fault_ipc_invoke(thd, 0, 0, &thd->regs, COS_FLT_FLT_NOTIF, dest_spd);
 	return &thd->regs;
 }
@@ -843,6 +843,41 @@ cos_syscall_thd_cntl(int spd_id, int op_thdid, long arg1, long arg2)
 		if (NULL == tif) return 0;
 		i_spd = tif->spd;
 		return spd_get_index(i_spd);
+	}
+	case COS_THD_RESET_HOME_SPD:   // Jiguo:
+	{
+		struct thd_invocation_frame *tif;
+		struct spd *i_spd = NULL;
+		
+		printk("cos: RESET HOME SPD requesting component %d\n", arg1);
+		i_spd = spd_get_by_index(arg1);
+		if (NULL == i_spd) {
+			printk("cos: requesting non-existed component %d\n", arg1);
+			return -1;
+		}
+		if (thd == NULL) {
+			printk("cos: Could not find thread\n");
+			return -1;
+		}
+
+		thd->stack_ptr = 0;
+		thd->stack_base[0].current_composite_spd = i_spd->composite_spd;
+		thd->stack_base[0].spd = i_spd;
+
+		/* FIXME: do this lazily */
+		spd_mpd_ipc_take((struct composite_spd *)i_spd->composite_spd);
+
+		thd->regs.cx = COS_UPCALL_THD_CREATE;
+		thd->regs.dx = i_spd->upcall_entry;
+		thd->regs.bx = 0;
+		thd->regs.di = 0;	
+		thd->regs.si = 0;
+		thd->regs.ax = thd_get_id(thd) | (get_cpuid() << 16);
+
+		thd->flags |= THD_STATE_CYC_CNT;
+		/* initialize_sched_info(thd, sched_spd); */
+		
+		return 0;
 	}
 	case COS_THD_CLEAR_PENDING_UPCALL:   // Jiguo:
 	{

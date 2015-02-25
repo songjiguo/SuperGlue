@@ -116,7 +116,7 @@ void cos_init(void)
 		if (cos_get_thd_id() == high) {
 			printc("\nfault injector %ld (high %d thd %d)\n", 
 			       cos_spd_id(), high, cos_get_thd_id());
-			timed_event_block(cos_spd_id(), 30);
+			/* timed_event_block(cos_spd_id(), 30); */   // do not need this!!!
 			periodic_wake_create(cos_spd_id(), INJECTION_PERIOD);
 			while(num < 500) {
 				/*  run this first to update the

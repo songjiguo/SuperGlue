@@ -249,7 +249,7 @@ vaddr_t __sg_mman_reflect(spdid_t spd, int src_spd, int cnt)
 		for (rd_page = FIRST_LIST(rd_page_list, next, prev);
 		     rd_page != rd_page_list;
 		     rd_page = FIRST_LIST(rd_page, next, prev)){
-			printc("(cnt)saved pages %p @ %p (thd %d)\n", (void *)rd_page->addr, (void *)rd_page, cos_get_thd_id());
+			/* printc("(cnt)saved pages %p @ %p (thd %d)\n", (void *)rd_page->addr, (void *)rd_page, cos_get_thd_id()); */
 			ret++;
 		}
 	} else {

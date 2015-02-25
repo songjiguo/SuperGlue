@@ -573,21 +573,21 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 	/*        cos_get_thd_id(), spdinv);		 */
 	/* test_num++; */
 	/* if (spdinv == 16 && cos_get_thd_id() == 13 && test_num == 1) { */
-	if (test_num++ > 1000)
-		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
+	if (test_num++ > 1000) {
+		printc("trigger fault in periodic_wake_create before: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
 	}
 #endif
 
-	// Jiguo: a thread is associated with an event now
+// Jiguo: a thread is associated with an event now
 	evt = evt_split(cos_spd_id(), 0, 0);
 	assert(evt > 0);
 	te->evt = evt;
-
+	
 	ticks = sched_timestamp();
-	ret   = ticks;   // Jiguo: see above assumption. This only track once
-	if (!c3_ticks) {
+	ret   = ticks;   // Jiguo: see above assumption. This is only tracked once
+	if (likely(!c3_ticks)) {
 		te->event_expiration = n = ticks + period;
 		/* printc("normal event_expiration %d\n", te->event_expiration); */
 	} else {
@@ -613,15 +613,15 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 	/* /\* printc("in periodic_wake_create: thd %d spd %d, test_num %d\n", *\/ */
 	/* /\*        cos_get_thd_id(), spdinv, test_num); *\/ */
 	/* if (spdinv == 16 && cos_get_thd_id() == 13 && test_num == 1) { */
-	if (test_num++ > 1000)
-		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
+	if (test_num++ > 1000) {
+		printc("trigger fault in periodic_wake_create after: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
 	}
 #endif
-
-	/* return 0; */
-	return ret;
+	
+        /* return 0; */
+	return ret;   // Jiguo: return the creation ticks
 }
 
 int periodic_wake_create(spdid_t spdinv, unsigned int period)
@@ -677,9 +677,8 @@ int periodic_wake_wait(spdid_t spdinv)
 	/* test_num++; */
 	/* printc("in periodic_wake_wait: thd %d spd %d, test_num %d\n", */
 	/*        cos_get_thd_id(), spdinv, test_num); */
-	/* if (spdinv == 16 && cos_get_thd_id() == 13 && test_num >= 2) { */
-	if (test_num++ > 1000)
-		printc("trigger fault in periodic_wake_wait: thd %d spd %d\n", 
+	if (test_num++ > 50) {
+		printc("trigger fault in periodic_wake_wait before: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
 	}
@@ -734,8 +733,8 @@ redo:
 	/* /\* printc("in periodic_wake_wait: thd %d spd %d, test_num %d\n", *\/ */
 	/* /\*        cos_get_thd_id(), spdinv, test_num); *\/ */
 	/* if (spdinv == 16 && cos_get_thd_id() == 13 && test_num >= 2) { */
-	if (test_num++ > 1000)
-		printc("trigger fault in periodic_wake_wait: thd %d spd %d\n", 
+	if (test_num++ > 50) {
+		printc("trigger fault in periodic_wake_wait after: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
 	}
@@ -748,17 +747,13 @@ err:
 	return -1;
 }
 
-
-static int first = 1;  // for creating timer thread. Only need one
-
-static void start_timer_thread(void)
+static void start_timer_thread(int again)
 {
 	// Jiguo: use alignment here. Also set first to be 0 to ensure only one timer thd
 
 	// align the following instructions
 	// change this to __atrribute__((aligned(512))) later
 	/* __asm__ volatile(".balign 512"); */
-	first = 0;
 	
 	spdid_t spdid = cos_spd_id();
 	unsigned int tick_freq;
@@ -773,21 +768,23 @@ static void start_timer_thread(void)
 	cyc_per_tick = sched_cyc_per_tick();
 	//	printc("cyc_per_tick = %lld\n", cyc_per_tick);
 
-	/* When the system boots, we have no pending waits */
-	assert(EMPTY_LIST(&events, next, prev));
-	/* printc("start timer thread %d (Kevinandy) is blocking...\n", cos_get_thd_id()); */
-	sched_block(spdid, 0);
+	if (likely(!again)) {
+		/* When the system boots, we have no pending waits */
+		assert(EMPTY_LIST(&events, next, prev));
+		printc("start timer thread %d (Kevinandy) is blocking...\n", cos_get_thd_id());
+		sched_block(spdid, 0);
+	} // otherwise, this is the re-execution in home spd. Do not block -- Jiguo
 
-#if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_TIMER_THD_BEFORE)
-	if (test_num++ > 5) {
-		printc("trigger fault in periodic_wake_create: thd %d spd %d\n", 
-		       cos_get_thd_id(), spdid);
-		assert(0);
-	}
-#endif
 	/* Wait for events, then act on expired events.  Loop. */
 	while (1) {
 		/* printc("timed_evt: timer thread %d\n", cos_get_thd_id()); */
+#if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_TIMER_THD_BEFORE)
+		if (test_num++ > 40) {
+			printc("trigger fault in timer before: thd %d spd %d\n", 
+			       cos_get_thd_id(), spdid);
+			assert(0);
+		}
+#endif
 		event_time_t next_wakeup;
 		cos_mpd_update(); /* update mpd config given this
 				   * thread is now in this component
@@ -815,9 +812,9 @@ static void start_timer_thread(void)
 #ifdef LINUX_HIGHEST_PRIORITY
 			//gap assert(next_wakeup > ticks);
 #endif
-			/* printc("next_wakeup %d ticks %d\n", next_wakeup, ticks); */
+			printc("next_wakeup %d ticks %d\n", next_wakeup, ticks);
 			/* Jiguo: not sure why this failed even when next_wakeup > ticks */
-			/* assert(next_wakeup > ticks); */
+			assert(next_wakeup > ticks);
 			wakeup = (unsigned int)(next_wakeup - ticks);
 			if (sched_component_release(spdid)) {
 				prints("fprr: scheduler lock release failed!!!");
@@ -826,8 +823,8 @@ static void start_timer_thread(void)
 			sched_timeout(spdid, wakeup);
 			
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_TIMER_THD_AFTER)
-			if (test_num++ > 5) {
-				printc("trigger fault in timer: thd %d spd %d\n", 
+			if (test_num++ > 40) {
+				printc("trigger fault in timer after: thd %d spd %d\n", 
 				       cos_get_thd_id(), spdid);
 				assert(0);
 			}
@@ -835,40 +832,6 @@ static void start_timer_thread(void)
 		}
 	}
 }
-
-static void rd_reflection();
-
-static int init_first = 1;
-
-void cos_init()
-{
-	union sched_param sp;
-
-	if (init_first) {
-		init_first = 0;
-		INIT_LIST(&events, next, prev);
-		events.thread_id = 0;
-		INIT_LIST(&periodic, next, prev);
-		periodic.thread_id = 0;
-
-		cos_vect_init_static(&thd_evts);
-		cos_vect_init_static(&thd_periodic);
-
-		sp.c.type = SCHEDP_PRIO;
-		sp.c.value = 3;
-
-		if (cos_thd_create(start_timer_thread, NULL, sp.v, 0, 0) <= 0) BUG();
-		printc("after timed_event component creates a new timer thread.\n");
-
-		if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
-			printc("need do reflection now!!!!\n");
-			rd_reflection();
-		}
-	} else {
-		printc("timed_event component received too many bootstrap threads.");
-	}
-}
-	
 
 extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
 extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
@@ -889,11 +852,52 @@ rd_reflection()
 		mman_release_page(cos_spd_id(), addr, dest_spd);
 	}
 
-	printc("pte reflection on evt_trigger_all (thd %d)\n\n", cos_get_thd_id());
+	// to reflect all threads blocked from evt component, such as evt_wait
+	int wake_thd;
+	count_obj = sched_reflect(cos_spd_id(), dest_spd, 1);
+	printc("pte relfects on sched: %d objs\n", count_obj);
+	while (count_obj--) {
+		wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0);
+		printc("thread %d wake_thd %d\n", cos_get_thd_id(), wake_thd);
+		sched_wakeup(cos_spd_id(), wake_thd);
+	}
+
+	printc("pte reflects on evt_trigger_all (thd %d)\n\n", cos_get_thd_id());
 	evt_trigger_all(cos_spd_id());  // for now, only pte and mailbox use this
 		
-	printc("\n\n reflection done!!!\n\n");
+	printc("\nreflection done!!!\n\n");
 	return;
+}
+
+static int init_first = 1;
+
+void cos_init()
+{
+	union sched_param sp;
+
+	if (init_first) {
+		init_first = 0;
+		INIT_LIST(&events, next, prev);
+		events.thread_id = 0;
+		INIT_LIST(&periodic, next, prev);
+		periodic.thread_id = 0;
+
+		cos_vect_init_static(&thd_evts);
+		cos_vect_init_static(&thd_periodic);
+
+		if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
+			printc("need do reflection now!!!!\n");
+			rd_reflection();
+		} else {
+			sp.c.type = SCHEDP_PRIO;
+			sp.c.value = 3;
+			if (cos_thd_create(start_timer_thread, NULL, sp.v, 0, 0) <= 0) BUG();
+			printc("after timed_event component creates a new timer thread.\n");
+		}
+
+	} else {
+		printc("timed_event component received too many bootstrap threads.");
+	}
 }
 
 #ifdef EVT_C3
@@ -910,7 +914,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		printc("time_event: upcall to call cos_init (thd %d, spd %ld)\n",
 		       cos_get_thd_id(), cos_spd_id());
 		if (!arg1) cos_init();
-		else start_timer_thread();  // Jiguo: no idea....thread can not find fn?
+		else start_timer_thread(0);  // Jiguo: no idea....thread can not find fn?
 		break;
 	}
 	case COS_UPCALL_RECEVT:
@@ -919,6 +923,13 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 #ifdef EVT_C3
 		events_replay_all();
 #endif
+		break;
+	case COS_UPCALL_HOMEAGAIN:
+		printc("time_event: reset execution in home spd (thd %d, spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
+		if (init_first) cos_init();
+		start_timer_thread(1);   // restart execution timer thread
+		assert(0);
 		break;
 	default:
 		return;
