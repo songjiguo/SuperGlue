@@ -172,6 +172,8 @@ param_save(char *param, int param_len)
 	return l_param;
 }
 
+/* Jiguo: https calls tsplit with FN_=server, so here it is */
+
 extern td_t server_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
 
 /* restore the server state */
@@ -199,7 +201,7 @@ rd_recover_state(struct rec_data_tor *rd)
 	td_t tmp_tid = server_tsplit(cos_spd_id(), rd->p_tid, 
 			      rd->param, rd->param_len, rd->tflags, rd->evtid);
 	if (tmp_tid <= 1) return;
-	printc("\n recovery process tsplit return!!!...(tmp_tid %d)\n\n", tmp_tid);
+	printc("\nrecovery process tsplit return!!!...(tmp_tid %d)\n\n", tmp_tid);
 	
 	assert((tmp = map_rd_lookup(tmp_tid)));
 	rd->s_tid = tmp->s_tid;

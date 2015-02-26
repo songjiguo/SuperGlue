@@ -21,6 +21,8 @@
 #include <uniq_map.h>
 #include <pgfault.h>
 
+static int test_num = 0;
+
 static cos_lock_t fs_lock;
 struct fsobj root;
 #define LOCK() if (lock_take(&fs_lock)) BUG();
@@ -82,8 +84,6 @@ tiduniq_dealloc(struct tid_uniqid_data *idmapping)
 }
 
 
-static int test_control = 0;
-
 td_t 
 tsplit(spdid_t spdid, td_t td, char *param, 
        int len, tor_flags_t tflags, long evtid) 
@@ -126,9 +126,9 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	ret = nt->td;
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TSPLIT_BEFORE)
-	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 3) {
-		printc("trigger fault in ramfs tsplit: thd %d spd %ld passed spd %d\n", 
+	/* if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 3) { */
+	if (test_num++ > 50000) {
+		printc("trigger fault in ramfs tsplit before: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -186,9 +186,9 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	nt->offset = 0;  // initialize this to be zero
 	
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TSPLIT_AFTER)
-	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 3) {
-		printc("trigger fault in ramfs tsplit: thd %d spd %ld passed spd %d\n", 
+	/* if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 3) { */
+	if (test_num++ > 50000) {
+		printc("trigger fault in ramfs tsplit after: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -239,8 +239,8 @@ twritep(spdid_t spdid, td_t td, int cb, int sz)
 	/* assert(tmem == 1); */
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TWRITEP_BEFORE)
-	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
+	test_num++;
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 2) {
 		printc("trigger fault in ramfs twritep: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -307,8 +307,8 @@ twritep(spdid_t spdid, td_t td, int cb, int sz)
 	cbufp_send(cb);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TWRITEP_AFTER)
-	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) {
+	test_num++;
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 2) {
 		printc("trigger fault in ramfs twritep: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -359,20 +359,8 @@ treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 	if (!fso->size) ERR_THROW(0, done);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TREADP)
-	/* printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n", */
-	/*        cos_get_thd_id(), cos_spd_id(), spdid); */
-
-	/* // ubenchmark */
-	/* test_control++; */
-	/* if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 2) { */
-	/* 	printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n", */
-	/* 	       cos_get_thd_id(), cos_spd_id(), spdid); */
-	/* 	assert(0); */
-	/* } */
-	
-	// web server
-	test_control++;
-	if (spdid == 22 && cos_get_thd_id() == 15 && test_control == 1000) {
+	/* if (spdid == 22 && cos_get_thd_id() == 15 && test_num == 1000) { */
+	if (test_num++ > 50000) {
 		printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -424,8 +412,8 @@ tmerge(spdid_t spdid, td_t td, td_t td_into, char *param, int len)
 	if (td_into != td_null) ERR_THROW(-EINVAL, done);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TMERGE)
-	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 1) {
+	test_num++;
+	if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 1) {
 		printc("trigger fault in ramfs tmerge: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -468,8 +456,8 @@ trelease(spdid_t spdid, td_t td)
 	if (!t) goto done;
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TRELEASE)
-	test_control++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_control == 3) {
+	/* if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 3) { */
+	if (test_num++ > 50000) {
 		printc("trigger fault in ramfs trelease: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -560,38 +548,6 @@ __twmeta(spdid_t spdid, td_t td, const char *key,
 	return 0;
 }
 
-
-static void rd_reflection();
-
-int cos_init(void)
-{
-	unsigned long long start, end;
-	rdtscll(start);
-	
-	lock_static_init(&fs_lock);
-	torlib_init();
-	
-	fs_init_root(&root);
-	root_torrent.data = &root;
-	root.flags = TOR_READ | TOR_SPLIT;
-	
-	rdtscll(end);
-	printc("COST (cos_init): %llu\n", end - start);
-
-	printc("spd %d heap pointer %p\n", cos_spd_id(), cos_get_heap_ptr());
-
-	// Jiguo: tracking the mapping between server tid and uniqid
-	cvect_init_static(&idmapping_vect);
-	// Jiguo: rdreflection
-	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
-		printc("\n\nneed do reflection now!!!!\n");
-		rd_reflection();
-		printc("\nreflection done!!!\n\n");
-	}
-
-	return 0;
-}
-
 /* extern int sched_reflect(spdid_t spdid, int src_spd, int cnt); */
 /* extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id); */
 /* extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt); */
@@ -637,3 +593,31 @@ rd_reflection()
 	lock_trigger_all(cos_spd_id(), cos_spd_id());
 	return;
 }
+
+int cos_init(void)
+{
+	unsigned long long start, end;
+	/* rdtscll(start); */
+	
+	lock_static_init(&fs_lock);
+	torlib_init();
+	
+	fs_init_root(&root);
+	root_torrent.data = &root;
+	root.flags = TOR_READ | TOR_SPLIT;
+	
+	/* rdtscll(end); */
+	/* printc("COST (cos_init): %llu\n", end - start); */
+	/* printc("spd %d heap pointer %p\n", cos_spd_id(), cos_get_heap_ptr()); */
+
+	// Jiguo: tracking the mapping between server tid and uniqid
+	cvect_init_static(&idmapping_vect);
+	// Jiguo: rdreflection
+	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
+		rd_reflection();
+		printc("\nreflection done!!!\n\n");
+	}
+
+	return 0;
+}
+

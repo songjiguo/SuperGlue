@@ -25,7 +25,6 @@
 
 #include <name_server.h>
 
-
 unsigned long long evt_alloc_cnt = 0;
 unsigned long long evt_free_cnt = 0;
 
