@@ -345,6 +345,8 @@ typedef enum {
 	COS_UPCALL_RECEVT,	   /* for event recovery */
 	COS_UPCALL_HOMEAGAIN,	   /* for home component crashes */
 	COS_UPCALL_REFLECTION,	   /* for reflection purpose. Now only used by evt */
+	COS_UPCALL_SWIFI_BEFORE,   /* for preparing SWIFI (stage 1) */
+	COS_UPCALL_SWIFI_AFTER,    /* for preparing SWIFI (stage 2)*/
 	COS_UPCALL_EAGER_RECOVERY, /* for compare lazy and eager */
 	COS_UPCALL_LOG_PROCESS,    /* for log monitor process*/
 	COS_UPCALL_FAILURE_NOTIF,

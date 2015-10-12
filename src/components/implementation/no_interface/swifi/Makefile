@@ -2,7 +2,7 @@ C_OBJS=swifi.o
 ASM_OBJS=
 COMPONENT=fi.o
 INTERFACES=
-DEPENDENCIES=periodic_wake sched printc cbuf_c mem_mgr_large valloc evt timed_blk ll_log
+DEPENDENCIES=sched periodic_wake  printc cbuf_c mem_mgr_large valloc evt timed_blk ll_log recovery_upcall
 
 include ../../Makefile.subsubdir
 ifeq (${ENABLE_STACK_MANAGER},1)

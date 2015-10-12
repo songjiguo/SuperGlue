@@ -3,22 +3,6 @@
 
 #include <res_spec.h>
 
-/* #define TEST_SCHED_CREATE_THD */
-/* #define TEST_SCHED_CREATE_THD_DEFAULT */
-/* #define TEST_SCHED_WAKEUP */
-/* #define TEST_SCHED_BLOCK */
-/* #define TEST_SCHED_COMPONENT_TAKE */
-/* #define TEST_SCHED_COMPONENT_RELEASE */
-/* #define TEST_SCHED_TIMEOUT_THD */
-/* #define TEST_SCHED_TIMEOUT */
-
-//#define MEASU_SCHED_INTERFACE_CREATE
-//#define MEASU_SCHED_INTERFACE_DEFAULT
-//#define MEASU_SCHED_INTERFACE_WAKEUP
-//#define MEASU_SCHED_INTERFACE_BLOCK
-//#define MEASU_SCHED_INTERFACE_COM_TAKE
-//#define MEASU_SCHED_INTERFACE_COM_RELEASE
-
 int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
 int sched_block(spdid_t spdid, unsigned short int dependency_thd);
 

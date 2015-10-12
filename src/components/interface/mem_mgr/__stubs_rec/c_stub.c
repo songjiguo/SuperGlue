@@ -128,8 +128,8 @@ rd_cons(struct rec_data_mm *rd, int id,
 	rd->fcnt	= fcounter;
 
 	
-	printc("rd_cons print rd --- \n");
-	print_rd_info(rd);
+	/* printc("rd_cons print rd --- \n"); */
+	/* print_rd_info(rd); */
 	return;
 }
 
@@ -240,9 +240,9 @@ CSTUB_FN(vaddr_t, mman_get_page) (struct usr_inv_cap *uc,
 
 	unsigned long long start, end;
 redo:
-	if (cos_spd_id() != 5) {
-		printc("mm cli: call mman_get_page addr %p\n", addr);
-	}
+	/* if (cos_spd_id() != 5) { */
+	/* 	printc("mm cli: call mman_get_page addr %p\n", addr); */
+	/* } */
 	
 	CSTUB_INVOKE(ret, fault, uc, 3,  spdid,addr, flags);
         if (unlikely (fault)){
@@ -267,12 +267,12 @@ CSTUB_FN(vaddr_t, __mman_alias_page) (struct usr_inv_cap *uc,
 	unsigned int test  = d_spd_flags;
 	
 redo:
-	if (cos_spd_id() != 5) {
-		printc("mm cli: d_spd_flags %p\n", d_spd_flags);
-		printc("mm cli: __mman_alias_page spd %d s_addr %p and (PAGE_SHIFT %p) dest %d d_addr %p\n",
-		       cos_spd_id(), s_addr, (s_addr >> PAGE_SHIFT) & 0xFFF, 
-		       test >> 16, d_addr);
-	}
+	/* if (cos_spd_id() != 5) { */
+	/* 	printc("mm cli: d_spd_flags %p\n", d_spd_flags); */
+	/* 	printc("mm cli: __mman_alias_page spd %d s_addr %p and (PAGE_SHIFT %p) dest %d d_addr %p\n", */
+	/* 	       cos_spd_id(), s_addr, (s_addr >> PAGE_SHIFT) & 0xFFF,  */
+	/* 	       test >> 16, d_addr); */
+	/* } */
 	
 	CSTUB_INVOKE(ret, fault, uc, 4,  s_spd, s_addr, d_spd_flags, d_addr);
         if (unlikely (fault)){
@@ -313,9 +313,9 @@ CSTUB_FN(vaddr_t, mman_revoke_page) (struct usr_inv_cap *uc,
 	struct rec_data_mm *rd;
 	
 redo:
-	printc("mm cli: call mman_revoke_page addr %p\n", addr);
+	/* printc("mm cli: call mman_revoke_page addr %p\n", addr); */
 	
-	if (cos_spd_id() == 5) goto cont;   // do not track booter for now
+	if (cos_spd_id() == 5) goto cont;   // do not track booter -- hack
 	rd = rd_update(addr, PAGE_STATE_REVOKE);
 	assert(rd);
 cont:

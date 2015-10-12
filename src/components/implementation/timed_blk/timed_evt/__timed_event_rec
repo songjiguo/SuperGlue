@@ -26,6 +26,11 @@
 
 #include <evt.h>  // Jiguo: now have thread block through event
 
+#if (RECOVERY_ENABLE == 1)
+#include <c3_test.h>
+#endif
+unsigned int swifi_ready = 0;  // explicitly initialize to 0
+
 #include <sched.h>
 #include "../../sched/cos_sched_sync.h"
 
@@ -351,8 +356,8 @@ redo:
 	/* if return from the fault and the time is not expired, keep
 	 * waiting. No need to take lock? */
 	if (unlikely(wait_ret < 0 && !EMPTY_LIST(te, next, prev))) {
-		/* printc("thd %d is going to call evt_wait in spd %ld again\n", */
-		/*        cos_get_thd_id(), cos_spd_id()); */
+		printc("thd %d is going to call evt_wait in spd %ld again\n",
+		       cos_get_thd_id(), cos_spd_id());
 		goto redo;  
 	}
 
@@ -598,7 +603,7 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 	}
 
 	assert(n > ticks);
-	printc("ticks %llu period %d\n", ticks, period);
+	/* printc("ticks %llu period %d\n", ticks, period); */
 
 	t = next_event_time();
 	assert(t > ticks);
@@ -662,12 +667,23 @@ int periodic_wake_wait(spdid_t spdinv)
 	struct thread_event *te;
 	u16_t tid = cos_get_thd_id();
 	long long t;
+
 	/* printc("thd %d calling period_wake_wait\n", cos_get_thd_id()); */
 
+	WAIT_FAULT();
+
 	TAKE(spdid);
+
+	// SWIFI thread shoulod not wait for fault, it is injecing fault!!
+	/* if (cos_get_thd_id() != 11) WAIT_FAULT(); */
+
+
 	te = te_pget(tid);
 	if (NULL == te) BUG();
 	if (!(te->flags & TE_PERIODIC)) goto err;
+
+	/* volatile unsigned long long wait_fault = 0; */
+	/* while (wait_fault++ < 10000000); */
 		
 	assert(!EMPTY_LIST(te, next, prev));
 
@@ -677,7 +693,7 @@ int periodic_wake_wait(spdid_t spdinv)
 	/* test_num++; */
 	/* printc("in periodic_wake_wait: thd %d spd %d, test_num %d\n", */
 	/*        cos_get_thd_id(), spdinv, test_num); */
-	if (test_num++ > 50) {
+	if (test_num++ > 2) {
 		printc("trigger fault in periodic_wake_wait before: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
@@ -728,6 +744,8 @@ redo:
 
 	/* printc("leaving the periodic wake wait\n"); */
 
+	WAIT_FAULT();
+	
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_WAIT_AFTER)
 	/* test_num++; */
 	/* /\* printc("in periodic_wake_wait: thd %d spd %d, test_num %d\n", *\/ */
@@ -740,6 +758,7 @@ redo:
 	}
 #endif
 
+	/* printc("thd %d returns from period_wake_wait\n", cos_get_thd_id()); */
 
 	return 0;
 err:
@@ -812,7 +831,7 @@ static void start_timer_thread(int again)
 #ifdef LINUX_HIGHEST_PRIORITY
 			//gap assert(next_wakeup > ticks);
 #endif
-			printc("next_wakeup %d ticks %d\n", next_wakeup, ticks);
+			/* printc("next_wakeup %d ticks %d\n", next_wakeup, ticks); */
 			/* Jiguo: not sure why this failed even when next_wakeup > ticks */
 			assert(next_wakeup > ticks);
 			wakeup = (unsigned int)(next_wakeup - ticks);
@@ -820,6 +839,7 @@ static void start_timer_thread(int again)
 				prints("fprr: scheduler lock release failed!!!");
 				BUG();
 			}
+
 			sched_timeout(spdid, wakeup);
 			
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_TIMER_THD_AFTER)
@@ -845,27 +865,26 @@ rd_reflection()
 	// remove the mapped page for mailbox spd
 	vaddr_t addr;
 	count_obj = mman_reflect(cos_spd_id(), dest_spd, 1);
-	printc("pte relfects on mmgr: %d objs (thd %d)\n", count_obj, cos_get_thd_id());
+	/* printc("pte relfects on mmgr: %d objs (thd %d)\n", count_obj, cos_get_thd_id()); */
 	while (count_obj--) {
 		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
 		/* printc("evt mman_release: %p addr\n", (void *)addr); */
 		mman_release_page(cos_spd_id(), addr, dest_spd);
 	}
 
-	// to reflect all threads blocked from evt component, such as evt_wait
 	int wake_thd;
 	count_obj = sched_reflect(cos_spd_id(), dest_spd, 1);
-	printc("pte relfects on sched: %d objs\n", count_obj);
+	/* printc("pte relfects on sched: %d objs\n", count_obj); */
 	while (count_obj--) {
 		wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0);
-		printc("thread %d wake_thd %d\n", cos_get_thd_id(), wake_thd);
+		/* printc("thread %d wake_thd %d\n", cos_get_thd_id(), wake_thd); */
 		sched_wakeup(cos_spd_id(), wake_thd);
 	}
-
-	printc("pte reflects on evt_trigger_all (thd %d)\n\n", cos_get_thd_id());
+	// to reflect all threads blocked from evt component, such as evt_wait
+	/* printc("pte reflects on evt_trigger_all (thd %d)\n\n", cos_get_thd_id()); */
 	evt_trigger_all(cos_spd_id());  // for now, only pte and mailbox use this
 		
-	printc("\nreflection done!!!\n\n");
+	/* printc("\nreflection done!!!\n\n"); */
 	return;
 }
 
@@ -931,6 +950,16 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		start_timer_thread(1);   // restart execution timer thread
 		assert(0);
 		break;
+	case COS_UPCALL_SWIFI_BEFORE:   // prepare for swifi
+	{
+		swifi_ready = 1; // now other thread can spin for inject fault
+		break;
+	}
+	case COS_UPCALL_SWIFI_AFTER:   // allow other thread to proceed 
+	{
+		swifi_ready = 0; // now other thread can continue
+		break;
+	}
 	default:
 		return;
 	}

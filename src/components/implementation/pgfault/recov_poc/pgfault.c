@@ -27,6 +27,8 @@
  * time event thread is recovered....
  */
 
+static int test_num = 0;
+
 int fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 {
 	unsigned long r_ip; 	/* the ip to return to */
@@ -46,10 +48,14 @@ int fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip
 		       spdid, cos_get_thd_id());
 	}
 
+	/* if (test_num++ > 10) { */
+	/* 	printc("notif has failed %d times\n", test_num); */
+	/* 	assert(0); */
+	/* } */
+
 	return 0;
 }
 
-static int test_num = 0;
 
 int fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 {

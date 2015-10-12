@@ -1,6 +1,7 @@
+/* It is strange that this spd has to be loaded early ???? in script*/
+
 #include <cos_component.h>
 #include <print.h>
-#include <cos_component.h>
 #include <res_spec.h>
 #include <sched.h>
 
@@ -8,46 +9,64 @@
 #include <timed_blk.h>
 
 #include <swifi.h>
+#include <c3_test.h>
 
 int high;
 unsigned long counter = 0;
 
-#define SWIFI_ENABLE 0
+// 10 for non-MM
 #define INJECTION_PERIOD 10
+#define INJECTION_ITER 10000
 
 // hard code all components
 enum SEL_SPD{
-	SEL_SH,
-	SEL_MM,
-	SEL_FS,
-	SEL_LK,
-	SEL_TE,
-	SEL_EV,
-	SEL_MB,
+	SEL_SH,    // scheduelr
+	SEL_MM,    // mm
+	SEL_FS,    // file system
+	SEL_LK,    // lock
+	SEL_TE,    // time management
+	SEL_EV,    // event
+	SEL_MB,    // mailbox
 	MAX_C3_SPD
 };
-#define TARGET_SPD SEL_EV
 
-#define SH_SPD 2
-#define MM_SPD 3
-#define FS_SPD 23
-#define LK_SPD 15
-#define TE_SPD 16
-#define EV_SPD 18
-#define MB_SPD 99   // where should this fit into webserver?
+// choose this for different injection
+#define TARGET_SPD SEL_FS
+
+#ifdef SWIFI_ON
+// need check this every time
+#define SH_SPD 2      // done
+#define MM_SPD 3      // done
+#define FS_SPD 15     // done
+#define LK_SPD 10     // done
+#define TE_SPD 11     // done     
+#define EV_SPD 12     // done
+#define MB_SPD 99     // where should this fit into webserver? 
+#endif
+
+#ifdef SWIFI_WEB
+// need check this every time
+#define SH_SPD 2      // done
+#define MM_SPD 3      // done
+#define FS_SPD 15     // done
+#define LK_SPD 10     // done
+#define TE_SPD 11     // done     
+#define EV_SPD 12     // done
+#endif
 
 int target_spd[MAX_C3_SPD];
 #define IDLE_THD 4
 static int entry_cnt = 0;
+
 int fault_inject(int spd)
 {
 	int ret = 0;
 	int tid, spdid;
 
 	entry_cnt++;
-	/* printc("\nthread %d in SWIFI %ld (%d) ... TARGET_COMPONENT %d\n",  */
+	/* printc("\nthread %d in SWIFI %ld (%d) ... TARGET_COMPONENT %d\n", */
 	/*        cos_get_thd_id(), cos_spd_id(), entry_cnt, spd); */
-
+	
 	if (spd == 0) return 0;
 	
 	struct cos_regs r;
@@ -56,7 +75,7 @@ int fault_inject(int spd)
 		spdid = cos_thd_cntl(COS_THD_FIND_SPD_TO_FLIP, tid, spd, 0);
 		if (tid == IDLE_THD || spdid == -1) continue;
 		counter++;
-		printc("<<%lu>> flip the register in component %d (tid %d)!!!\n", 
+		printc("<<flip counter %lu>> flip the register in spd %d (thd %d)!!!\n", 
 		       counter, spd, tid);
 		cos_regs_read(tid, spdid, &r);
 		cos_regs_print(&r);
@@ -72,9 +91,11 @@ void cos_init(void)
 	static int first = 0;
 	union sched_param sp;
 	int rand;
-	int num = 0;
 
-#if (SWIFI_ENABLE == 0)
+/* #ifndef SWIFI_ON */
+/* 	return; */
+/* #else */
+#ifndef SWIFI_WEB
 	return;
 #else
 	if(first == 0){
@@ -116,17 +137,32 @@ void cos_init(void)
 		if (cos_get_thd_id() == high) {
 			printc("\nfault injector %ld (high %d thd %d)\n", 
 			       cos_spd_id(), high, cos_get_thd_id());
-			/* timed_event_block(cos_spd_id(), 30); */   // do not need this!!!
 			periodic_wake_create(cos_spd_id(), INJECTION_PERIOD);
-			while(num < 500) {
-				/*  run this first to update the
-				 *  wakeup time */
-				periodic_wake_wait(cos_spd_id());
+			timed_event_block(cos_spd_id(), 1);
+
+#ifdef SWIFI_ON
+			// this is for each service fault coverage test
+			while(1) {
+				recovery_upcall(cos_spd_id(), COS_UPCALL_SWIFI_BEFORE, 
+						target_spd[TARGET_SPD], 0);
+				// in 1 tick, hope some thread is spinning there!
+				timed_event_block(cos_spd_id(), 1);
+				
 				fault_inject(target_spd[TARGET_SPD]);
-				num++;
+				recovery_upcall(cos_spd_id(), COS_UPCALL_SWIFI_AFTER, 
+						target_spd[TARGET_SPD], 0);
+				periodic_wake_wait(cos_spd_id());
 			}
+#endif
+#ifdef SWIFI_WEB
+			// this is for web server fault injection only
+			while(1) {
+				fault_inject(target_spd[TARGET_SPD]);
+				periodic_wake_wait(cos_spd_id());
+			}
+#endif
 		}
 	}
 #endif
-
+	
 }

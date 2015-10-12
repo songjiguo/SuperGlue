@@ -41,6 +41,8 @@ capability over that interface
 #include <lock.h>
 #include <cstub.h>
 
+#include <c3_test.h>
+
 extern int sched_component_take(spdid_t spdid);
 extern int sched_component_release(spdid_t spdid);
 #define TAKE(spdid) 	do { if (sched_component_take(spdid))    return; } while (0)
@@ -252,13 +254,12 @@ redo:
 		test_flag = 1;
 		rdtscll(meas_start);
 #endif		
-
 		CSTUB_FAULT_UPDATE();
-		int dest = cap_to_dest(uc->cap_no);
-		int tmp_owner = sched_reflection_component_owner(dest);
-		if (tmp_owner == cos_get_thd_id()) {
-			sched_component_release(cap_to_dest(dest));
-		}
+		/* int dest = cap_to_dest(uc->cap_no); */
+		/* int tmp_owner = sched_reflection_component_owner(dest); */
+		/* if (tmp_owner == cos_get_thd_id()) { */
+		/* 	sched_component_release(cap_to_dest(dest)); */
+		/* } */
 		goto redo;
 	}
 	
@@ -311,11 +312,12 @@ redo:
 #endif		
 
 		CSTUB_FAULT_UPDATE();
-		int dest = cap_to_dest(uc->cap_no);
-		int tmp_owner = sched_reflection_component_owner(dest);
-		if (tmp_owner == cos_get_thd_id()) {
-			sched_component_release(dest);
-		}
+
+		/* int dest = cap_to_dest(uc->cap_no); */
+		/* int tmp_owner = sched_reflection_component_owner(dest); */
+		/* if (tmp_owner == cos_get_thd_id()) { */
+		/* 	sched_component_release(dest); */
+		/* } */
 		goto redo;  // update the generation number
 	}
 	
@@ -331,17 +333,13 @@ CSTUB_FN(int, lock_component_take) (struct usr_inv_cap *uc,
 
 	struct rec_data_lk *rd = NULL;
 
-	volatile unsigned long long lock_overhead_start, lock_overhead_end;
-	
-	rdtscll(lock_overhead_start);
+redo:
 	rd = rd_update(lock_id, LOCK_TAKE);
 	assert(rd);
-	rdtscll(lock_overhead_end);
-	/* printc("lock_component_take interface overhead %llu\n",  */
-	/*        lock_overhead_end - lock_overhead_start);		 */
 	
 #ifdef BENCHMARK_MEAS_TAKE
 	rdtscll(meas_end);
+	/* printc("now take again(thd %d, end %llu)!!!!\n", cos_get_thd_id(), meas_end); */
 	if (test_flag) {
 		test_flag = 0;
 		printc("recovery a lock cost: %llu\n", meas_end - meas_start);
@@ -355,14 +353,18 @@ CSTUB_FN(int, lock_component_take) (struct usr_inv_cap *uc,
 #ifdef BENCHMARK_MEAS_TAKE
 		test_flag = 1;
 		rdtscll(meas_start);
+		/* printc("a fault(thd %d start %llu)!!!!\n", cos_get_thd_id(), meas_start); */
 #endif		
+
 		CSTUB_FAULT_UPDATE();
-		int dest = cap_to_dest(uc->cap_no);
-		int tmp_owner = sched_reflection_component_owner(dest);
-		if (tmp_owner == cos_get_thd_id()) {
-			sched_component_release(dest);
-		}
+
+		/* int dest = cap_to_dest(uc->cap_no); */
+		/* int tmp_owner = sched_reflection_component_owner(dest); */
+		/* if (tmp_owner == cos_get_thd_id()) { */
+		/* 	sched_component_release(dest); */
+		/* } */
 		/* this will force contending the lock again */
+		goto redo;
 		ret = 0; 
 	}
 
@@ -389,11 +391,12 @@ CSTUB_FN(int, lock_component_release) (struct usr_inv_cap *uc,
 
 	if (unlikely (fault)){
 		CSTUB_FAULT_UPDATE();
-		int dest = cap_to_dest(uc->cap_no);
-		int tmp_owner = sched_reflection_component_owner(dest);
-		if (tmp_owner == cos_get_thd_id()) {
-			sched_component_release(dest);
-		}
+
+		/* int dest = cap_to_dest(uc->cap_no); */
+		/* int tmp_owner = sched_reflection_component_owner(dest); */
+		/* if (tmp_owner == cos_get_thd_id()) { */
+		/* 	sched_component_release(dest); */
+		/* } */
 	}
 	
 	return ret;

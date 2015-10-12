@@ -103,7 +103,7 @@ long __sg_evt_wait(spdid_t spdid, long extern_evt)
 
 	ret = evt_wait(spdid, extern_evt);
 
-	rdtscll(overhead_start);
+	/* rdtscll(overhead_start); */
 	/* C_TAKE(cos_spd_id()); */
 	lock_take(&evt_interface_lock);
 	/* printc("return from evt_wait....(thd %d)\n", cos_get_thd_id()); */
@@ -111,9 +111,9 @@ long __sg_evt_wait(spdid_t spdid, long extern_evt)
 	REM_LIST(&te, next, prev);  	
 	lock_release(&evt_interface_lock);
 	/* C_RELEASE(cos_spd_id()); */
-	rdtscll(overhead_end);
-	printc("evt_wait interface overhead %llu\n", 
-	       overhead_end - overhead_start + tmp_overhead);
+	/* rdtscll(overhead_end); */
+	/* printc("evt_wait interface overhead %llu\n",  */
+	/*        overhead_end - overhead_start + tmp_overhead); */
 
 	return ret;
 }

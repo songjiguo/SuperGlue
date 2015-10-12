@@ -410,7 +410,7 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 
 	switch(option) {
 	case COS_SPD_FAULT_TRIGGER:
-		/* printk("increase fault counter for spd %d\n", d_spdid); */
+		printk("increase fault counter for spd %d\n", d_spdid);
 		d_spd->fault.cnt++;
 		d_spd->reflection.cnt = d_spd->fault.cnt;
 		break;

@@ -18,6 +18,8 @@
 
 #include <name_server.h>
 
+#include <c3_test.h>
+
 static cos_lock_t uniq_map_lock;
 #define LOCK() if (lock_take(&uniq_map_lock)) BUG();
 #define UNLOCK() if (lock_release(&uniq_map_lock)) BUG();
@@ -263,7 +265,6 @@ ns_reflection(spdid_t spdid, int id, int type)
 	return 0;
 }
 
-
 /* The function used to upcall to each client to rebuild each event
  * state. This is only the faulty path and no need to take the lock */
 int
@@ -273,16 +274,17 @@ ns_upcall(spdid_t spdid)
 	
 	/* LOCK(); */
 	
-	/* printc("evt_ns: ready to upcall (thd %d call from spd %d)\n",  */
+	/* printc("evt_ns: ready to upcall (thd %d call from spd %d)\n", */
 	/*        cos_get_thd_id(), spdid); */
 	
 	int i;
 	for (i = 0; i < MAX_NUM_SPDS; i++) {
 		if (!spd_evts_cnt[i]) continue;
 		/* UNLOCK(); */
-		/* printc("evt_ns has found spd %d has created evt (counter %d)\n",  */
+		/* printc("evt_ns has found spd %d has created evt (counter %d)\n", */
 		/*        i, spd_evts_cnt[i]); */
 		recovery_upcall(cos_spd_id(), COS_UPCALL_RECEVT, i, 0);
+
 		/* LOCK(); */
 	}
 done:

@@ -95,6 +95,17 @@ cos_init(void)
 			ec3_ser1_test(low, med, high);
 		}
 #endif
+#ifdef EXAMINE_MBOX
+		if (cos_get_thd_id() == high) {
+			printc("<<<high thd %d>>>\n", cos_get_thd_id());
+			ec3_ser1_test(low, med, high);
+		}
+		
+		if (cos_get_thd_id() == med) {
+			printc("<<<med thd %d>>>\n", cos_get_thd_id());
+			ec3_ser2_test(low, med, high);
+		}
+#endif
 #ifdef EXAMINE_LOCK
 		if (cos_get_thd_id() == high) {
 			printc("<<<high thd %d>>>\n", cos_get_thd_id());
@@ -140,12 +151,19 @@ cos_init(void)
 		if (cos_get_thd_id() == high) {
 			printc("<<<high thd %d>>>\n", cos_get_thd_id());
 			ec3_ser1_test(low, med, high);
-		}
-			
+		} 
+
 		if (cos_get_thd_id() == med) {
 			printc("<<<med thd %d>>>\n", cos_get_thd_id());
 			ec3_ser1_test(low, med, high);
 		}
+		
+		else if (cos_get_thd_id() > med) {
+			printc("<<<other thd %d>>>\n", cos_get_thd_id());
+			ec3_ser1_test(low, med, high);
+		}
+
+		
 #endif
 	}
 

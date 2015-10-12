@@ -1,20 +1,7 @@
 #ifndef   	EVT_H
 #define   	EVT_H
 
-/* #define TEST_EVT_SPLIT */
-/* #define TEST_EVT_TRIGGER_BEFORE */
-/* #define TEST_EVT_TRIGGER_AFTER */
-/* #define TEST_EVT_WAIT_BEFORE */
-/* #define TEST_EVT_WAIT_AFTER */
-/* #define TEST_EVT_FREE */
-
-/* #define TEST_EVT_CREATE */
-
-/* #define BENCHMARK_MEAS_SPLIT */
-/* #define BENCHMARK_MEAS_CREATE */
-/* #define BENCHMARK_MEAS_TRIGGER */   // no need to measure this
-/* #define BENCHMARK_MEAS_WAIT */
-/* #define BENCHMARK_MEAS_FREE */
+#include <c3_test.h>
 
 typedef enum {
 	EVT_NIL   = 0,

@@ -293,10 +293,13 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	}
 #endif
 	LOCK();
+	printc("0\n");
 	t = tor_lookup(td);
 	if (!t) ERR_THROW(-EINVAL, done);
+	printc("1\n");
 	nt = tor_alloc(NULL, tflags);
 	if (!nt) ERR_THROW(-ENOMEM, done);
+	printc("2\n");
 	nt->evtid = evtid;
 	fsc = fsobj_path2obj(param, len, t->data, &parent, &subpath);
 	if (!fsc) {
@@ -489,11 +492,13 @@ tread(spdid_t spdid, td_t td, int cbid, int sz)
 }
 
 int 
-treadp(spdid_t spdid, td_t td, int *off, int *sz)
+treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 {
 	cbufp_t ret;
 	struct torrent *t;
 	struct as_conn *ac;
+
+	printc("In treadp (thd %d)\n", cos_get_thd_id());
 
 	if (tor_isnull(td)) return -EINVAL;
 
@@ -520,7 +525,7 @@ treadp(spdid_t spdid, td_t td, int *off, int *sz)
 
 done:	
 	UNLOCK();
-	/* printc("treadp (thd %d) return, ret %d\n", cos_get_thd_id(), ret); */
+	printc("treadp (thd %d) return, ret %d\n", cos_get_thd_id(), ret);
 	return ret;
 }
 
@@ -564,6 +569,13 @@ twritep(spdid_t spdid, td_t td, int cbid, int sz)
 done:	
 	UNLOCK();
 	return ret;
+}
+
+int
+__twmeta(spdid_t spdid, td_t td, const char *key, 
+	 unsigned int klen, const char *val, unsigned int vlen) 
+{
+	return 0;
 }
 
 static void rd_reflection();

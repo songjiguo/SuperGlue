@@ -10,10 +10,6 @@
 #ifndef   	MEM_MGR_H
 #define   	MEM_MGR_H
 
-/* #define TEST_MM_GET_PAGE */
-#define TEST_MM_ALIAS_PAGE
-/* #define TEST_MM_REVOKE_PAGE */
-
 /* Map a physical frame into a component. */
 vaddr_t mman_get_page(spdid_t spd, vaddr_t addr, int flags);
 /* 
@@ -25,7 +21,7 @@ vaddr_t mman_get_page(spdid_t spd, vaddr_t addr, int flags);
 int mman_release_page(spdid_t spd, vaddr_t addr, int flags);
 /* remove all descendent mappings of this one (but not this one). */ 
 int mman_revoke_page(spdid_t spd, vaddr_t addr, int flags); 
-/* The invoking component (s_spd) must own the mapping. */
+
 vaddr_t __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_addr);
 static inline vaddr_t 
 mman_alias_page(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr, int flags)

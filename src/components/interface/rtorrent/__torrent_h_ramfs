@@ -13,14 +13,6 @@
 #include <cbuf.h>
 #include <evt.h>
 
-/* #define TEST_RAMFS_TSPLIT_BEFORE */
-/* #define TEST_RAMFS_TSPLIT_AFTER */
-/* #define TEST_RAMFS_TREADP */
-/* #define TEST_RAMFS_TWRITEP_BEFORE */
-/* #define TEST_RAMFS_TWRITEP_AFTER */
-/* #define TEST_RAMFS_TRELEASE */
-/* #define TEST_RAMFS_TMERGE */
-
 typedef int td_t;
 static const td_t td_null = 0, td_root = 1;
 typedef enum {
@@ -37,7 +29,6 @@ td_t tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, l
 void trelease(spdid_t spdid, td_t tid);
 int tmerge(spdid_t spdid, td_t td, td_t td_into, char *param, int len);
 int tread(spdid_t spdid, td_t td, int cbid, int sz);
-
 /* No idea why do we need off returned? */
 int treadp(spdid_t spdid, td_t td, int len, int *off, int *sz);
 

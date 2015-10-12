@@ -21,6 +21,11 @@
 #include <uniq_map.h>
 #include <pgfault.h>
 
+#if (RECOVERY_ENABLE == 1)
+#include <c3_test.h>
+#endif
+unsigned int swifi_ready = 0;  // explicitly initialize to 0
+
 static int test_num = 0;
 
 static cos_lock_t fs_lock;
@@ -621,3 +626,28 @@ int cos_init(void)
 	return 0;
 }
 
+void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
+{
+	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p\n", */
+	/*        t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3); */
+	switch (t) {
+	case COS_UPCALL_THD_CREATE:
+	{
+		cos_init();
+		break;
+	}
+	case COS_UPCALL_SWIFI_BEFORE:   // prepare for swifi
+	{
+		swifi_ready = 1; // now other thread can spin for inject fault
+		break;
+	}
+	case COS_UPCALL_SWIFI_AFTER:   // allow other thread to proceed 
+	{
+		swifi_ready = 0; // now other thread can continue
+		break;
+	}
+	default:
+		return;
+	}
+	return;
+}

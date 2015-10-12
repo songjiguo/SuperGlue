@@ -33,6 +33,11 @@
 #include <ck_ring.h>
 #include <ck_spinlock.h>
 
+#if (RECOVERY_ENABLE == 1)
+#include <c3_test.h>
+#endif
+unsigned int swifi_ready = 0;  // explicitly initialize to 0
+
 //#define TIMER_ACTIVATE
 #include <timer.h>
 #include <errno.h>
@@ -842,6 +847,8 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 		goto xcore_done;
 	}
 	
+	WAIT_FAULT();
+
 	cos_sched_lock_take();
 
 	thd = sched_get_mapping(thd_id);
@@ -851,18 +858,17 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	/* printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", */
 	/*        cos_get_thd_id(), cos_spd_id(), spdid); */
 	test_control++;
-
-	/* if (spdid == 12 && cos_get_thd_id() == 14 && test_control == 4) { */
-	/* 	printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", */
-	/* 	       cos_get_thd_id(), cos_spd_id(), spdid); */
-	/* 	assert(0); */
-	/* } */
-
-	if (spdid == 18 && cos_get_thd_id() == 10 && test_control == 20000) {
+	if (spdid == 17 && cos_get_thd_id() == 14 && test_control == 4) {
 		printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
+
+	/* if (spdid == 18 && cos_get_thd_id() == 10 && test_control == 20000) { */
+	/* 	printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", */
+	/* 	       cos_get_thd_id(), cos_spd_id(), spdid); */
+	/* 	assert(0); */
+	/* } */
 #endif
 
 	/* only increase the count once */
@@ -971,6 +977,8 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 	// Added by Gabe 08/19
 	if (unlikely(dep_thd == cos_get_thd_id())) return -EINVAL;
 
+	WAIT_FAULT();
+
 	cos_sched_lock_take();
 	thd = sched_get_current();
 	assert(thd);
@@ -1002,10 +1010,9 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 	assert(!sched_thd_blocked(thd));
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_BLOCK)
-	/* printc("trigger fault in sched_block: thd %d spd %ld passed spd %d\n",  */
-	/*        cos_get_thd_id(), cos_spd_id(), spdid); */
-	test_control++;
-	if (spdid == 18 && cos_get_thd_id() == 15 && test_control == 500) {
+	/* printc("trigger fault in sched_block: thd %d spd %ld passed spd %d (test_control %d)\n", */
+	/*        cos_get_thd_id(), cos_spd_id(), spdid, test_control); */
+	if (spdid == 17 && cos_get_thd_id() == 13 && test_control++ == 4) {
 		printc("trigger fault in sched_block: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -1149,6 +1156,8 @@ int sched_component_take(spdid_t spdid)
 	struct sched_thd *holder, *curr;
 	int first = 1;
 
+	WAIT_FAULT();
+
 	cos_sched_lock_take();
 	report_event(COMP_TAKE);
 	curr = sched_get_current();
@@ -1162,10 +1171,9 @@ int sched_component_take(spdid_t spdid)
 		/* If the current thread is dependent on another thread, switch to it for help! */
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_COMPONENT_TAKE)
-		test_control++;
 		/* printc("trigger sched_component_take %d (thd %d test_control %d)\n",  */
 		/*        spdid, cos_get_thd_id(), test_control); */
-		if (spdid == 15 && cos_get_thd_id() == 11 && test_control  == 400) {
+		if (spdid == 17 && cos_get_thd_id() == 13 && test_control++ == 5) {
 			printc("trigger fault in sched_component_take: thd %d spd %ld passed spd %d\n",
 			       cos_get_thd_id(), cos_spd_id(), spdid);
 			assert(0);
@@ -1174,6 +1182,9 @@ int sched_component_take(spdid_t spdid)
 
 		holder = sched_take_crit_sect(spdid, curr);
 		if (NULL == holder) break;
+
+		if (curr == holder) break;  // Jiguo: see sched_take_crit_sect
+
 		curr->flags |= THD_DEPENDENCY;
 		
 		/* FIXME: proper handling of recursive locking */
@@ -1199,6 +1210,8 @@ int sched_component_release(spdid_t spdid)
 	struct sched_thd *curr;
 
 	/* printc("sched component release %d\n", spdid); */
+
+	WAIT_FAULT();
 
 	report_event(COMP_RELEASE);
 	cos_sched_lock_take();
@@ -2422,6 +2435,16 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	case COS_UPCALL_ACAP_COMPLETE:
 		fp_event_completion(sched_get_current());
 		break;
+	case COS_UPCALL_SWIFI_BEFORE:   // prepare for swifi
+	{
+		swifi_ready = 1; // now other thread can spin for inject fault
+		break;
+	}
+	case COS_UPCALL_SWIFI_AFTER:   // allow other thread to proceed 
+	{
+		swifi_ready = 0; // now other thread can continue
+		break;
+	}
 	default:
 		printc("fp_rr: cos_upcall_fn error - type %x, arg1 %d, arg2 %d\n", 
 		      (unsigned int)t, (unsigned int)arg1, (unsigned int)arg2);
@@ -2429,8 +2452,8 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		return;
 	}
 
-	printc("upcall type %d, core %ld, thd %d, args %p %p %p  done!!!!\n",
-	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
+	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p  done!!!!\n", */
+	/*        t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3); */
 
 	return;
 }

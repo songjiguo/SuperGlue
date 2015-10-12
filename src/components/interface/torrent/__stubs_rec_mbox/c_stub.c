@@ -74,7 +74,7 @@
 #include <cos_component.h>
 #include <cos_debug.h>
 
-#include <mbtorrent.h>
+#include <torrent.h>
 #include <cstub.h>
 #include <print.h>
 #include <cos_map.h>
@@ -493,12 +493,14 @@ CSTUB_FN(td_t, tsplit)(struct usr_inv_cap *uc,
 	}
 	
 redo:
-        /* printc("<<< In: call tsplit  (thread %d) >>>\n", cos_get_thd_id()); */
+        printc("<<< In: call tsplit  (thread %d) >>>\n", cos_get_thd_id());
 	rd = rd_update(parent_tid, STATE_TSPLIT_PARENT);
 	/* assert(rd); */
 	
 	d = cbuf_alloc(sz, &cb);
 	if (!d) return -1;
+	printc("<<< In: call tsplit  (thread %d) 2 >>>\n", cos_get_thd_id());
+
         d->parent_tid = parent_tid;   
 	d->tflags     = tflags;
 	d->evtid      = evtid;
@@ -537,14 +539,14 @@ redo:
 	
 	// ret is server side id
 	ser_tid = ret;
-	/* printc("cli: tsplit create a new rd %d in spd %ld\n", ser_tid, cos_spd_id()); */
+	printc("cli: tsplit create a new rd %d in spd %ld\n", ser_tid, cos_spd_id());
 	assert (ser_tid >= 1);
 	
 	struct uniqmap_data *dm = NULL;
 	cbuf_t cb_p;
 	int uniq_id;
 	int tmp_sz = strlen(&d->data[0]);
-	/* printc("sz of the passed in string path name is %d\n", sz); */
+	printc("sz of the passed in string path name is %d\n", sz);
 	if (tmp_sz > 0) {
 		dm = cbuf_alloc(tmp_sz, &cb_p);
 		assert(dm);
@@ -678,7 +680,7 @@ CSTUB_FN(int, treadp)(struct usr_inv_cap *uc,
 	long fault = 0;
         struct rec_data_tor *rd = NULL;
 redo:
-        /* printc("<<< In: call treadp  (thread %d) >>>\n", cos_get_thd_id()); */
+        printc("<<< cli: before call treadp  (thread %d) >>>\n", cos_get_thd_id());
         rd = rd_update(c_tid, STATE_TREAD);
 	assert(rd);
         /* printc("<<< In: call treadp  (thread %d)... after rd_update >>>\n", cos_get_thd_id()); */
@@ -705,6 +707,7 @@ redo:
 		goto redo;
 	}
 
+        printc("<<< cli: after return from treadp (thread %d) >>>\n", cos_get_thd_id());
 	// ret is the cbufid for mbox
 	if (ret > 0) {
 

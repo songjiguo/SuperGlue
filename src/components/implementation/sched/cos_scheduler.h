@@ -449,7 +449,12 @@ static inline struct sched_thd *sched_take_crit_sect(spdid_t spdid, struct sched
 		/* printc("curr %d\n", curr->id); */
 		/* printc("spdid %d\n", spdid); */
 
-		assert(curr != cs->holding_thd);
+		/* Jiguo: lock component could fail while still
+		 * holding the critical section , if so just
+		 * return  */
+		if (curr == cs->holding_thd) return cs->holding_thd;
+		/* assert(curr != cs->holding_thd); */   // old one
+
 		curr->contended_component = spdid;
 		assert(!curr->dependency_thd);
 		return cs->holding_thd;

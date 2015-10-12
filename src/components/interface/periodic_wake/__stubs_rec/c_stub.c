@@ -28,6 +28,7 @@ Notes:
 #include <cos_debug.h>
 #include <print.h>
 
+#include <c3_test.h>
 
 #include <periodic_wake.h>
 #include <cstub.h>
@@ -181,8 +182,8 @@ CSTUB_FN(int, c3_periodic_wake_create)(struct usr_inv_cap *uc,
 	int ret;
 	long fault = 0;
 redo:
-	printc("cli: __periodic_wake_create (thd %d ticks %d period %d) for recovery\n",
-	       cos_get_thd_id(), ticks, period);
+	/* printc("cli: __periodic_wake_create (thd %d ticks %d period %d) for recovery\n", */
+	/*        cos_get_thd_id(), ticks, period); */
 	
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, period, ticks);
 	if (unlikely (fault)){
@@ -190,12 +191,6 @@ redo:
 		CSTUB_FAULT_UPDATE();
 
 		assert(0);   // normally this should not expect another fault
-		int dest = cap_to_dest(uc->cap_no);
-		int tmp_owner = sched_reflection_component_owner(dest);
-		if (tmp_owner == cos_get_thd_id()) {
-			sched_component_release(cap_to_dest(uc->cap_no));
-		}
-
 		goto redo;
 	}
 
@@ -236,16 +231,16 @@ redo:
 #endif		
 		CSTUB_FAULT_UPDATE();
 
-		/* The rd_reflection should be executed by the current
-		 * running thread to guarantee the component
-		 * synchronization. So we check and release here. This
-		 * is done because: 1) pte/timed_evt uses
-		 * sched_component_take, not lock component 2)
-		 * pte/timed_evt component might fail while a thread
-		 * holds the component lock. */
-		int dest = cap_to_dest(uc->cap_no);
-		int tmp_owner = sched_reflection_component_owner(dest);
-		if (tmp_owner == cos_get_thd_id()) sched_component_release(dest);
+		/* /\* The rd_reflection should be executed by the current */
+		/*  * running thread to guarantee the component */
+		/*  * synchronization. So we check and release here. This */
+		/*  * is done because: 1) pte/timed_evt uses */
+		/*  * sched_component_take, not lock component 2) */
+		/*  * pte/timed_evt component might fail while a thread */
+		/*  * holds the component lock. *\/ */
+		/* int dest = cap_to_dest(uc->cap_no); */
+		/* int tmp_owner = sched_reflection_component_owner(dest); */
+		/* if (tmp_owner == cos_get_thd_id()) sched_component_release(dest); */
 
 		goto redo;
 	}
@@ -282,32 +277,33 @@ redo:
 
 #ifdef BENCHMARK_MEAS_WAIT
 	rdtscll(meas_end);
-	printc("end measuring.....\n");
+	/* printc("end measuring.....(thd %d)\n", cos_get_thd_id()); */
 	if (meas_flag) {
 		meas_flag = 0;
-		printc("recovery a pte cost: %llu\n", meas_end - meas_start);
+		printc("recovery a pte cost: %llu (thd %d)\n", 
+		       meas_end - meas_start, cos_get_thd_id());
 	}
 #endif		
 
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
 
-		printc("see a fault during periodic_wake_wait (thd %d in spd %ld)\n",
-		       cos_get_thd_id(), cos_spd_id());
+		/* printc("see a fault during periodic_wake_wait (thd %d in spd %ld)\n", */
+		/*        cos_get_thd_id(), cos_spd_id()); */
 
 #ifdef BENCHMARK_MEAS_WAIT
 		meas_flag = 1;
-		printc("start measuring.....\n");
+		/* printc("start measuring.....(thd %d)\n", cos_get_thd_id()); */
 		rdtscll(meas_start);
 #endif		
 
 		CSTUB_FAULT_UPDATE();
 
-		int dest = cap_to_dest(uc->cap_no);
-		int tmp_owner = sched_reflection_component_owner(dest);
-		/* printc("found a fault in periodic_wake_wait, owner is %d (curr %d)\n",  */
-		/*        tmp_owner, cos_get_thd_id()); */
-		if (tmp_owner == cos_get_thd_id()) sched_component_release(dest);
+		/* int dest = cap_to_dest(uc->cap_no); */
+		/* int tmp_owner = sched_reflection_component_owner(dest); */
+		/* /\* printc("found a fault in periodic_wake_wait, owner is %d (curr %d)\n",  *\/ */
+		/* /\*        tmp_owner, cos_get_thd_id()); *\/ */
+		/* if (tmp_owner == cos_get_thd_id()) sched_component_release(dest); */
 
 		goto redo;
 	}

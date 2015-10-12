@@ -85,7 +85,7 @@ COS_MAP_CREATE_STATIC(uniq_tids);
 CSLAB_CREATE(rd, sizeof(struct rec_data_tor));
 CVECT_CREATE_STATIC(rec_vect);
 
-void print_rd_info(struct rec_data_tor *rd);
+void print_rdtor_info(struct rec_data_tor *rd);
 
 static struct rec_data_tor *
 rd_lookup(td_t td)
@@ -665,7 +665,7 @@ CSTUB_FN(int, twrite)(struct usr_inv_cap *uc,
 }
 
 void 
-print_rd_info(struct rec_data_tor *rd)
+print_rdtor_info(struct rec_data_tor *rd)
 {
 	assert(rd);
 	print_rd("rd->parent_tid %d  ",rd->parent_tid);

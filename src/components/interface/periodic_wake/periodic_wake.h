@@ -1,19 +1,6 @@
 #ifndef   	PERIODIC_WAKE_H
 #define   	PERIODIC_WAKE_H
 
-/* #define TEST_PTE_CREATE_BEFORE */
-/* #define TEST_PTE_CREATE_AFTER  */
-/* #define TEST_PTE_WAIT_BEFORE */
-/* #define TEST_PTE_WAIT_AFTER */
-
-/* #define TEST_PTE_TIMER_THD_BEFORE */
-/* #define TEST_PTE_TIMER_THD_AFTER */
-
-
-/* #define BENCHMARK_MEAS_CREATE */
-/* #define BENCHMARK_MEAS_WAIT */
-/* #define BENCHMARK_MEAS_TIMER_THD */
-
 int periodic_wake_create(spdid_t spdinv, unsigned int period);
 
 /* Jiguo: c^3 api for recreate pte thread */

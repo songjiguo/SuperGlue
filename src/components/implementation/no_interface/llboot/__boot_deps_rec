@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <c3_test.h>
+
 static int 
 prints(char *s)
 {
@@ -195,13 +197,13 @@ static int second = 0;
 int
 recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 {
-	printc("LL: llbooter upcall to spd %d, arg %x thd %d op %d\n", dest, (unsigned int)arg, cos_get_thd_id(), op);
+	/* printc("LL: llbooter upcall to spd %d, arg %x thd %d op %d\n", dest, (unsigned int)arg, cos_get_thd_id(), op); */
 
-	/* printc("recovery_upcall has been called %d times\n",second); */
-	if(second++ >= 20) {
-		printc("Yusheng\n");
-		sched_exit();
-	}
+	/* /\* printc("recovery_upcall has been called %d times\n",second); *\/ */
+	/* if(second++ >= 20) { */
+	/* 	printc("Yusheng\n"); */
+	/* 	sched_exit(); */
+	/* } */
 
 	if(op == COS_UPCALL_HOMEAGAIN) {
 		/* printc("Restart execution in home spd\n"); */
@@ -212,7 +214,8 @@ recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 	struct llbooter_per_core *llboot = PERCPU_GET(llbooter);
 	
 	assert(llboot);
-	// test if any fault occurs during recovery
+	/* if any fault occurs during recovery, we exit (assume no
+	 * fault can happen during recovery) */
 	if (cos_get_thd_id() == llboot->recovery_thd) {
 		printc("Kevin\n");
 		sched_exit();
@@ -252,11 +255,26 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	/* cos_brand_cntl(COS_BRAND_REMOVE_THD, 0, 0, 0); /\* remove the brand *\/ */
 	/* debug only: avoid endless faults and wait */
 	first++;
-	if(first > 2) {
+	if(first > 50) {
 		printc("has failed %d times\n",first);
 		sched_exit();
 	}
-	printc("has failed %d times\n",first);
+	/* printc("has failed %d times\n",first); */
+
+	/* This is a hack -- when system exits, a fault can be
+	 * triggered in MM:392 . For now, just ignore it */
+#ifndef EXAMINE_MM
+	if(spdid == 3) {
+		printc("MM failed\n");
+		sched_exit();
+	}
+#endif
+#ifdef EXAMINE_MM
+	if(spdid == 2) {
+		printc("Sched failed when testing MM\n");
+		sched_exit();
+	}
+#endif
 
 	// u-reboot the failed component
 	failure_notif_fail(cos_spd_id(), spdid);
@@ -277,8 +295,9 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 		return 0;
 	}
 	
-	/* printc("LL: <<2>>\n"); */
-	/* printc("reboot %d thd %d spd %d\n", reboot, cos_get_thd_id(), spdid); */
+	/* for scheduler...*/
+	printc("LL: <<2>>\n");
+	printc("reboot %d thd %d spd %d\n", reboot, cos_get_thd_id(), spdid);
 	/* 
 	 * The thread was created in the failed component...just use
 	 * it to restart the component!  This might even be the

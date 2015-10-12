@@ -1,5 +1,5 @@
 #include <cos_component.h>
-#include <mbtorrent.h>
+#include <torrent.h>
 
 struct __sg_tsplit_data {
 	td_t tid;
@@ -31,11 +31,15 @@ td_t __sg_tsplit(spdid_t spdid, cbuf_t cbid, int len)
 }
 
 int
-__sg_treadp(spdid_t spdid, int tid, int leb, int __pad0, int __pad1, int *off_len)
+__sg_treadp(spdid_t spdid, int tid, int __pad0, int __pad1, int *off_len)
 {
-	/* printc("server: treadp (thd %d from spd %d)\n", cos_get_thd_id(), spdid); */
-	assert(tid);
-	return treadp(spdid, tid, len, &off_len[0], &off_len[1]);
+	int ret = 0;
+	printc("passed: treadp ser (before): td %d len %d off_len[0] %d off_len[1] %d\n",
+	       tid, 0, off_len[0], off_len[1]);
+        ret = treadp(spdid, tid, 0, &off_len[0], &off_len[1]);
+	printc("treadp ser (after): ret %d off_len[0] %d off_len[1] %d\n",
+	       ret, off_len[0], off_len[1]);
+	return ret;
 }
 
 struct __sg_tmerge_data {

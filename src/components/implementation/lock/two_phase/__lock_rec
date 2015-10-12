@@ -24,6 +24,11 @@
 
 #include <sched.h>
 
+#if (RECOVERY_ENABLE == 1)
+#include <c3_test.h>
+#endif
+unsigned int swifi_ready = 0;  // explicitly initialize to 0
+
 static int test_num = 0;
 
 //#define ACT_LOG
@@ -213,6 +218,7 @@ int lock_component_pretake(spdid_t spd, unsigned long lock_id, unsigned short in
 	ACT_RECORD(ACT_PRELOCK, spd, lock_id, cos_get_thd_id(), thd);
 	TAKE(spdid);
 
+
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_PRETAKE)
 	/* printc("trigger fault in lock pre_take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
 	/* if (spd == 16 && cos_get_thd_id() == 13 && test_num++ == 2) { */
@@ -253,10 +259,17 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	ACT_RECORD(ACT_LOCK, spd, lock_id, cos_get_thd_id(), thd_id);
 	TAKE(spdid);
 
+	WAIT_FAULT();
+
+	/* while(swifi_ready == 1) { */
+	/* 	if (tt++ < 1) printc("thread %d is spinning...\n", cos_get_thd_id()); */
+	/* }  */
+	/* printc("thread %d continues\n", cos_get_thd_id()); */
+
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_TAKE_BEFORE)	
 	/* printc("trigger fault in lock take before: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
 	/* if (spd == 17 && cos_get_thd_id() == 10 && test_num++ == 2) { */
-	if (test_num++ > 600) {
+	if (test_num++ > 20) {
 		printc("trigger fault in lock take before: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}
@@ -300,7 +313,7 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	/* printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
 		
 	/* if (spd == 17 && cos_get_thd_id() == 10 && test_num++ >= 0)  */
-	if (test_num++ > 600) {
+	if (test_num++ > 20) {
 		printc("trigger fault in lock take after: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}
@@ -352,6 +365,13 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 	ml = lock_find(lock_id, spd);
 	if (!ml) goto error;
 
+
+	WAIT_FAULT();
+	/* int tt = 0; */
+	/* while(swifi_ready == 1) { */
+	/* 	if (tt++ < 1) printc("thread %d is spinning...\n", cos_get_thd_id()); */
+	/* }  */
+	/* printc("thread %d continues\n", cos_get_thd_id()); */
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_RELEASE_BEFORE)
 	/* printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n", */
@@ -571,12 +591,22 @@ int lock_trigger_all(spdid_t spdid, int dest) {return 0;}
 
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
-	printc("upcall type %d, core %ld, thd %d, args %p %p %p\n",
-	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
+	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p\n", */
+	/*        t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3); */
 	switch (t) {
 	case COS_UPCALL_THD_CREATE:
 	{
 		cos_init();
+		break;
+	}
+	case COS_UPCALL_SWIFI_BEFORE:   // prepare for swifi
+	{
+		swifi_ready = 1; // now other thread can spin for inject fault
+		break;
+	}
+	case COS_UPCALL_SWIFI_AFTER:   // allow other thread to proceed 
+	{
+		swifi_ready = 0; // now other thread can continue
 		break;
 	}
 	default:

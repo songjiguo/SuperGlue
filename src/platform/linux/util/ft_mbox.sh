@@ -19,10 +19,10 @@ bufp.o-sm.o|fprr.o|print.o|l.o|mm.o|va.o|mpool.o|buf.o;\
 mpool.o-print.o|fprr.o|mm.o|boot.o|va.o|l.o;\
 vm.o-fprr.o|print.o|mm.o|l.o|boot.o;\
 va.o-fprr.o|print.o|mm.o|l.o|boot.o|vm.o;\
-pfr.o-fprr.o|mm.o|print.o|boot.o;\
+pfr.o-fprr.o|mm.o|print.o|boot.o|[home_]llboot.o;\
 unique_map.o-sm.o|va.o|fprr.o|print.o|mm.o|l.o|buf.o|bufp.o;\
 tasc.o-sm.o|fprr.o|l.o|buf.o|bufp.o|mm.o|va.o|eg.o|print.o|unique_map.o|pfr.o;\
-evtns.o-fprr.o|print.o|mm.o|l.o|va.o;\
+evtns.o-fprr.o|print.o|mm.o|l.o|va.o|llboot.o;\
 \
 micro_mbox_server.o-sm.o|fprr.o|tasc.o|buf.o|bufp.o|mm.o|unique_map.o|eg.o|va.o|l.o|print.o|te.o;\
 micro_mbox_client.o-sm.o|fprr.o|tasc.o|buf.o|bufp.o|mm.o|unique_map.o|eg.o|va.o|l.o|print.o|te.o\

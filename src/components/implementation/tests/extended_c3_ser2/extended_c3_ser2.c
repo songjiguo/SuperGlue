@@ -1,8 +1,9 @@
 #include <cos_component.h>
 #include <print.h>
 #include <sched.h>
-#include <mem_mgr.h>
+#include <cbuf.h>
 #include <evt.h>
+#include <torrent.h>
 #include <periodic_wake.h>
 #include <timed_blk.h>
 
@@ -165,8 +166,8 @@ vaddr_t ec3_ser2_test(void)
 	vaddr_t ret;
 	int idx = 0;
 
-	printc("\n<<< ... Ser2 MM test in spd %d >>>>\n\n",
-	       cos_spd_id(), cos_get_thd_id());
+	/* printc("\n<<< ... Ser2 MM test in spd %d >>>>\n\n", */
+	/*        cos_spd_id(), cos_get_thd_id()); */
 	
 	if (first) {
 		first = 0;
@@ -176,7 +177,7 @@ vaddr_t ec3_ser2_test(void)
 	}
 	ret = addr[index%PAGE_NUM];
 	index++;
-	printc("kevin: addr %p\n", ret);
+	/* printc("kevin: addr %p\n", ret); */
 	return ret;
 }
 
@@ -189,7 +190,117 @@ int ec3_ser2_pass(long id)
 
 #endif
 
+/********************************
+                 _ _ _               
+ _ __ ___   __ _(_) | |__   _____  __
+| '_ ` _ \ / _` | | | '_ \ / _ \ \/ /
+| | | | | | (_| | | | |_) | (_) >  < 
+|_| |_| |_|\__,_|_|_|_.__/ \___/_/\_\
+**********************************/
+
+
+// this is client side, open later
+#ifdef EXAMINE_MBOX
+
+volatile unsigned long long overhead_start, overhead_end;
+#define  ITER 10
+static void parse_args(int *p, int *n)
+{
+	char *c;
+	int i = 0, s = 0;
+	c = cos_init_args();
+	while (c[i] != ' ') {
+		s = 10*s+c[i]-'0';
+		i++;
+	}
+	*p = s;
+	s = 0;
+	i++;
+	while (c[i] != '\0') {
+		s = 10*s+c[i]-'0';
+		i++;
+	}
+	*n = s;
+	return ;
+}
+
+static void mbox_test()
+{
+	td_t t1, serv;
+	long evt;
+	char *params1 = "foo", *params2 = "", *d;
+	char *data = "1234567890";
+	int period, num, ret, sz, i, j;
+	u64_t start = 0, end = 0, re_cbuf;
+	cbufp_t cb1;
+
+	evt = evt_split(cos_spd_id(), 0, 0);
+	assert(evt > 0);
+	printc("mb client: tsplit by thd %d in spd %ld\n", 
+	       cos_get_thd_id(), cos_spd_id());
+
+	serv = tsplit(cos_spd_id(), td_root, params1, strlen(params1), TOR_RW | TOR_WAIT, evt);
+	if (serv < 1) {
+		printc("UNIT TEST FAILED (3): split1 failed %d\n", serv); 
+		assert(0);
+	}
+
+	printc("mb client: thd %d 1\n", cos_get_thd_id());
+	evt_wait(cos_spd_id(), evt);
+	printc("mb client: thd %d 2\n", cos_get_thd_id());
+
+	printc("client split successfully\n");
+	sz = 4096;
+	j = 1000*ITER;
+	j = 40;
+	rdtscll(start);
+	for (i=1; i<=j; i++) {
+		if (i == j) rdtscll(end);
+		d = cbufp_alloc(sz, &cb1);
+		if (!d) {
+			printc("can not get a cbufp (thd %d)\n", cos_get_thd_id());
+			assert(0);
+		}
+		cbufp_send(cb1);
+		rdtscll(end);
+		((u64_t *)d)[0] = end;
+		printc("cli:passed out data is %lld\n", ((u64_t *)d)[0]);
+		printc("cli:passed out data in cbuf %d\n", cb1);
+		ret = twritep(cos_spd_id(), serv, cb1, sz);
+
+		cbufp_deref(cb1); 
+	}
+
+	printc("mb client: finally trelease by thd %d in spd %ld\n", 
+	       cos_get_thd_id(), cos_spd_id());
+
+	evt_wait(cos_spd_id(), evt);  // test only
+	rdtscll(overhead_start);
+	trelease(cos_spd_id(), serv);
+	rdtscll(overhead_end);
+	printc("mbox client trelease overhead %llu\n", overhead_end - overhead_start);
+
+	return;
+}
+
+vaddr_t ec3_ser2_test(void)
+{
+	printc("<<< MBOX CLIENT RECOVERY TEST START (thd %d) >>>\n", cos_get_thd_id());
+	mbox_test();
+	printc("<<< MBOX CLIENT RECOVERY TEST DONE!! >>>\n\n\n");
+	return 0;
+}
+
+int ec3_ser2_pass(long id)
+{
+	return 0;
+}
+
+#endif
+
 #ifdef EXAMINE_RAMFS
+#include <mem_mgr_large.h>
+#include <valloc.h>
 
 vaddr_t ec3_ser2_test(void)
 {
@@ -202,6 +313,7 @@ int ec3_ser2_pass(long id)
 }
 
 #endif
+
 
 
 #ifdef EXAMINE_TE

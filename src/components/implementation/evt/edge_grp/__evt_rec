@@ -25,6 +25,15 @@
 
 #include <name_server.h>
 
+
+#if (RECOVERY_ENABLE == 1)
+#include <c3_test.h>
+#endif
+unsigned int swifi_ready = 0;  // explicitly initialize to 0
+
+
+static unsigned long long start, end;
+
 unsigned long long evt_alloc_cnt = 0;
 unsigned long long evt_free_cnt = 0;
 
@@ -354,6 +363,8 @@ __evt_split(spdid_t spdid, long parent, int group)
 	struct evt *e;
 	long ret = -ENOMEM;
 
+	WAIT_FAULT();
+
 	lock_take(&evt_lock);
 
 	e = __evt_alloc((group == 1) ? EVT_GROUP : EVT_NORMAL, parent, spdid);
@@ -421,6 +432,8 @@ void evt_free(spdid_t spdid, long evt_id)
 {
 	int ret;
 
+	WAIT_FAULT();
+
 	lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_FREE)
@@ -469,13 +482,15 @@ long evt_wait(spdid_t spdid, long evt_id)
 	/* printc("evt_wait: passed in evt_id %d by thd %d (called from spd %d)\n", */
 	/*        evt_id, cos_get_thd_id(), spdid); */
 
+	WAIT_FAULT();
+
 	do {
 		lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_BEFORE)
 		/* printc("trigger fault in evt_wait before (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
 		/* if (spdid == 20 && cos_get_thd_id() == 15 && test_num++ > 50) { */
-		if (test_num++ > 500000) {
+		if (test_num++ > 4) {
 			printc("trigger fault in evt_wait before (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
 			assert(0);
 		}
@@ -483,6 +498,7 @@ long evt_wait(spdid_t spdid, long evt_id)
 		ret = __evt_wait(spdid, evt_id);
 
 		lock_release(&evt_lock);
+
 		/* printc("evt_wait: before sched_block (thd %d and ret %d) \n", */
 		/*        cos_get_thd_id(), ret); */
 
@@ -522,6 +538,9 @@ int
 evt_trigger(spdid_t spdid, long evt_id)
 {
 	int ret;
+
+	WAIT_FAULT();
+
 	lock_take(&evt_lock);
 
 	/* printc("evt_trigger: passed in evt_id %d by thd %d\n", evt_id, cos_get_thd_id()); */
@@ -531,7 +550,8 @@ evt_trigger(spdid_t spdid, long evt_id)
 	/*        cos_get_thd_id(), spdid, evt_id); */
 	/* if (spdid == 17 && cos_get_thd_id() == 10 && test_num++ > 5000) { */
 
-	if (test_num++ > 500000) {
+	/* if (test_num++ > 500000) { */
+	if (test_num++ > 2) {
 		printc("trigger fault in evt_trigger before: thd %d passed spd %d (evt %d)\n",
 		       cos_get_thd_id(), spdid, evt_id);
 		assert(0);
@@ -540,7 +560,8 @@ evt_trigger(spdid_t spdid, long evt_id)
 	
 	ret = __evt_trigger(spdid, evt_id, 0);
 	lock_release(&evt_lock);
-	
+
+
 	/* printc("evt_trigger: ns_lookup return actual id %d (passed in evt_id %d ret from __evt_trigger is %d)\n", actual_evtid, evt_id, ret); */
 	
 	if (ret > 0) {
@@ -652,10 +673,20 @@ cos_init(void)
 		evt_free_cnt = 0;
 		evt_alloc_cnt = 0;
 
+#ifdef BENCHMARK_MEAS_WAIT
+		rdtscll(start);
+#endif		
+
 		ns_upcall(cos_spd_id());
-		printc("back from ns_upcall thd %d\n", cos_get_thd_id());
+
+#ifdef BENCHMARK_MEAS_WAIT
+		rdtscll(end);
+		printc("recovery an event group cost: %llu\n", end - start);
+#endif
+
+		/* printc("back from ns_upcall thd %d\n", cos_get_thd_id()); */
 		rd_reflection();
-		printc("back from reflection thd %d\n", cos_get_thd_id());
+		/* printc("back from reflection thd %d\n", cos_get_thd_id()); */
 		return;
 	}
 	
@@ -758,6 +789,16 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	case COS_UPCALL_THD_CREATE:
 	{
 		cos_init();
+		break;
+	}
+	case COS_UPCALL_SWIFI_BEFORE:   // prepare for swifi
+	{
+		swifi_ready = 1; // now other thread can spin for inject fault
+		break;
+	}
+	case COS_UPCALL_SWIFI_AFTER:   // allow other thread to proceed 
+	{
+		swifi_ready = 0; // now other thread can continue
 		break;
 	}
 	default:

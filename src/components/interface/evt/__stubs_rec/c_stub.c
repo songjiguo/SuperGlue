@@ -386,7 +386,22 @@ events_replay_all()
 		/* printc("1\n"); */
 		assert(!rde->p_evtid); // otherwise, there must be some events
 		assert(rde->thdid == i);
+/* #ifdef BENCHMARK_MEAS_WAIT */
+/* 			meas_flag = 1; */
+/* 			printc("start measuring.....\n"); */
+/* 			rdtscll(meas_start); */
+/* #endif		 */
+
 		rd_recover_state(rde, i);
+
+/* #ifdef BENCHMARK_MEAS_WAIT */
+/* 			rdtscll(meas_end); */
+/* 			printc("end measuring.....\n"); */
+/* 			if (meas_flag) { */
+/* 				meas_flag = 0; */
+/* 				printc("recovery an event group cost: %llu\n", meas_end - meas_start); */
+/* 			} */
+/* #endif		 */
 
 		/* printc("2\n"); */
 		// rest parent rd
@@ -401,6 +416,7 @@ events_replay_all()
 			/*        cos_spd_id(), total_add_evts, total_rem_evts); */
 			/* print_rde_info(rde); */
 			assert(rde->thdid == i);
+
 			rd_recover_state(rde, i);
 		}
 	}
@@ -567,6 +583,8 @@ CSTUB_FN(long, c3_evt_split) (struct usr_inv_cap *uc,
 	// update the fault counter and cap.fcnt only once after the fault (eagerly)
 	if (recover_all) {
 		recover_all = 0;
+		/* printc("recovery thread %d is updating .....(spd %ld)\n",  */
+		/*        cos_get_thd_id(), cos_spd_id()); */
 		CSTUB_FAULT_UPDATE();
 	}
 redo:
@@ -613,25 +631,25 @@ redo:
 	/* printc("evt cli: evt_wait thd %d (extern_evt %d rd->evt id %ld)\n", */
 	/*        cos_get_thd_id(), extern_evt, rd->s_evtid); */
 
-#ifdef BENCHMARK_MEAS_WAIT
-	rdtscll(meas_end);
-	printc("end measuring.....\n");
-	if (meas_flag) {
-		meas_flag = 0;
-		printc("recovery an event cost: %llu\n", meas_end - meas_start);
-	}
-#endif		
+/* #ifdef BENCHMARK_MEAS_WAIT */
+/* 	rdtscll(meas_end); */
+/* 	printc("end measuring.....\n"); */
+/* 	if (meas_flag) { */
+/* 		meas_flag = 0; */
+/* 		printc("recovery an event cost: %llu\n", meas_end - meas_start); */
+/* 	} */
+/* #endif		 */
 
 	assert(rd->s_evtid > 0);
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid);
         if (unlikely (fault)){
 		/* printc("(ret %d)see a fault during evt_wait (thd %d in spd %ld)\n", */
 		/*        ret, cos_get_thd_id(), cos_spd_id()); */
-#ifdef BENCHMARK_MEAS_WAIT
-		meas_flag = 1;
-		printc("start measuring.....\n");
-		rdtscll(meas_start);
-#endif		
+/* #ifdef BENCHMARK_MEAS_WAIT */
+/* 		meas_flag = 1; */
+/* 		printc("start measuring.....\n"); */
+/* 		rdtscll(meas_start); */
+/* #endif		 */
 
 		/* Here is the issue: the fault counter on cap is only
 		 * updated over the interface of the component that
@@ -693,7 +711,7 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
 
 redo:
 	/* printc("evt cli: evt_trigger thd %d (evt id %ld)\n", cos_get_thd_id(), extern_evt); */
-#ifdef BENCHMARK_MEAS_TRIGGER
+#ifdef BENCHMARK_MEAS_EVT
 	rdtscll(meas_end);
 	printc("end measuring.....\n");
 	if (meas_flag) {
@@ -706,7 +724,7 @@ redo:
 	if (unlikely(fault)){
 		/* printc("see a fault during evt_trigger (thd %d in spd %ld)\n", */
 		/*        cos_get_thd_id(), cos_spd_id()); */
-#ifdef BENCHMARK_MEAS_TRIGGER
+#ifdef BENCHMARK_MEAS_EVT
 		meas_flag = 1;
 		printc("start measuring.....\n");
 		rdtscll(meas_start);
