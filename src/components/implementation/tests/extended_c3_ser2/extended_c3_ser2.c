@@ -20,9 +20,9 @@ static int hig = 11;
 
 #include <cos_synchronization.h>
 cos_lock_t t_lock;
-#define LOCK_TAKE()    lock_take(&t_lock)
-#define LOCK_RELEASE() lock_release(&t_lock)
-#define LOCK_INIT()    lock_static_init(&t_lock);
+#define THIS_LOCK_TAKE()    lock_take(&t_lock)
+#define THIS_LOCK_RELEASE() lock_release(&t_lock)
+#define THIS_LOCK_INIT()    lock_static_init(&t_lock);
 
 volatile int spin = 1;
 
@@ -34,10 +34,10 @@ static void try_hp(void)
 	spin = 0;
 	/* printc("thread h (in spd %ld) : %d try to take lock\n",  */
 	/*        cos_spd_id(), cos_get_thd_id()); */
-	LOCK_TAKE();
+	THIS_LOCK_TAKE();
 	/* printc("thread h (in spd %ld) : %d has the lock\n",  */
 	/*        cos_spd_id(), cos_get_thd_id()); */
-	LOCK_RELEASE();
+	THIS_LOCK_RELEASE();
 	/* printc("thread h (in spd %ld) : %d released lock\n",  */
 	/*        cos_spd_id(), cos_get_thd_id()); */
 
@@ -47,9 +47,9 @@ static void try_hp(void)
 static void try_mp(void)
 {
 	/* printc("thread m : %d try to take lock\n", cos_get_thd_id()); */
-	LOCK_TAKE();
+	THIS_LOCK_TAKE();
 	/* printc("thread m : %d has the lock\n", cos_get_thd_id()); */
-	LOCK_RELEASE();
+	THIS_LOCK_RELEASE();
 	/* printc("thread m : %d released lock\n", cos_get_thd_id()); */
 
 	return;
@@ -62,7 +62,7 @@ static void try_lp(void)
 	/*        cos_spd_id(), cos_get_thd_id()); */
 	/* printc("thread l (in spd %ld) : %d try to take lock\n",  */
 	/*        cos_spd_id(), cos_get_thd_id()); */
-	LOCK_TAKE();
+	THIS_LOCK_TAKE();
 	/* printc("thread l (in spd %ld) : %d has the lock\n",  */
 	/*        cos_spd_id(), cos_get_thd_id()); */
 	/* printc("thread l (in spd %ld) : %d spinning\n",  */
@@ -72,7 +72,7 @@ static void try_lp(void)
 	/*        cos_spd_id(), cos_get_thd_id()); */
 	/* printc("thread l (in spd %ld): %d try to release lock\n",  */
 	/*        cos_spd_id(), cos_get_thd_id()); */
-	LOCK_RELEASE();
+	THIS_LOCK_RELEASE();
 
 	return;
 }
@@ -95,8 +95,8 @@ int ec3_ser2_pass(long id)
 void
 cos_init(void)
 {
-	printc("thd %d is trying to init lock (in spd %ld)\n", cos_get_thd_id(), cos_spd_id());
-	LOCK_INIT();
+	printc("ser2 :thd %d is trying to init lock (in spd %ld)\n", cos_get_thd_id(), cos_spd_id());
+	THIS_LOCK_INIT();
 	printc("after init LOCK\n");
 }
 

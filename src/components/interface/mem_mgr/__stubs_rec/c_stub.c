@@ -28,7 +28,7 @@ extern void free_page(void *ptr);
 #include <cvect.h>
 
 /* global fault counter, only increase, never decrease */
-static unsigned long fcounter;
+static unsigned long global_fault_cnt;
 
 struct rec_data_mm_list;
 /* recovery data structure for each alias */
@@ -107,7 +107,7 @@ print_rd_info(struct rec_data_mm *rd)
 	printc("rd->d_spd_flags %p\n",rd->d_spd_flags);
 	printc("rd->d_addr %d\n",rd->d_addr);
 	printc("rd->fcnt %ld\n",rd->fcnt);
-	printc("fcounter %ld \n",fcounter);
+	printc("global_fault_cnt %ld \n",global_fault_cnt);
 	
 	return;
 }
@@ -125,7 +125,7 @@ rd_cons(struct rec_data_mm *rd, int id,
 	rd->d_spd_flags	= d_spd_flags;
 
 	rd->state	= state;
-	rd->fcnt	= fcounter;
+	rd->fcnt	= global_fault_cnt;
 
 	
 	/* printc("rd_cons print rd --- \n"); */
@@ -142,7 +142,7 @@ rd_recover(struct rec_data_mm *rd)
 	printc("spd %ld: ready to replay now...thd %d\n", cos_spd_id(), cos_get_thd_id());
 
 	assert(rd);
-	rd->fcnt = fcounter;
+	rd->fcnt = global_fault_cnt;
 	
 	struct rec_data_mm *next, *alias_rd, *new;
 	
@@ -203,8 +203,8 @@ rd_update(vaddr_t s_addr, int state)
 	 * s_addr is done by recovery thread and its upcall into each
 	 * spd (see above alias_replay) */
 	if (unlikely(!(rd = rdmm_lookup(s_addr)))) goto done;
-	if (likely(rd->fcnt == fcounter)) goto done;
-	rd->fcnt = fcounter;
+	if (likely(rd->fcnt == global_fault_cnt)) goto done;
+	rd->fcnt = global_fault_cnt;
 
 	printc("State Machine mm %p -- ", s_addr);
 	/* STATE MACHINE */

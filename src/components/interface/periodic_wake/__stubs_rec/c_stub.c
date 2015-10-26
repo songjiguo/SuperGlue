@@ -53,7 +53,7 @@ extern int sched_component_release(spdid_t spdid);
 static int meas_flag = 0;
 static unsigned long long meas_start, meas_end;
 
-static unsigned long fcounter = 0;
+static unsigned long global_fault_cnt = 0;
 
 struct rec_data_pte {
 	unsigned int tid;   // thread id. time event server is not a id_based server
@@ -115,7 +115,7 @@ rd_cons(struct rec_data_pte *rd, unsigned int period, int state, unsigned int cr
 	rd->period	   = period;
 	rd->creation_ticks = creation_ticks;
 	rd->state	   = state;
-	rd->fcnt	   = fcounter;
+	rd->fcnt	   = global_fault_cnt;
 	
 	return;
 }
@@ -127,8 +127,8 @@ rd_update(unsigned int id, int state)
 
         rd = rdpte_lookup(id);
 	if (unlikely(!rd)) goto done;
-	if (likely(rd->fcnt == fcounter)) goto done;
-	rd->fcnt	 = fcounter;
+	if (likely(rd->fcnt == global_fault_cnt)) goto done;
+	rd->fcnt	 = global_fault_cnt;
 
 	/* STATE MACHINE*/
 	switch(state) {

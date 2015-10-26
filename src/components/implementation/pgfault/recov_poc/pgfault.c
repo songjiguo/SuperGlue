@@ -15,6 +15,8 @@
 
 #include <failure_notif.h>
 
+#include <recovery_upcall.h>
+
 /* Here is the special case: when a thread faults in its home
  * component, it can not do the replay by removing the current
  * invocation frame (and minus ip by 8) since the current invocation
@@ -48,10 +50,10 @@ int fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip
 		       spdid, cos_get_thd_id());
 	}
 
-	/* if (test_num++ > 10) { */
-	/* 	printc("notif has failed %d times\n", test_num); */
-	/* 	assert(0); */
-	/* } */
+	if (test_num++ > 10) {
+		printc("notif has failed %d times\n", test_num);
+		assert(0);
+	}
 
 	return 0;
 }

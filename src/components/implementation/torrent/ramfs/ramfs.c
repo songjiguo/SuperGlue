@@ -1,1 +1,1 @@
-__ramfs_rec
+__ramfs

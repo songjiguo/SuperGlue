@@ -1099,6 +1099,14 @@ int sched_component_take(spdid_t spdid)
 		curr->flags |= THD_DEPENDENCY;
 
 		/* FIXME: proper handling of recursive locking */
+		if (curr == holder) {
+			printc("sched: curr %d from spd %d\n", curr->id, spdid);
+			/* Jiguo: use this to indicate we need
+			 * release, see sched_componnent_take and
+			 * release in s_stub.S */
+			first = -1; 
+			break;
+		}
 		assert(curr != holder);
 		report_event(COMP_TAKE_CONTENTION);
 		sched_switch_thread_target(0, NULL_EVT, holder);

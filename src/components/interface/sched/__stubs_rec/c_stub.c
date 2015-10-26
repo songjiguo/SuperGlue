@@ -37,7 +37,7 @@ static unsigned long long meas_start, meas_end;
 static int meas_flag = 0;
 
 /* global fault counter, only increase, never decrease */
-static unsigned long fcounter;
+static unsigned long global_fault_cnt;
 
 static unsigned int timer_thread;
 
@@ -107,7 +107,7 @@ rd_cons(struct rec_data_thd *rd, int thd, int dep_thd, int state)
 	rd->dep_thd	= dep_thd;
 	rd->lock_state	= 0;
 	rd->state	= state;
-	rd->fcnt	= fcounter;
+	rd->fcnt	= global_fault_cnt;
 
 	return;
 }
@@ -132,10 +132,10 @@ rd_update(int thd, int target_thd, int state)
 		rd = thdrdt_alloc(cos_get_thd_id());
 		rd_cons(rd, thd, target_thd, state);
 		rd->state = state;
-		rd->fcnt = fcounter;
+		rd->fcnt = global_fault_cnt;
 	}
-	if (likely(rd->fcnt == fcounter)) goto done;
-	rd->fcnt = fcounter;
+	if (likely(rd->fcnt == global_fault_cnt)) goto done;
+	rd->fcnt = global_fault_cnt;
 	
 	if (cos_get_thd_id() == timer_thread) sched_timeout_thd(cos_spd_id());
 

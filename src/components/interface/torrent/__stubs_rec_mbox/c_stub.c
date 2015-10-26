@@ -114,7 +114,7 @@ enum {
 static unsigned long long meas_start, meas_end;
 static int meas_flag = 0;
 
-static unsigned long fcounter = 0;
+static unsigned long global_fault_cnt = 0;
 
 // tracking data structure
 struct rec_data_tor {
@@ -285,7 +285,7 @@ rd_recover_state(struct rec_data_tor *rd)
 	 * client to tsplit successfully */
 	if (rd->p_tid > 1) {     // not tsplit from td_root
 		assert((prd = map_rd_lookup(rd->p_tid)));
-		prd->fcnt = fcounter;
+		prd->fcnt = global_fault_cnt;
 		rd_recover_state(prd);
 	}
 	
@@ -360,9 +360,9 @@ rd_update(td_t tid, int state)
 	if (tid <= 1 && state == STATE_TSPLIT_PARENT) goto done;
         rd = map_rd_lookup(tid);
 	if (unlikely(!rd)) goto done;
-	if (likely(rd->fcnt == fcounter)) goto done;
+	if (likely(rd->fcnt == global_fault_cnt)) goto done;
 
-	rd->fcnt = fcounter;
+	rd->fcnt = global_fault_cnt;
 
 	/* One issue: when recover both client/server, since the
 	 * thread needs to be evt_wait as part of the protocol, do we
@@ -443,7 +443,7 @@ rd_cons(struct rec_data_tor *rd, td_t p_tid, td_t c_tid, td_t s_tid,
 	rd->param_len	 = len;
 	rd->tflags	 = tflags;
 	rd->evtid	 = evtid;
-	rd->fcnt	 = fcounter;
+	rd->fcnt	 = global_fault_cnt;
 	// set object state to server/client/ready, for trelease
 	rd->state = rd_get_state(param, tflags);
 	

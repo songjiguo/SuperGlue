@@ -1,1 +1,1 @@
-__mem_man_rec
+__mem_man

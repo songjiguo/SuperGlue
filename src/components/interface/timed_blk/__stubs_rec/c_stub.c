@@ -42,7 +42,7 @@ extern void free_page(void *ptr);
 
 typedef unsigned long long event_time_t;
 static volatile event_time_t ticks;
-static unsigned long fcounter = 0;
+static unsigned long global_fault_cnt = 0;
 
 struct rec_data_te {
 	unsigned int id;
@@ -82,7 +82,7 @@ rd_cons(struct rec_data_te *rd, unsigned int tid, event_time_t last_ticks, unsig
 	rd->id   	 = tid;
 	rd->last_ticks	 = last_ticks;
 	rd->amnt	 = amnt;
-	rd->fcnt	 = fcounter;
+	rd->fcnt	 = global_fault_cnt;
 
 	return;
 }
@@ -95,9 +95,9 @@ update_rd(unsigned int id)
         rd = rd_lookup(id);
 	if (!rd) return NULL;
 	/* fast path */
-	if (likely(rd->fcnt == fcounter)) return rd;
+	if (likely(rd->fcnt == global_fault_cnt)) return rd;
 	assert(rd);
-	rd->fcnt	 = fcounter;
+	rd->fcnt	 = global_fault_cnt;
 	return rd;
 }
 
@@ -127,7 +127,7 @@ redo:
 
 CSTUB_ASM_2(timed_event_block, spdinv, rd->amnt)
         if (unlikely(fault)) {
-		fcounter++;
+		global_fault_cnt++;
 		if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
 			printc("set cap_fault_cnt failed\n");
 			BUG();
@@ -154,7 +154,7 @@ redo:
 CSTUB_ASM_2(timed_event_wakeup, spdinv, thd_id)
 
         if (unlikely(fault)) {
-		fcounter++;
+		global_fault_cnt++;
 		if (cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no)) {
 			printc("set cap_fault_cnt failed\n");
 			BUG();

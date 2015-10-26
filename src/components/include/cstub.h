@@ -150,7 +150,7 @@
 #define CSTUB_FAULT_UPDATE()						\
 	int fault_update = cos_fault_cntl(COS_CAP_FAULT_UPDATE, cos_spd_id(), uc->cap_no); \
 	if (fault_update <= 0) assert(0);				\
-	else fcounter++;						\
+	else global_fault_cnt++;					\
 	
 #else
 #define CSTUB_FAULT_UPDATE()

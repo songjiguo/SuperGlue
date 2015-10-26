@@ -76,8 +76,8 @@ restart:
 		 * needed.  */
 		if (unlikely(owner)) {
 			int ret;
-			/* printc("thd %d in spd %ld is contending lock %d (owner %d)\n", */
-			/*        cos_get_thd_id(), cos_spd_id(), l->lock_id, owner); */
+			printc("thd %d in spd %ld is contending lock %d (owner %d)\n",
+			       cos_get_thd_id(), cos_spd_id(), l->lock_id, owner);
 			ret = lock_take_contention(l, &result, &prev_val, owner);
 			if (ret < 0) return ret;
 			/* try to take the lock again */
@@ -101,6 +101,7 @@ __lock_release(cos_lock_t *l, int smp) {
 		assert(sizeof(union cos_lock_atomic_struct) == sizeof(u32_t));
 		prev_val.v = l->atom.v; /* local copy of lock */
 		/* If we're here, we better own the lock... */
+		printc("owner is %d\n", prev_val.c.owner);
 		if (unlikely(prev_val.c.owner != curr)) BUG();
 		if (unlikely(prev_val.c.contested)) {
 			return lock_release_contention(l, &prev_val);
@@ -169,7 +170,7 @@ lock_static_init(cos_lock_t *l)
 {
 	lock_init(l);
 	l->lock_id = lock_id_get();
-
+	printc("lock id %d\n", l->lock_id);
 	return l->lock_id;
 }
 

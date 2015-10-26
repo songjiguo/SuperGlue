@@ -253,7 +253,8 @@ ipc_walk_static_cap(unsigned int capability, vaddr_t sp,
 	/* inv_frame_fault_cnt_update(curr_frame, curr_spd); */
 	if (unlikely(fault_ret = ipc_fault_detect(cap_entry, dest_spd))){
 		/* inv_frame_fault_cnt_update(thd_invstk_top(thd), dest_spd); */
-		printk("thd %d invocation....from %d to %d\n", thd_get_id(thd), spd_get_index(curr_spd), spd_get_index(dest_spd));
+		printk("cos: thd %d invocation....from %d to %d\n", 
+		       thd_get_id(thd), spd_get_index(curr_spd), spd_get_index(dest_spd));
 		/* s = virtual_namespace_query(cap_entry->dest_entry_instruction); */
 		/* printk("cos: s spd %d\n", spd_get_index(s)); */
 

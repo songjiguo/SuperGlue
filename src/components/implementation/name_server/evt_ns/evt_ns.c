@@ -19,6 +19,7 @@
 #include <name_server.h>
 
 #include <c3_test.h>
+#include <recovery_upcall.h>
 
 static cos_lock_t uniq_map_lock;
 #define LOCK() if (lock_take(&uniq_map_lock)) BUG();

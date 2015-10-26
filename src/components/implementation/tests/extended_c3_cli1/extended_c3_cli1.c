@@ -108,19 +108,19 @@ cos_init(void)
 #endif
 #ifdef EXAMINE_LOCK
 		if (cos_get_thd_id() == high) {
-			printc("<<<high thd %d>>>\n", cos_get_thd_id());
+			printc("\n\n<<high thd %d LOCK test>>>\n", cos_get_thd_id());
 			timed_event_block(cos_spd_id(), 5);
 			ec3_ser1_test(low, med, high);
 		}
 
 		if (cos_get_thd_id() == med) {
-			printc("<<<med thd %d>>>\n", cos_get_thd_id());
+			printc("<<<med thd %d LOCK test>>>\n", cos_get_thd_id());
 			timed_event_block(cos_spd_id(), 2);
 			ec3_ser1_test(low, med, high);
 		}
 
 		if (cos_get_thd_id() == low) {
-			printc("<<<low thd %d>>>\n", cos_get_thd_id());
+			printc("<<<low thd %d LOCK test>>>\n", cos_get_thd_id());
 			ec3_ser1_test(low, med, high);
 		}
 #endif

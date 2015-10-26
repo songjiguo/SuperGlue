@@ -27,7 +27,7 @@ cos_asm_server_fn_stub_spdid(sched_block, __sg_sched_block)
 cos_asm_server_fn_stub_spdid(sched_reflect, __sg_sched_reflect)
 
 cos_asm_server_stub_spdid(sched_component_take)
-//cos_asm_server_stub_spdid(sched_component_release)
+cos_asm_server_stub_spdid(sched_component_release)
 
 /* After the fault, a thread might call sched to take the lock again,
    it will check if the lock has been taken and release the lock if so
@@ -37,7 +37,8 @@ cos_asm_server_stub_spdid(sched_component_take)
    change this interface function to "not" use _stub_spid which will
    enfore only the caller spd can release the lock. We do not need
    change this for sched_component_take -- Jiguo */
-cos_asm_server_stub(sched_component_release)
+// Not true any more. We simply release the lock if TAKE return -1	
+//cos_asm_server_stub(sched_component_release)
 /* Jiguo: this is used to reflect the owner of a critical section. We
    do not need this on the noraml path. */
 cos_asm_server_stub(sched_reflection_component_owner)

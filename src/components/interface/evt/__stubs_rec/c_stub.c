@@ -94,7 +94,7 @@ static unsigned long long meas_start, meas_end;
 static int meas_flag = 0;
 
 /* global fault counter, only increase, never decrease */
-static unsigned long fcounter;
+static unsigned long global_fault_cnt;
 
 static unsigned int recover_all = 0;  // only tested/changed by the recovery thread
 
@@ -215,7 +215,7 @@ rd_cons(struct rec_data_evt *rd, long c_evtid,
 	rd->grp	         = grp;
 
 	rd->state	 = state;
-	rd->fcnt	 = fcounter;
+	rd->fcnt	 = global_fault_cnt;
 
 	if (unlikely(recovery)) goto done;
 	
@@ -339,7 +339,7 @@ rd_recover_state(struct rec_data_evt *rd, int thd)
                                 /* a child update its new re-created parent id */
 				tmp->p_evtid = rd->s_evtid;
                                 /* only re-create this child once */
-				tmp->fcnt    = fcounter; 
+				tmp->fcnt    = global_fault_cnt; 
 				/* printc("\n>>found an evt %d (thd %d)\n", */
 				/*        tmp->c_evtid, cos_get_thd_id()); */
 				/* printc("its parent evt %d\n", tmp->p_evtid); */
@@ -435,9 +435,9 @@ rd_update(int evtid, int state)
 
         rd = rdevt_lookup(&rec_evt_map, evtid);
 	if (unlikely(!rd)) goto done;
-	if (likely(rd->fcnt == fcounter)) goto done;
+	if (likely(rd->fcnt == global_fault_cnt)) goto done;
 	
-	rd->fcnt = fcounter;
+	rd->fcnt = global_fault_cnt;
 
 done:	
 

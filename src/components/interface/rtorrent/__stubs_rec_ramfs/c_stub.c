@@ -49,7 +49,7 @@ enum {
 #define print_rd(fmt,...) 
 #endif
 
-static volatile unsigned long fcounter = 0;
+static volatile unsigned long global_fault_cnt = 0;
 
 /* recovery data and related utility functions */
 struct rec_data_tor {
@@ -188,7 +188,7 @@ rd_recover_state(struct rec_data_tor *rd)
 	printc("in rd_recover_state: rd->p_tid %d\n", rd->p_tid);
 	if (rd->p_tid > 1) {     // not tsplit from td_root
 		assert((prd = map_rd_lookup(rd->p_tid)));
-		prd->fcnt = fcounter;
+		prd->fcnt = global_fault_cnt;
 		printc("in rd_recover_state: found a parent to be recovered rd->p_tid %d\n",
 		       rd->p_tid);
 		rd_recover_state(prd);
@@ -239,9 +239,9 @@ rd_update(td_t tid, int state)
 	if (tid <= 1 && state == STATE_TSPLIT_PARENT) goto done;
         rd = map_rd_lookup(tid);
 	if (unlikely(!rd)) goto done;
-	if (likely(rd->fcnt == fcounter)) goto done;
+	if (likely(rd->fcnt == global_fault_cnt)) goto done;
 
-	rd->fcnt = fcounter;
+	rd->fcnt = global_fault_cnt;
 
 	/* STATE MACHINE */
 	switch (state) {
@@ -311,7 +311,7 @@ rd_cons(struct rec_data_tor *rd, td_t p_tid, td_t c_tid, td_t s_tid,
 	rd->param_len	 = len;
 	rd->tflags	 = tflags;
 	rd->evtid	 = evtid;
-	rd->fcnt	 = fcounter;
+	rd->fcnt	 = global_fault_cnt;
 
 	rd->being_recovered = 0;
 	rd->state           = STATE_TSPLIT;
@@ -680,7 +680,7 @@ print_fs_rd_info(struct rec_data_tor *rd)
 	print_rd("rd->evtid %ld  ",rd->evtid);
 
 	print_rd("rd->fcnt %ld  ",rd->fcnt);
-	print_rd("fcounter %ld  ",fcounter);
+	print_rd("global_fault_cnt %ld  ",global_fault_cnt);
 
 	print_rd("rd->offset %d \n ",rd->offset);
 

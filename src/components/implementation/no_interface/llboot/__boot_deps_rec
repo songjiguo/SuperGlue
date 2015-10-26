@@ -249,6 +249,8 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	printc("\nLL: rec_thd %d, alpha %d, init_thd %d\n", 
 	       llboot->recovery_thd, llboot->alpha, llboot->init_thd);
 	printc("LL: <<0>> thd %d : failed spd %d (this spd %ld)\n", cos_get_thd_id(), spdid, cos_spd_id());
+
+	if (spdid == 2) sched_exit();  // test only
 	
 	/* if (reboot) sched_exit(); /\* just a quick way to measure ubenchmark , for MM only. Need fix later *\/ */
 
