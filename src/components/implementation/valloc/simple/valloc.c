@@ -190,7 +190,7 @@ int valloc_reset_hp(spdid_t spdid, spdid_t dest)
 	trac = cos_vect_lookup(&spd_vect, dest);
 	if (!trac || !trac->ci || !trac->map) goto done;
 
-	printc("[[[valloc_reset_hp for spd %ld]]]\n", dest);
+	printc("[[[valloc_reset_hp for spd %d]]]\n", dest);
 	
 	cos_release_vas_page(trac->ci);
 

@@ -694,7 +694,7 @@ cbufp_record(int cbid, int len, int offset, int fid)
 	/* printc("record: cbid %ld d->addr %p (d's spd %d, and addr is %p)\n",  */
 	/*        cbid, d->addr, d->owner.spd, d->owner.addr); */
 	vaddr_t vaddr = cbi->owner.addr;
-	printc("vaddr %p\n", vaddr);
+	printc("vaddr %p\n", (void *)vaddr);
 	if (cos_mmap_cntl(COS_MMAP_SETRW, MAPPING_READ, cbi->owner.spdid, vaddr, 0)) {
 		printc("set page to be read only failed\n");
 		BUG();

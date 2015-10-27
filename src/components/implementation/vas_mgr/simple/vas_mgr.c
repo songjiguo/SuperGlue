@@ -46,7 +46,7 @@ vas_mgr_expand(spdid_t spd, spdid_t dest, unsigned long amnt)
 	unsigned long a, i, nentries;
 
 	amnt = round_up_to_pgd_page(amnt); 
-	printc("vas_mgr_expand: dest %d amnt %d\n", dest, amnt);
+	printc("vas_mgr_expand: dest %d amnt %lu\n", dest, amnt);
 	LOCK();
 	svi = cos_vect_lookup(&spd_vas_map, dest);
 	if (!svi) {
@@ -84,7 +84,7 @@ vas_mgr_expand(spdid_t spd, spdid_t dest, unsigned long amnt)
 
 		if (!found) continue;
 		
-		printc("cos_vas_cntl: dest %d amnt %p (s %p)\n", dest, amnt, s);
+		printc("cos_vas_cntl: dest %d amnt %lu (s %lu)\n", dest, amnt, s);
 		if (cos_vas_cntl(COS_VAS_SPD_EXPAND, dest, s, amnt)) {
 			vas->s[s_idx] = &unknown;
 			continue;

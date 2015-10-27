@@ -459,9 +459,9 @@ print_rde_info(struct rec_data_evt *rde)
 	assert(rde);
 
 	printc("rde->spdid %d\n", rde->spdid);
-	printc("rde->c_evtid %d\n", rde->c_evtid);
-	printc("rde->s_evtid %d\n", rde->s_evtid);
-	printc("rde->p_evtid %d\n", rde->p_evtid);
+	printc("rde->c_evtid %ld\n", rde->c_evtid);
+	printc("rde->s_evtid %ld\n", rde->s_evtid);
+	printc("rde->p_evtid %ld\n", rde->p_evtid);
 	printc("rde->grp %d\n", rde->grp);
 
 	return;
@@ -490,7 +490,7 @@ cos_init(void *arg)
 	port = off++;
 	port += __port;
 	eid = evt_get();
-	printc("conn_mgr: tsplit init evtid %d for thd %d\n", eid, cos_get_thd_id());
+	printc("conn_mgr: tsplit init evtid %ld for thd %d\n", eid, cos_get_thd_id());
 	if (snprintf(__create_str, 128, create_str, port) < 0) BUG();
 	ret = c = server_tsplit(cos_spd_id(), td_root, __create_str, strlen(__create_str), TOR_ALL, eid);
 	if (ret <= td_root) BUG();

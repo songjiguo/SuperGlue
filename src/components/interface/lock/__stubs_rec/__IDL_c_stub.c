@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Mon Oct 26 11:57:34 2015 */
+/* IDL generated code ver 0.1 ---  Tue Oct 27 01:42:30 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -34,8 +34,8 @@ static volatile unsigned long global_fault_cnt = 0;
 
 /* tracking thread state for data recovery */
 //CVECT_CREATE_STATIC(rd_vect);
-COS_MAP_CREATE_STATIC(desc_maps);
-CSLAB_CREATE(descservice, sizeof(struct desc_track));
+COS_MAP_CREATE_STATIC(lock_desc_maps);
+CSLAB_CREATE(lock_slab, sizeof(struct desc_track));
 
 enum state_codes { state_lock_component_alloc, state_lock_component_free,
 	    state_lock_component_take, state_lock_component_pretake,
@@ -101,7 +101,7 @@ static inline int block_cli_if_track_lock_component_free(int ret, spdid_t spdid,
 static inline struct desc_track *call_desc_lookup(int id)
 {
 	/* return (struct desc_track *)cvect_lookup(&rd_vect, id); */
-	return (struct desc_track *)cos_map_lookup(&desc_maps, id);
+	return (struct desc_track *)cos_map_lookup(&lock_desc_maps, id);
 }
 
 static inline struct desc_track *call_desc_alloc()
@@ -110,9 +110,9 @@ static inline struct desc_track *call_desc_alloc()
 	int map_id = 0;
 
 	while (1) {
-		desc = cslab_alloc_descservice();
+		desc = cslab_alloc_lock_slab();
 		assert(desc);
-		map_id = cos_map_add(&desc_maps, desc);
+		map_id = cos_map_add(&lock_desc_maps, desc);
 		desc->lock_id = map_id;
 		desc->server_lock_id = -1;	// reset to -1
 		if (map_id >= 1)
@@ -128,8 +128,8 @@ static inline void call_desc_dealloc(struct desc_track *desc)
 	int id = desc->lock_id;
 	desc->server_lock_id = -1;	// reset to -1
 	assert(desc);
-	cslab_free_descservice(desc);
-	cos_map_del(&desc_maps, id);
+	cslab_free_lock_slab(desc);
+	cos_map_del(&lock_desc_maps, id);
 	return;
 }
 
@@ -246,7 +246,6 @@ static inline int block_cli_if_track_lock_component_pretake(int ret,
 {
 	struct desc_track *desc = call_desc_lookup(lock_id);
 	assert(desc);
-	desc->state = state_lock_component_pretake;
 
 	return ret;
 }
@@ -280,7 +279,6 @@ static inline int block_cli_if_track_lock_component_release(int ret,
 {
 	struct desc_track *desc = call_desc_lookup(lock_id);
 	assert(desc);
-	desc->state = state_lock_component_release;
 
 	return ret;
 }
@@ -313,7 +311,6 @@ static inline int block_cli_if_track_lock_component_take(int ret, spdid_t spdid,
 {
 	struct desc_track *desc = call_desc_lookup(lock_id);
 	assert(desc);
-	desc->state = state_lock_component_take;
 
 	return ret;
 }
@@ -402,8 +399,8 @@ CSTUB_FN(int, lock_component_pretake)(struct usr_inv_cap * uc, spdid_t spdid,
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!desc_maps.data.depth)) {
-		cos_map_init_static(&desc_maps);
+	if (unlikely(!lock_desc_maps.data.depth)) {
+		cos_map_init_static(&lock_desc_maps);
 	}
 
  redo:
@@ -427,8 +424,8 @@ CSTUB_FN(int, lock_component_release)(struct usr_inv_cap * uc, spdid_t spdid,
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!desc_maps.data.depth)) {
-		cos_map_init_static(&desc_maps);
+	if (unlikely(!lock_desc_maps.data.depth)) {
+		cos_map_init_static(&lock_desc_maps);
 	}
 
 	block_cli_if_desc_update_lock_component_release(lock_id);
@@ -449,8 +446,8 @@ CSTUB_FN(int, lock_component_take)(struct usr_inv_cap * uc, spdid_t spdid,
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!desc_maps.data.depth)) {
-		cos_map_init_static(&desc_maps);
+	if (unlikely(!lock_desc_maps.data.depth)) {
+		cos_map_init_static(&lock_desc_maps);
 	}
 
 	block_cli_if_desc_update_lock_component_take(lock_id);
@@ -471,8 +468,8 @@ CSTUB_FN(ul_t, lock_component_alloc) (struct usr_inv_cap * uc, spdid_t spdid) {
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!desc_maps.data.depth)) {
-		cos_map_init_static(&desc_maps);
+	if (unlikely(!lock_desc_maps.data.depth)) {
+		cos_map_init_static(&lock_desc_maps);
 	}
 
  redo:
@@ -492,8 +489,8 @@ CSTUB_FN(int, lock_component_free)(struct usr_inv_cap * uc, spdid_t spdid,
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!desc_maps.data.depth)) {
-		cos_map_init_static(&desc_maps);
+	if (unlikely(!lock_desc_maps.data.depth)) {
+		cos_map_init_static(&lock_desc_maps);
 	}
 
  redo:

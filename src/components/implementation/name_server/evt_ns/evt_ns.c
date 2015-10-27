@@ -151,7 +151,7 @@ ns_free(spdid_t spdid, spdid_t cli_spdid, int id)
 	m->id = 0;
 	cslab_free_evt(m);
 	spd_evts_cnt[cli_spdid]--;
-	assert(spd_evts_cnt[cli_spdid] >= 0);
+	/* assert(spd_evts_cnt[cli_spdid] >= 0); */
 	ret = 0;
 done:
 	UNLOCK();
@@ -223,7 +223,7 @@ ns_lookup(spdid_t spdid, int id)
 	assert(curr);
 	ret = curr->actual_id;
 	/* printc("evt_ns: ns_lookup done. Fonud new id %d for old id %d\n", ret, id); */
-done:
+/* done: */
 	UNLOCK();
 	return ret;
 }
@@ -288,7 +288,7 @@ ns_upcall(spdid_t spdid)
 
 		/* LOCK(); */
 	}
-done:
+/* done: */
 	/* UNLOCK(); */
 	return ret;
 }

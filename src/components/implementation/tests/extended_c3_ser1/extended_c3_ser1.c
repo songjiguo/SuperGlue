@@ -462,6 +462,9 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 
 char buffer[1024];
 
+extern td_t fs_tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, long evtid);
+extern void fs_trelease(spdid_t spdid, td_t tid);
+
 static void
 ramfs_test(void)
 {
@@ -478,22 +481,22 @@ ramfs_test(void)
 	/* evt3 = evt_create(cos_spd_id()); */
 	assert(evt1 > 0 && evt2 > 0);
 	
-	printc("\nRAMFS Testing Starting (in ser1 %d).....(thd %d)\n\n", 
+	printc("\nRAMFS Testing Starting (in ser1 %ld).....(thd %d)\n\n", 
 	       cos_spd_id(), cos_get_thd_id());
 
-	t1 = tsplit(cos_spd_id(), td_root, params1, strlen(params1), TOR_ALL, evt1);
+	t1 = fs_tsplit(cos_spd_id(), td_root, params1, strlen(params1), TOR_ALL, evt1);
 	if (t1 < 1) {
 		printc("UNIT TEST FAILED: split failed %d\n", t1);
 		return;
 	}
-	trelease(cos_spd_id(), t1);
+	fs_trelease(cos_spd_id(), t1);
 	
-	t1 = tsplit(cos_spd_id(), td_root, params2, strlen(params2), TOR_ALL, evt1);
+	t1 = fs_tsplit(cos_spd_id(), td_root, params2, strlen(params2), TOR_ALL, evt1);
 	if (t1 < 1) {
 		printc("UNIT TEST FAILED: split2 failed %d\n", t1); return;
 	}
 
-	t2 = tsplit(cos_spd_id(), t1, params1, strlen(params1), TOR_ALL, evt2);
+	t2 = fs_tsplit(cos_spd_id(), t1, params1, strlen(params1), TOR_ALL, evt2);
 	if (t2 < 1) {
 		printc("UNIT TEST FAILED: split3 failed %d\n", t2); return;
 	}
@@ -508,17 +511,17 @@ ramfs_test(void)
 	printc("write %d & %d, ret %d & %d\n", strlen(data1), strlen(data2), ret1, ret2);
 
 	/* This is important!!!! release in the opposite order */
-	trelease(cos_spd_id(), t2);
-	trelease(cos_spd_id(), t1);
+	fs_trelease(cos_spd_id(), t2);
+	fs_trelease(cos_spd_id(), t1);
 
 	int max_test;
 	
 	// need test for max number of allowed faults (ureboot)
-	for (max_test = 0; max_test < 400; max_test++) {
+	for (max_test = 0; max_test < 2; max_test++) {
 		printc("\n>>>>>>ramfs test phase 3 start .... (iter %d)\n", max_test);
-		t1 = tsplit(cos_spd_id(), td_root, params2, strlen(params2), TOR_ALL, evt1);
+		t1 = fs_tsplit(cos_spd_id(), td_root, params2, strlen(params2), TOR_ALL, evt1);
 		/* printc("\n[[[[[[.... 2nd tsplit\n"); */
-		t2 = tsplit(cos_spd_id(), t1, params1, strlen(params1), TOR_ALL, evt2);
+		t2 = fs_tsplit(cos_spd_id(), t1, params1, strlen(params1), TOR_ALL, evt2);
 		if (t1 < 1 || t2 < 1) {
 			printc("UNIT TEST FAILED: later splits failed\n");
 			return;
@@ -548,8 +551,8 @@ ramfs_test(void)
 		printc("read %d (%d): %s (%s)\n", ret1, strlen(data2), buffer, data2);
 		buffer[0] = '\0';
 
-		trelease(cos_spd_id(), t2);
-		trelease(cos_spd_id(), t1);
+		fs_trelease(cos_spd_id(), t2);
+		fs_trelease(cos_spd_id(), t1);
 	}
 
 	printc("\nRAMFS Testing Done.....\n\n");

@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Mon Oct 26 11:57:34 2015 */
+/* IDL generated code ver 0.1 ---  Tue Oct 27 01:42:30 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -8,12 +8,6 @@
 #include <cos_list.h>
 #include <cstub.h>
 #include <lock.h>
-
-extern ul_t lock_component_alloc(spdid_t spdid);
-extern int lock_component_take(spdid_t spdid, ul_t lock_id, u32_t thd_id);
-extern int lock_component_pretake(spdid_t spdid, ul_t lock_id, u32_t thd_id);
-extern int lock_component_release(spdid_t spdid, ul_t lock_id);
-extern int lock_component_free(spdid_t spdid, ul_t lock_id);
 
 struct track_block {
 	int lock_id;
@@ -77,6 +71,8 @@ static inline void block_ser_if_client_fault_notification(int spdid)
 			BUG();
 	} while (0);
 
+	if (!tracking_block_list[spdid].next)
+		goto done;
 	if (EMPTY_LIST(&tracking_block_list[spdid], next, prev))
 		goto done;
 
@@ -106,7 +102,7 @@ static inline void block_ser_if_client_fault_notification(int spdid)
 	return;
 }
 
-void __ser_client_fault_notification(int spdid)
+void __ser_lock_client_fault_notification(int spdid)
 {
 	block_ser_if_client_fault_notification(spdid);
 	return;

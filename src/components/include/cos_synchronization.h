@@ -101,7 +101,6 @@ __lock_release(cos_lock_t *l, int smp) {
 		assert(sizeof(union cos_lock_atomic_struct) == sizeof(u32_t));
 		prev_val.v = l->atom.v; /* local copy of lock */
 		/* If we're here, we better own the lock... */
-		printc("owner is %d\n", prev_val.c.owner);
 		if (unlikely(prev_val.c.owner != curr)) BUG();
 		if (unlikely(prev_val.c.contested)) {
 			return lock_release_contention(l, &prev_val);

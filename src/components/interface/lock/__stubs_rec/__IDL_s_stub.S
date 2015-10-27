@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Mon Oct 26 11:57:34 2015 */
+/* IDL generated code ver 0.1 ---  Tue Oct 27 01:42:30 2015 */
 
 
 /* How IDL know when to use simple stack or stack? */
@@ -8,7 +8,7 @@
 .text
     
 cos_asm_server_fn_stub_spdid(lock_component_take,__ser_lock_component_take)
-cos_asm_server_fn_stub_spdid(client_fault_notification,__ser_client_fault_notification)
+cos_asm_server_fn_stub_spdid(lock_client_fault_notification,__ser_lock_client_fault_notification)
 cos_asm_server_stub_spdid(lock_component_alloc)
 cos_asm_server_stub_spdid(lock_component_pretake)
 cos_asm_server_stub_spdid(lock_component_release)

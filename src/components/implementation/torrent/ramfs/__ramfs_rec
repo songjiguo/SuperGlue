@@ -6,10 +6,6 @@
  */
 
 #include <cos_component.h>
-#include <torrent.h>
-#include <torlib.h>
-
-#include <cbuf.h>
 #include <print.h>
 #include <cos_synchronization.h>
 #include <evt.h>
@@ -17,6 +13,14 @@
 #include <cos_map.h>
 #include <fs.h>
 #include <sched.h>
+
+#include <cbuf.h>
+#include <cbufp.h>
+#include <mem_mgr_large.h>
+#include <valloc.h>
+
+#include <torrent.h>
+#include <torlib.h>
 
 #include <uniq_map.h>
 #include <pgfault.h>
@@ -98,7 +102,7 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	struct fsobj *fso, *fsc, *parent; /* obj, child, and parent */
 	char *subpath;
 
-	/* printc("ramfs tsplit from td %d (evtid %ld), \n", td, evtid); */
+	printc("ramfs tsplit from td %d (evtid %ld), \n", td, evtid);
 
 	LOCK();
 	t = tor_lookup(td);
@@ -132,7 +136,8 @@ tsplit(spdid_t spdid, td_t td, char *param,
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TSPLIT_BEFORE)
 	/* if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 3) { */
-	if (test_num++ > 50000) {
+	printc("tsplit test_num %d\n", test_num);
+	if (test_num++ > 4) {
 		printc("trigger fault in ramfs tsplit before: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -192,7 +197,7 @@ tsplit(spdid_t spdid, td_t td, char *param,
 	
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TSPLIT_AFTER)
 	/* if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 3) { */
-	if (test_num++ > 50000) {
+	if (test_num++ > 4) {
 		printc("trigger fault in ramfs tsplit after: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -229,7 +234,7 @@ twritep(spdid_t spdid, td_t td, int cb, int sz)
 	int tmem;
 	u32_t cbid;
 
-	printc("ramfs: twrite (td %d cb %d)\n", td, cb);
+	printc("ramfs: twritep (td %d cb %d)\n", td, cb);
 	if (tor_isnull(td)) return -EINVAL;
 
 	LOCK();
@@ -244,9 +249,10 @@ twritep(spdid_t spdid, td_t td, int cb, int sz)
 	/* assert(tmem == 1); */
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TWRITEP_BEFORE)
-	test_num++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 2) {
-		printc("trigger fault in ramfs twritep: thd %d spd %ld passed spd %d\n", 
+	/* test_num++; */
+	/* if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 2) { */
+	if (test_num++ > 1) {
+		printc("trigger fault in ramfs twritep before: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -312,9 +318,10 @@ twritep(spdid_t spdid, td_t td, int cb, int sz)
 	cbufp_send(cb);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TWRITEP_AFTER)
-	test_num++;
-	if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 2) {
-		printc("trigger fault in ramfs twritep: thd %d spd %ld passed spd %d\n", 
+	/* test_num++; */
+	/* if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 2) { */
+	if (test_num++ > 0) {
+		printc("trigger fault in ramfs twritep after: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -343,7 +350,7 @@ treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 	char *buf;
 	cbufp_t cb;
 
-	/* printc("ramfs: tread (td %d len %d)\n", td, len); */
+	printc("ramfs: treadp (td %d len %d)\n", td, len);
 	if (tor_isnull(td)) return -EINVAL;
 
 	LOCK();
@@ -365,7 +372,8 @@ treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TREADP)
 	/* if (spdid == 22 && cos_get_thd_id() == 15 && test_num == 1000) { */
-	if (test_num++ > 50000) {
+	printc("treadp testnum %d\n", test_num);
+	if (test_num++ > 2) {
 		printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -462,7 +470,7 @@ trelease(spdid_t spdid, td_t td)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TRELEASE)
 	/* if (spdid == 16 && cos_get_thd_id() == 13 && test_num == 3) { */
-	if (test_num++ > 50000) {
+	if (test_num++ > 3) {
 		printc("trigger fault in ramfs trelease: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -563,6 +571,8 @@ extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
 extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
 extern int lock_trigger_all(spdid_t spdid, int dest);  
 
+extern void lock_client_fault_notification(spdid_t spdid);
+
 static void
 rd_reflection()
 {
@@ -595,7 +605,11 @@ rd_reflection()
 	 lock meta data structure?
 	 */
 
-	lock_trigger_all(cos_spd_id(), cos_spd_id());
+	
+	//lock_trigger_all(cos_spd_id(), cos_spd_id());
+	lock_client_fault_notification(cos_spd_id());
+
+
 	return;
 }
 
@@ -614,13 +628,24 @@ int cos_init(void)
 	/* rdtscll(end); */
 	/* printc("COST (cos_init): %llu\n", end - start); */
 	/* printc("spd %d heap pointer %p\n", cos_spd_id(), cos_get_heap_ptr()); */
+	
+	// Jiguo: forgot how to use CCTOR code in cbuf_c.c....? simple_stack?
+        // manually init here
+	int i;
+	lock_static_init(&cbuf_lock);
+	for (i = 0 ; i < CBUFP_MAX_NSZ/2 ; i++) {
+		cbufp_alloc_freelists[i].next = cbufp_alloc_freelists[i].prev = &cbufp_alloc_freelists[i];
+		cbufp_alloc_freelists[i].length = PAGE_SIZE << i;
+		cbufp_alloc_freelists[i].addr   = NULL;
+	}
+
 
 	// Jiguo: tracking the mapping between server tid and uniqid
 	cvect_init_static(&idmapping_vect);
 	// Jiguo: rdreflection
 	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
 		rd_reflection();
-		printc("\nreflection done!!!\n\n");
+		printc("\nramfs reflection done!!!\n\n");
 	}
 
 	return 0;

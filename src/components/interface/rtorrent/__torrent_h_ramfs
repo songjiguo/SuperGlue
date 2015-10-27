@@ -37,6 +37,11 @@ int twritep(spdid_t spdid, td_t td, int cbid, int sz);
 int trmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, char *retval, unsigned int max_rval_len);
 int twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen);
 
+
+extern int fs_treadp(spdid_t spdid, td_t td, int len, int *off, int *sz);
+extern int fs_tread(spdid_t spdid, td_t td, int cbid, int sz);
+extern int fs_twritep(spdid_t spdid, td_t td, int cbid, int sz);
+extern int fs_twrite(spdid_t spdid, td_t td, int cbid, int sz);
 /* treadp/twritep version of pack -- using cbufp */
 static inline int
 treadp_pack(spdid_t spdid, td_t td, char *data, int len)
@@ -45,7 +50,7 @@ treadp_pack(spdid_t spdid, td_t td, char *data, int len)
 	char *d;
 	int off, sz;
 	
-	cb = treadp(spdid, td, len, &off, &sz);
+	cb = fs_treadp(spdid, td, len, &off, &sz);
 	/* printc("after treadp in tread_pack off %d sz %d\n", off, sz); */
 	if (!cb < 0) return 0;
 	d = cbufp2buf(cb, sz);
@@ -67,7 +72,7 @@ twritep_pack(spdid_t spdid, td_t td, char *data, int len)
 	if (!d) return -1;
 	cbufp_send(cb);
 	memcpy(d, data, len);
-	ret = twritep(spdid, td, cb, len);
+	ret = fs_twritep(spdid, td, cb, len);
 	cbufp_deref(cb);
 	
 	return ret;
@@ -84,7 +89,7 @@ tread_pack(spdid_t spdid, td_t td, char *data, int len)
 	d = cbuf_alloc(len, &cb);
 	if (!d) return -1;
 
-	ret = tread(spdid, td, cb, len);
+	ret = fs_tread(spdid, td, cb, len);
         if (ret < 0) goto free;
         if (ret > len) {
                 ret = len; /* FIXME: this is broken, and we should figure out a better solution */
@@ -106,7 +111,7 @@ twrite_pack(spdid_t spdid, td_t td, char *data, int len)
 	if (!d) return -1;
 
 	memcpy(d, data, len);
-	ret = twrite(spdid, td, cb, len);
+	ret = fs_twrite(spdid, td, cb, len);
 	cbuf_free(cb);
 	
 	return ret;

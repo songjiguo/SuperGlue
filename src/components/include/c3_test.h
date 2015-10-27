@@ -21,12 +21,12 @@
 | | (_) | (__|   < 
 |_|\___/ \___|_|\_\
 ****************************/
-#define EXAMINE_LOCK
+/* #define EXAMINE_LOCK */
 
 /* #define TEST_LOCK_ALLOC */
 /* #define TEST_LOCK_PRETAKE */
 /* #define TEST_LOCK_TAKE_BEFORE */
-#define TEST_LOCK_TAKE_AFTER
+/* #define TEST_LOCK_TAKE_AFTER */
 /* #define TEST_LOCK_RELEASE_BEFORE */
 /* #define TEST_LOCK_RELEASE_AFTER */
 
@@ -134,7 +134,7 @@
 | | | (_| | | | | | |  _\__ \
 |_|  \__,_|_| |_| |_|_| |___/
 ****************************/
-/* #define EXAMINE_RAMFS */
+#define EXAMINE_RAMFS
 
 #ifdef EXAMINE_RAMFS
 #define TEST_RAMFS_C3    // using cbufp version of treadp and twritep

@@ -418,6 +418,7 @@ __cbufp_freelist_get(int size)
 	assert(pow2(size) && size >= PAGE_SIZE);
 	assert(order >= 0 && order < WORD_SIZE-PAGE_ORDER);
 	d = &cbufp_alloc_freelists[order];
+	printc("length %d -- size %d, order %d\n", d->length, size, order);
 	assert(d->length == size);
 
 	return d;
@@ -436,6 +437,8 @@ __cbuf_alloc(unsigned int sz, cbuf_t *cb, int tmem)
 		fl = &cbuf_alloc_freelists;
 	} else {
 		/* need a size >= PAGE_ORDER, that is a power of 2 */
+		printc("spd %ld calls cbufp_alloc size %d (tmem %d)\n", 
+		       cos_spd_id(), sz, tmem);
 		sz = nlepow2(round_up_to_page(sz));
 		fl = __cbufp_freelist_get(sz);
 	}

@@ -331,7 +331,7 @@ lock_reflection_component_owner(spdid_t spdid, unsigned long lock_id)
 	return 0;
 }
 
-void client_fault_notification(spdid_t spdid) {return;}
+void lock_client_fault_notification(spdid_t spdid) {return;}
 
 #ifdef ACT_LOG
 unsigned long *lock_stats(spdid_t spdid, unsigned long *stats)

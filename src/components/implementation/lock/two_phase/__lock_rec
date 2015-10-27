@@ -269,7 +269,7 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 
 	ACT_RECORD(ACT_LOCK, spd, lock_id, cos_get_thd_id(), thd_id);
 
-	printc("called in lock_component_take passed in lock_id %d\n", lock_id);
+	printc("called in lock_component_take passed in lock_id %lu\n", lock_id);
 
 	/* TAKE(spdid); */
 	// Jiguo: see sched s_stub.S. Might need to release the lock
@@ -299,7 +299,7 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	ml = lock_find(lock_id, spd);
 	/* tried to access a lock not yet created */
 	if (!ml) {
-		printc("lock id %d goto error 1\n", lock_id);
+		printc("lock id %lu goto error 1\n", lock_id);
 		goto error;
 	}
 
@@ -498,7 +498,7 @@ unsigned long lock_component_alloc(spdid_t spd)
 	RELEASE(spdid);
 	
 	if (!l) return 0;
-	printc("lock_component_alloc id %d(request by spd %d)\n", l->lock_id, spd);
+	printc("lock_component_alloc id %lu(request by spd %d)\n", l->lock_id, spd);
  	return l->lock_id;
 }
 
@@ -620,7 +620,7 @@ rd_reflection()
 
 int lock_trigger_all(spdid_t spdid, int dest) {return 0;}
 
-void client_fault_notification(spdid_t spdid) {return;}
+void lock_client_fault_notification(spdid_t spdid) {return;}
 
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {

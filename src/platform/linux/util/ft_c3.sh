@@ -26,8 +26,8 @@ vm.o-fprr.o|print.o|mm.o|l.o|boot.o;\
 va.o-fprr.o|print.o|mm.o|l.o|boot.o|vm.o;\
 tasc.o-sm.o|fprr.o|l.o|buf.o|bufp.o|mm.o|va.o|eg.o|print.o|unique_map.o|pfr.o;\
 \
-ec3cli1.o-sm.o|va.o|fprr.o|print.o|mm.o|buf.o|bufp.o|l.o||tasc.o||[server_]rfs.o|eg.o|ec3ser1.o|ec3ser2.o|te.o;\
-ec3ser1.o-sm.o|va.o|fprr.o|print.o|mm.o|buf.o|bufp.o|l.o||tasc.o||[server_]rfs.o|eg.o|ec3ser2.o|ec3ser3.o|te.o|unique_map.o;\
-ec3ser2.o-sm.o|va.o|print.o|l.o|buf.o|bufp.o|fprr.o|mm.o|te.o||tasc.o||[server_]rfs.o|eg.o|unique_map.o;\
-ec3ser3.o-sm.o|va.o|print.o|l.o|buf.o|bufp.o|fprr.o|mm.o|te.o||tasc.o||[server_]rfs.o|eg.o\
+ec3cli1.o-sm.o|va.o|fprr.o|print.o|mm.o|buf.o|bufp.o|l.o||tasc.o||[fs_]rfs.o|eg.o|ec3ser1.o|ec3ser2.o|te.o;\
+ec3ser1.o-sm.o|va.o|fprr.o|print.o|mm.o|buf.o|bufp.o|l.o||tasc.o||[fs_]rfs.o|eg.o|ec3ser2.o|ec3ser3.o|te.o|unique_map.o;\
+ec3ser2.o-sm.o|va.o|print.o|l.o|buf.o|bufp.o|fprr.o|mm.o|te.o||tasc.o||[fs_]rfs.o|eg.o|unique_map.o;\
+ec3ser3.o-sm.o|va.o|print.o|l.o|buf.o|bufp.o|fprr.o|mm.o|te.o||tasc.o||[fs_]rfs.o|eg.o\
 " ./gen_client_stub
