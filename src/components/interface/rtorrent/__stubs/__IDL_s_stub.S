@@ -1,9 +1,9 @@
-/* IDL generated code ver 0.1 ---  Wed Oct 28 19:58:37 2015 */
+/* IDL generated code ver 0.1 ---  Thu Oct 29 18:17:31 2015 */
 
 
 /* How IDL know when to use simple stack or stack? */
-//#include <cos_asm_server_stub_simple_stack.h>
-#include <cos_asm_server_stub.h>
+#include <cos_asm_server_stub_simple_stack.h>
+//#include <cos_asm_server_stub.h>
     
 .text
     

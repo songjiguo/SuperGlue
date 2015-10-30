@@ -27,11 +27,11 @@ int
 __sg_treadp(spdid_t spdid, int td, int len, int __pad0, int *off_len)
 {
 	int ret = 0;
-	printc("passed: treadp ser (before): td %d len %d off_len[0] %d off_len[1] %d\n",
-	       td, len, off_len[0], off_len[1]);
+	/* printc("passed: treadp ser (before): td %d len %d off_len[0] %d off_len[1] %d\n", */
+	/*        td, len, off_len[0], off_len[1]); */
         ret = treadp(spdid, td, len, &off_len[0], &off_len[1]);
-	printc("treadp ser (after): ret %d off_len[0] %d off_len[1] %d\n",
-	       ret, off_len[0], off_len[1]);
+	/* printc("treadp ser (after): ret %d off_len[0] %d off_len[1] %d\n", */
+	/*        ret, off_len[0], off_len[1]); */
 	return ret;
 }
 

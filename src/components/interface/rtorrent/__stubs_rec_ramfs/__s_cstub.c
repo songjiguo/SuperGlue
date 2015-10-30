@@ -19,7 +19,7 @@ td_t __ser_tsplit(spdid_t spdid, cbuf_t cbid, int len)
 	if (unlikely(((int)(d->len[1] + sizeof(struct __ser_tsplit_data))) != len)) return -4;
 	if (unlikely(d->tid == 0)) return -EINVAL;
 
-	printc("tsplit ser (rtorrent): tid %d\n", d->tid);
+	/* printc("tsplit ser (rtorrent): tid %d\n", d->tid); */
 	/* printc("tsplit ser: tid %d\n", d->tid); */
 	return tsplit(spdid, d->tid, &d->data[0], 
 		      d->len[1] - d->len[0], d->tflags, d->evtid);
@@ -31,8 +31,8 @@ __ser_treadp(spdid_t spdid, int tid, int len, int __pad0, int *off_len)
 	int ret = 0;
 	/* printc("treadp ser passed in: spdid %d tid %d len %d\n", */
 	/*        spdid, tid, len); */
-	printc("treadp ser (before): ret %d off_len[0] %d off_len[1] %d\n",
-	       ret, off_len[0], off_len[1]);
+	/* printc("treadp ser (before): ret %d off_len[0] %d off_len[1] %d\n", */
+	/*        ret, off_len[0], off_len[1]); */
         ret = treadp(spdid, tid, len, &off_len[0], &off_len[1]);
 	/* printc("treadp ser (after): ret %d off_len[0] %d off_len[1] %d\n", */
 	/*        ret, off_len[0], off_len[1]); */

@@ -726,7 +726,7 @@ cbufp_reflect(int fid, int nth, int type)
 	int total_num = 0;
 	int index = 0;
 	
-	printc("cbufp_reflect fid %d\n", fid);
+	/* printc("cbufp_reflect fid %d\n", fid); */
 	
 	CBUFP_TAKE();
 	
@@ -736,13 +736,13 @@ cbufp_reflect(int fid, int nth, int type)
 	
 	switch (type) {
 	case 0:    // return the total number of cbufps
-		printc("try to get the total number of cbufps\n");
+		/* printc("try to get the total number of cbufps\n"); */
 		for(cfd = FIRST_LIST(head, next, prev);
 		    cfd != head;
 		    cfd = FIRST_LIST(cfd, next, prev)){
-			printc("cbid %d\n", cfd->cbid);
-			printc("len %d\n", cfd->len);
-			printc("offset %d\n", cfd->offset);
+			/* printc("cbid %d\n", cfd->cbid); */
+			/* printc("len %d\n", cfd->len); */
+			/* printc("offset %d\n", cfd->offset); */
 			total_num++;
 		}
 		ret = total_num;
@@ -750,7 +750,7 @@ cbufp_reflect(int fid, int nth, int type)
 	case 1:
 	case 2:
 	case 3:
-		printc("try to get the other cbupf info\n");
+		/* printc("try to get the other cbupf info\n"); */
 		for(cfd = FIRST_LIST(head, next, prev);
 		    cfd != head;
 		    cfd = FIRST_LIST(cfd, next, prev)){

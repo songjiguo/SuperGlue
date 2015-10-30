@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Tue Oct 27 01:42:30 2015 */
+/* IDL generated code ver 0.1 ---  Thu Oct 29 18:17:32 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -19,6 +19,8 @@ extern void free_page(void *ptr);
 #define CVECT_ALLOC() alloc_page()
 #define CVECT_FREE(x) free_page(x)
 #include <cvect.h>
+
+volatile unsigned long long ubenchmark_start, ubenchmark_end;
 
 struct desc_track {
 	spdid_t spdid;
@@ -115,7 +117,7 @@ static inline struct desc_track *call_desc_alloc()
 		map_id = cos_map_add(&lock_desc_maps, desc);
 		desc->lock_id = map_id;
 		desc->server_lock_id = -1;	// reset to -1
-		if (map_id >= 1)
+		if (map_id >= 2)
 			break;
 	}
 	assert(desc && desc->lock_id >= 1);
@@ -139,7 +141,10 @@ static inline void call_desc_cons(struct desc_track *desc, int id,
 	assert(desc);
 
 	desc->server_lock_id = id;
+
 	desc->spdid = spdid;
+
+	desc->fault_cnt = global_fault_cnt;
 
 	return;
 }
@@ -340,6 +345,10 @@ static inline int block_cli_if_invoke_lock_component_take(spdid_t spdid,
 static inline int block_cli_if_track_lock_component_alloc(int ret,
 							  spdid_t spdid)
 {
+	// if ret does not exist, just return as it is, thinking....
+	if (ret == -EINVAL)
+		return ret;
+
 	struct desc_track *desc = call_desc_alloc();
 	assert(desc);
 	call_desc_cons(desc, ret, spdid);
@@ -394,8 +403,9 @@ static inline int block_cli_if_invoke_lock_component_free(spdid_t spdid,
 	return ret;
 }
 
-CSTUB_FN(int, lock_component_pretake)(struct usr_inv_cap * uc, spdid_t spdid,
-				      ul_t lock_id, u32_t thd_id) {
+static int lock_component_pretake_ubenchmark_flag;
+CSTUB_FN(int, lock_component_pretake) (struct usr_inv_cap * uc, spdid_t spdid,
+				       ul_t lock_id, u32_t thd_id) {
 	long fault = 0;
 	int ret = 0;
 
@@ -405,10 +415,23 @@ CSTUB_FN(int, lock_component_pretake)(struct usr_inv_cap * uc, spdid_t spdid,
 
  redo:
 	block_cli_if_desc_update_lock_component_pretake(lock_id);
+
+	rdtscll(ubenchmark_end);
+	if (lock_component_pretake_ubenchmark_flag) {
+		lock_component_pretake_ubenchmark_flag = 0;
+		printc
+		    ("lock_component_pretake:recover per object end-end cost: %llu\n",
+		     ubenchmark_end - ubenchmark_start);
+	}
+
 	ret =
 	    block_cli_if_invoke_lock_component_pretake(spdid, lock_id, thd_id,
 						       ret, &fault, uc);
 	if (unlikely(fault)) {
+
+		lock_component_pretake_ubenchmark_flag = 1;
+		rdtscll(ubenchmark_start);
+
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
@@ -419,8 +442,9 @@ CSTUB_FN(int, lock_component_pretake)(struct usr_inv_cap * uc, spdid_t spdid,
 	return ret;
 }
 
-CSTUB_FN(int, lock_component_release)(struct usr_inv_cap * uc, spdid_t spdid,
-				      ul_t lock_id) {
+static int lock_component_release_ubenchmark_flag;
+CSTUB_FN(int, lock_component_release) (struct usr_inv_cap * uc, spdid_t spdid,
+				       ul_t lock_id) {
 	long fault = 0;
 	int ret = 0;
 
@@ -429,20 +453,35 @@ CSTUB_FN(int, lock_component_release)(struct usr_inv_cap * uc, spdid_t spdid,
 	}
 
 	block_cli_if_desc_update_lock_component_release(lock_id);
+
 	ret =
 	    block_cli_if_invoke_lock_component_release(spdid, lock_id, ret,
 						       &fault, uc);
 	if (unlikely(fault)) {
+
+		lock_component_release_ubenchmark_flag = 1;
+		rdtscll(ubenchmark_start);
+
 		CSTUB_FAULT_UPDATE();
 		block_cli_if_desc_update_lock_component_release(lock_id);
+
+		rdtscll(ubenchmark_end);
+		if (lock_component_release_ubenchmark_flag) {
+			lock_component_release_ubenchmark_flag = 0;
+			printc
+			    ("lock_component_release:recover per object end-end cost: %llu\n",
+			     ubenchmark_end - ubenchmark_start);
+		}
+
 	}
 	ret = block_cli_if_track_lock_component_release(ret, spdid, lock_id);
 
 	return ret;
 }
 
-CSTUB_FN(int, lock_component_take)(struct usr_inv_cap * uc, spdid_t spdid,
-				   ul_t lock_id, u32_t thd_id) {
+static int lock_component_take_ubenchmark_flag;
+CSTUB_FN(int, lock_component_take) (struct usr_inv_cap * uc, spdid_t spdid,
+				    ul_t lock_id, u32_t thd_id) {
 	long fault = 0;
 	int ret = 0;
 
@@ -451,12 +490,27 @@ CSTUB_FN(int, lock_component_take)(struct usr_inv_cap * uc, spdid_t spdid,
 	}
 
 	block_cli_if_desc_update_lock_component_take(lock_id);
+
 	ret =
 	    block_cli_if_invoke_lock_component_take(spdid, lock_id, thd_id, ret,
 						    &fault, uc);
+
 	if (unlikely(fault)) {
+
+		lock_component_take_ubenchmark_flag = 1;
+		rdtscll(ubenchmark_start);
+
 		CSTUB_FAULT_UPDATE();
 		block_cli_if_desc_update_lock_component_take(lock_id);
+
+		rdtscll(ubenchmark_end);
+		if (lock_component_take_ubenchmark_flag) {
+			lock_component_take_ubenchmark_flag = 0;
+			printc
+			    ("lock_component_take:recover per object end-end cost: %llu\n",
+			     ubenchmark_end - ubenchmark_start);
+		}
+
 	}
 	ret =
 	    block_cli_if_track_lock_component_take(ret, spdid, lock_id, thd_id);
@@ -464,6 +518,7 @@ CSTUB_FN(int, lock_component_take)(struct usr_inv_cap * uc, spdid_t spdid,
 	return ret;
 }
 
+static int lock_component_alloc_ubenchmark_flag;
 CSTUB_FN(ul_t, lock_component_alloc) (struct usr_inv_cap * uc, spdid_t spdid) {
 	long fault = 0;
 	int ret = 0;
@@ -474,8 +529,21 @@ CSTUB_FN(ul_t, lock_component_alloc) (struct usr_inv_cap * uc, spdid_t spdid) {
 
  redo:
 	block_cli_if_desc_update_lock_component_alloc();
+
+	rdtscll(ubenchmark_end);
+	if (lock_component_alloc_ubenchmark_flag) {
+		lock_component_alloc_ubenchmark_flag = 0;
+		printc
+		    ("lock_component_alloc:recover per object end-end cost: %llu\n",
+		     ubenchmark_end - ubenchmark_start);
+	}
+
 	ret = block_cli_if_invoke_lock_component_alloc(spdid, ret, &fault, uc);
 	if (unlikely(fault)) {
+
+		lock_component_alloc_ubenchmark_flag = 1;
+		rdtscll(ubenchmark_start);
+
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
@@ -484,8 +552,9 @@ CSTUB_FN(ul_t, lock_component_alloc) (struct usr_inv_cap * uc, spdid_t spdid) {
 	return ret;
 }
 
-CSTUB_FN(int, lock_component_free)(struct usr_inv_cap * uc, spdid_t spdid,
-				   ul_t lock_id) {
+static int lock_component_free_ubenchmark_flag;
+CSTUB_FN(int, lock_component_free) (struct usr_inv_cap * uc, spdid_t spdid,
+				    ul_t lock_id) {
 	long fault = 0;
 	int ret = 0;
 
@@ -495,10 +564,23 @@ CSTUB_FN(int, lock_component_free)(struct usr_inv_cap * uc, spdid_t spdid,
 
  redo:
 	block_cli_if_desc_update_lock_component_free(lock_id);
+
+	rdtscll(ubenchmark_end);
+	if (lock_component_free_ubenchmark_flag) {
+		lock_component_free_ubenchmark_flag = 0;
+		printc
+		    ("lock_component_free:recover per object end-end cost: %llu\n",
+		     ubenchmark_end - ubenchmark_start);
+	}
+
 	ret =
 	    block_cli_if_invoke_lock_component_free(spdid, lock_id, ret, &fault,
 						    uc);
 	if (unlikely(fault)) {
+
+		lock_component_free_ubenchmark_flag = 1;
+		rdtscll(ubenchmark_start);
+
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}

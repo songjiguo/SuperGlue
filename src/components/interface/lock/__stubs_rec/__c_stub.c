@@ -59,6 +59,8 @@ extern void free_page(void *ptr);
 #define CVECT_FREE(x) free_page(x)
 #include <cvect.h>
 
+volatile unsigned long long ubenchmark_start, ubenchmark_end;
+
 /* global fault counter, only increase, never decrease */
 static unsigned long global_fault_cnt;
 
@@ -312,6 +314,7 @@ redo:
 	return ret;
 }
 
+static int lock_component_take_ubenchmark_flag;
 CSTUB_FN(int, lock_component_take) (struct usr_inv_cap *uc,
 				    spdid_t spdid, 
 				    unsigned long lock_id, unsigned short int thd)
@@ -337,6 +340,9 @@ redo:
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, rd->s_lkid, thd);
 	
 	if (unlikely (fault)){
+		
+		lock_component_take_ubenchmark_flag = 1;
+		rdtscll(ubenchmark_start);
 
 #ifdef BENCHMARK_MEAS_TAKE
 		test_flag = 1;
@@ -344,8 +350,17 @@ redo:
 		/* printc("a fault(thd %d start %llu)!!!!\n", cos_get_thd_id(), meas_start); */
 #endif		
 		CSTUB_FAULT_UPDATE();
-		goto redo;
+		/* goto redo; */
+		rd = rd_update(lock_id, LOCK_TAKE);
 		ret = 0; 
+		rdtscll(ubenchmark_end);
+		if (lock_component_take_ubenchmark_flag) {
+			lock_component_take_ubenchmark_flag = 0;
+			printc
+				("lock_component_take(C3):recover per object end-end cost: %llu\n",
+				 ubenchmark_end - ubenchmark_start);
+		}
+		
 	}
 
 	return ret;

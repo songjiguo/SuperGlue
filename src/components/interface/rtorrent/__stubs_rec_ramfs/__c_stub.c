@@ -24,6 +24,7 @@
 #define CVECT_FREE(x) free_page(x)
 #include <cvect.h>
 
+volatile unsigned long long ubenchmark_start, ubenchmark_end;
 
 /* the state of an torrent file object */
 enum {
@@ -185,23 +186,23 @@ rd_recover_state(struct rec_data_tor *rd)
 
 	assert(rd && rd->p_tid >= 1 && rd->c_tid > 1);	
 
-	printc("in rd_recover_state: rd->p_tid %d\n", rd->p_tid);
+	/* printc("in rd_recover_state: rd->p_tid %d\n", rd->p_tid); */
 	if (rd->p_tid > 1) {     // not tsplit from td_root
 		assert((prd = map_rd_lookup(rd->p_tid)));
 		prd->fcnt = global_fault_cnt;
-		printc("in rd_recover_state: found a parent to be recovered rd->p_tid %d\n",
-		       rd->p_tid);
+		/* printc("in rd_recover_state: found a parent to be recovered rd->p_tid %d\n", */
+		/*        rd->p_tid); */
 		rd_recover_state(prd);
 	}
 	
 	// has reached td_root, start rebuilding and no tracking...
 	// tsplit returns the client id !!!!
-	printc("\n recovery process calls tsplit again!!!...\n\n");
-	printc("saved param is %s\n", rd->param);
+	/* printc("\n recovery process calls tsplit again!!!...\n\n"); */
+	/* printc("saved param is %s\n", rd->param); */
 	td_t tmp_tid = fs_tsplit(cos_spd_id(), rd->p_tid, 
 			      rd->param, rd->param_len, rd->tflags, rd->evtid);
 	if (tmp_tid <= 1) return;
-	printc("\nrecovery process tsplit return!!!...(tmp_tid %d)\n\n", tmp_tid);
+	/* printc("\nrecovery process tsplit return!!!...(tmp_tid %d)\n\n", tmp_tid); */
 	
 	assert((tmp = map_rd_lookup(tmp_tid)));
 	rd->s_tid = tmp->s_tid;
@@ -292,7 +293,7 @@ rd_update(td_t tid, int state)
 	default:
 		assert(0);
 	}
-	printc("thd %d restore ramfs done!!!\n", cos_get_thd_id());
+	/* printc("thd %d restore ramfs done!!!\n", cos_get_thd_id()); */
 done:
 	return rd;
 }
@@ -359,8 +360,8 @@ CSTUB_FN(td_t, tsplit)(struct usr_inv_cap *uc,
 	}
 
 redo:
-	printc("<<< cli rtorrent: call tsplit  (thread %d, spd %ld and parent tid %d) >>>\n",
-	       cos_get_thd_id(), cos_spd_id(), parent_tid);
+	/* printc("<<< cli rtorrent: call tsplit  (thread %d, spd %ld and parent tid %d) >>>\n", */
+	/*        cos_get_thd_id(), cos_spd_id(), parent_tid); */
 	
 	rd = rd_update(parent_tid, STATE_TSPLIT_PARENT);
 	if (rd) {
@@ -422,7 +423,7 @@ CSTUB_FN(int, twritep)(struct usr_inv_cap *uc,
 
         struct rec_data_tor *rd;
 redo:
-        printc("<<< In: call twrite  (thread %d) >>>\n", cos_get_thd_id());
+        /* printc("<<< In: call twrite  (thread %d) >>>\n", cos_get_thd_id()); */
 	rd = rd_update(td, STATE_TWRITE);
 	assert(rd);
 
@@ -438,6 +439,7 @@ redo:
 	return ret;
 }
 
+static int treadp_ubenchmark_flag;
 CSTUB_FN(int, treadp)(struct usr_inv_cap *uc,
 		      spdid_t spdid, td_t td, int len, int *off, int *sz)
 {
@@ -450,17 +452,27 @@ CSTUB_FN(int, treadp)(struct usr_inv_cap *uc,
         volatile unsigned long long start, end;
 
 redo:
-        printc("cli: treadp (spd %ld thd %d td %d)\n", cos_spd_id(), cos_get_thd_id(), td);
+        /* printc("cli: treadp (spd %ld thd %d td %d)\n", cos_spd_id(), cos_get_thd_id(), td); */
 	rd = rd_update(td, STATE_TREAD);
 	assert(rd);
 
 	/* printc("treadp cli (before): len %d off %d sz %d\n", len, *off, *sz); */
 
+	rdtscll(ubenchmark_end);
+	if (treadp_ubenchmark_flag) {
+		treadp_ubenchmark_flag = 0;
+		printc("treadp(c3):recover per object end-end cost: %llu\n",
+		       ubenchmark_end - ubenchmark_start);
+	}
 	CSTUB_INVOKE_3RETS(ret, fault, *off, *sz, uc, 3, spdid, rd->s_tid, len);
         if (unlikely(fault)) {
-		printc("treadp found a fault and ready to go to redo\n");
-		printc("treadp cli (in fault): ret %d len %d off %d sz %d\n", 
-		       ret, len, *off, *sz);
+		/* printc("treadp found a fault and ready to go to redo\n"); */
+		/* printc("treadp cli (in fault): ret %d len %d off %d sz %d\n",  */
+		/*        ret, len, *off, *sz); */
+		treadp_ubenchmark_flag = 1;
+		rdtscll(ubenchmark_start);
+
+
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
@@ -488,7 +500,7 @@ CSTUB_FN(int, tmerge)(struct usr_inv_cap *uc, spdid_t spdid, td_t td,
 	cbuf_t cb;
 	int sz = len + sizeof(struct __sg_tmerge_data);
 
-        printc("<<< rtorrent In: call tmerge (thread %d) >>>\n", cos_get_thd_id());
+        /* printc("<<< rtorrent In: call tmerge (thread %d) >>>\n", cos_get_thd_id()); */
 
         assert(param && len > 0);
 	assert(param[len] == '\0');

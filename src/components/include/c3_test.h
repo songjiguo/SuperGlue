@@ -21,8 +21,9 @@
 | | (_) | (__|   < 
 |_|\___/ \___|_|\_\
 ****************************/
-/* #define EXAMINE_LOCK */
+#define EXAMINE_LOCK
 
+#ifdef EXAMINE_LOCK
 /* #define TEST_LOCK_ALLOC */
 /* #define TEST_LOCK_PRETAKE */
 /* #define TEST_LOCK_TAKE_BEFORE */
@@ -30,11 +31,15 @@
 /* #define TEST_LOCK_RELEASE_BEFORE */
 /* #define TEST_LOCK_RELEASE_AFTER */
 
+#define BENCHMARK_MEAS_INV_OVERHEAD_LOCK
+#define BENCHMARK_MEAS_INV_OVERHEAD_NO_SERVER_TRACK_LOCK
+
 /* #define BENCHMARK_MEAS_TAKE */
 /* #define BENCHMARK_MEAS_PRETAKE */
 /* #define BENCHMARK_MEAS_ALLOC */
 /* #define BENCHMARK_MEAS_CREATION_TIME */
 
+#endif
 
 /****************************
  _       
@@ -134,12 +139,13 @@
 | | | (_| | | | | | |  _\__ \
 |_|  \__,_|_| |_| |_|_| |___/
 ****************************/
-#define EXAMINE_RAMFS
+/* #define EXAMINE_RAMFS */
 
 #ifdef EXAMINE_RAMFS
 #define TEST_RAMFS_C3    // using cbufp version of treadp and twritep
 #endif
 
+#ifdef EXAMINE_RAMFS
 /* #define TEST_RAMFS_TSPLIT_BEFORE */
 /* #define TEST_RAMFS_TSPLIT_AFTER */
 /* #define TEST_RAMFS_TREADP */
@@ -148,6 +154,10 @@
 /* #define TEST_RAMFS_TRELEASE */
 /* #define TEST_RAMFS_TMERGE */
 
+#define BENCHMARK_MEAS_INV_OVERHEAD_RAMFS
+#define BENCHMARK_MEAS_INV_OVERHEAD_NO_SERVER_TRACK_RAMFS
+
+#endif
 
 /****************************
                  _ _ _               

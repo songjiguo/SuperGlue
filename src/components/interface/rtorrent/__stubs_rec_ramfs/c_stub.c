@@ -1,1 +1,1 @@
-__IDL_c_stub.c
+__c_stub.c

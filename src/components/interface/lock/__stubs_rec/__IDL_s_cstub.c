@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Tue Oct 27 01:42:30 2015 */
+/* IDL generated code ver 0.1 ---  Thu Oct 29 18:17:32 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -8,6 +8,10 @@
 #include <cos_list.h>
 #include <cstub.h>
 #include <lock.h>
+
+#if (RECOVERY_ENABLE == 1)
+#include <c3_test.h>
+#endif
 
 struct track_block {
 	int lock_id;
@@ -20,10 +24,15 @@ static inline int block_ser_if_block_track_lock_component_take(spdid_t spdid,
 							       u32_t thd_id)
 {
 	int ret = 0;
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_NO_SERVER_TRACK_LOCK
+	ret = lock_component_take(spdid, lock_id, thd_id);
+	return ret;
+#else
 	struct track_block tb;	// track on stack
 
 	do {
-		if (sched_component_take(spdid))
+		if (sched_component_take(cos_spd_id()))
 			BUG();
 	} while (0);
 
@@ -35,25 +44,26 @@ static inline int block_ser_if_block_track_lock_component_take(spdid_t spdid,
 	ADD_LIST(&tracking_block_list[spdid], &tb, next, prev);
 
 	do {
-		if (sched_component_release(spdid))
+		if (sched_component_release(cos_spd_id()))
 			BUG();
 	} while (0);
 
 	ret = lock_component_take(spdid, lock_id, thd_id);
 
 	do {
-		if (sched_component_take(spdid))
+		if (sched_component_take(cos_spd_id()))
 			BUG();
 	} while (0);
 
 	REM_LIST(&tb, next, prev);
 
 	do {
-		if (sched_component_release(spdid))
+		if (sched_component_release(cos_spd_id()))
 			BUG();
 	} while (0);
 
 	return ret;
+#endif
 }
 
 int __ser_lock_component_take(spdid_t spdid, ul_t lock_id, u32_t thd_id)
@@ -67,7 +77,7 @@ static inline void block_ser_if_client_fault_notification(int spdid)
 	struct track_block *tb;
 
 	do {
-		if (sched_component_take(spdid))
+		if (sched_component_take(cos_spd_id()))
 			BUG();
 	} while (0);
 
@@ -81,21 +91,21 @@ static inline void block_ser_if_client_fault_notification(int spdid)
 	     tb = FIRST_LIST(tb, next, prev)) {
 
 		do {
-			if (sched_component_release(spdid))
+			if (sched_component_release(cos_spd_id()))
 				BUG();
 		} while (0);
 
 		lock_component_release(spdid, tb->lock_id);
 
 		do {
-			if (sched_component_take(spdid))
+			if (sched_component_take(cos_spd_id()))
 				BUG();
 		} while (0);
 	}
 
  done:
 	do {
-		if (sched_component_release(spdid))
+		if (sched_component_release(cos_spd_id()))
 			BUG();
 	} while (0);
 

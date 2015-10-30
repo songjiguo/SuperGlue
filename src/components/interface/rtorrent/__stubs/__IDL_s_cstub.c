@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Wed Oct 28 19:58:37 2015 */
+/* IDL generated code ver 0.1 ---  Thu Oct 29 18:17:31 2015 */
 
 #include <cos_component.h>
 #include <sched.h>

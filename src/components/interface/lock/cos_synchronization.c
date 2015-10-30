@@ -12,6 +12,10 @@
 #include <cos_synchronization.h>
 #include <print.h>
 
+#if (RECOVERY_ENABLE == 1)
+#include <c3_test.h>
+#endif
+
 extern int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int thd_id);
 extern int lock_component_release(spdid_t spd, unsigned long lock_id);
 extern int lock_component_pretake(spdid_t spd, unsigned long lock_id, unsigned short int thd);
@@ -29,7 +33,7 @@ lock_take_contention(cos_lock_t *l, union cos_lock_atomic_struct *result,
 	spdid_t spdid   = cos_spd_id();
 	int ret;
 
-	
+
 	if (lock_component_pretake(spdid, lock_id, owner)) return -1;
 
 	/* Must access memory (be volatile) as we want
@@ -45,7 +49,23 @@ lock_take_contention(cos_lock_t *l, union cos_lock_atomic_struct *result,
 	/* Note if a 1 is returned, there is a
 	 * generation mismatch, and we just want to
 	 * try and take the lock again anyway */
+
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_LOCK
+	unsigned long long infra_overhead_start;
+	unsigned long long infra_overhead_end;
+meas:
+	rdtscll(infra_overhead_start);
 	ret = lock_component_take(spdid, lock_id, owner);
+	if (cos_get_thd_id() == 13) {   // this is from the benchmark
+		rdtscll(infra_overhead_end);
+		printc("infra_overhead (lock_component_take) cost %llu\n",
+		       infra_overhead_end - infra_overhead_start);
+		goto meas;
+	}
+#else
+	ret = lock_component_take(spdid, lock_id, owner);
+#endif
 	return ret < 0 ? ret : 0;
 }
 

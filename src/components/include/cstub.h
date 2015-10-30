@@ -47,13 +47,13 @@
 /* Jiguo: instead using any register "r", force to use ecx, ebx and
  * edx. Make sure they are not on the clobber list
  */
-#define CSTUB_ASM_OUT(_ret, _fault) "=a" (_ret), "=c" (_fault)
-#define CSTUB_ASM_OUT_3RETS(_ret0, _fault, _ret1, _ret2) \
-	"=a" (_ret0), "=r" (_fault), "=r" (_ret1), "=r" (_ret2)
-// Jiguo: above 3RETS needs sepcifically not clobber ecx and edi
 /* #define CSTUB_ASM_OUT(_ret, _fault) "=a" (_ret), "=c" (_fault) */
 /* #define CSTUB_ASM_OUT_3RETS(_ret0, _fault, _ret1, _ret2) \ */
-/* 	"=a" (_ret0), "=c" (_fault), "=b" (_ret1), "=d" (_ret2) */
+/* 	"=a" (_ret0), "=r" (_fault), "=r" (_ret1), "=r" (_ret2) */
+// Jiguo: above 3RETS needs sepcifically not clobber ecx and edi
+#define CSTUB_ASM_OUT(_ret, _fault) "=a" (_ret), "=c" (_fault)
+#define CSTUB_ASM_OUT_3RETS(_ret0, _fault, _ret1, _ret2) \
+	"=a" (_ret0), "=c" (_fault), "=b" (_ret1), "=d" (_ret2)
 
 /* input registers */
 #define CSTUB_ASM_IN_0(_uc) "a" (_uc->cap_no)

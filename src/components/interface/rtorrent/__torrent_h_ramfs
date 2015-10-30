@@ -48,9 +48,22 @@ treadp_pack(spdid_t spdid, td_t td, char *data, int len)
 {
 	cbufp_t cb;
 	char *d;
-	int off, sz;
-	
+	int off = 0;
+	int sz = 0;
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_RAMFS
+	unsigned long long infra_overhead_start;
+	unsigned long long infra_overhead_end;	
+meas:
+	rdtscll(infra_overhead_start);
 	cb = fs_treadp(spdid, td, len, &off, &sz);
+	rdtscll(infra_overhead_end);
+	printc("infra_overhead (treadp) cost %llu\n", infra_overhead_end - infra_overhead_start);
+	goto meas;
+#else
+	cb = fs_treadp(spdid, td, len, &off, &sz);
+#endif
+
 	/* printc("after treadp in tread_pack off %d sz %d\n", off, sz); */
 	if (!cb < 0) return 0;
 	d = cbufp2buf(cb, sz);

@@ -13,6 +13,10 @@
 #include <print.h>
 #include <cos_list.h>
 
+#if (RECOVERY_ENABLE == 1)
+#include <c3_test.h>
+#endif
+
 volatile unsigned long long overhead_start, overhead_end;
 
 extern int sched_component_take(spdid_t spdid);
@@ -56,6 +60,10 @@ int __sg_lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short 
 	struct track_lock tl;
 	assert(spd && lock_id && thd);
 
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_NO_SERVER_TRACK_LOCK
+	ret = lock_component_take(spd, lock_id, thd);
+	return ret;
+#else
 	rdtscll(overhead_start);
 
 	C_TAKE(cos_spd_id());
@@ -95,6 +103,7 @@ int __sg_lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short 
 	/*        overhead_end - overhead_start + tmp_overhead); */
 
 	return ret;
+#endif
 }
 
 int __sg_lock_component_release(spdid_t spd, unsigned long lock_id)
@@ -113,8 +122,8 @@ int __sg_lock_trigger_all(spdid_t spdid, int dest)
 	long ret = 0;
 	struct track_lock *tl, *list_head, *tmp;
 	
-	printc("thread %d is going to release all locks from component %d\n",
-	       cos_get_thd_id(), dest);
+	/* printc("thread %d is going to release all locks from component %d\n", */
+	/*        cos_get_thd_id(), dest); */
 	
 	C_TAKE(cos_spd_id());
 	

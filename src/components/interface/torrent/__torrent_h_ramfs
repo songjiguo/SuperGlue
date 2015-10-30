@@ -55,8 +55,16 @@ treadp_pack(spdid_t spdid, td_t td, char *data, int len)
 	cbufp_t cb;
 	char *d;
 	int off, sz;
-	
+
+	unsigned long long infra_overhead_start;
+	unsigned long long infra_overhead_end;	
+	rdtscll(infra_overhead_start);
+
 	cb = treadp(spdid, td, len, &off, &sz);
+
+	rdtscll(infra_overhead_end);
+	printc("infra_overhead (normal treadp) cost %llu\n", infra_overhead_end - infra_overhead_start);
+
 	/* printc("after treadp in tread_pack off %d sz %d\n", off, sz); */
 	if (!cb < 0) return 0;
 	d = cbufp2buf(cb, sz);

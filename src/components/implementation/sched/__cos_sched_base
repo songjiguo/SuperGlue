@@ -1100,7 +1100,7 @@ int sched_component_take(spdid_t spdid)
 
 		/* FIXME: proper handling of recursive locking */
 		if (curr == holder) {
-			printc("sched: curr %d from spd %d\n", curr->id, spdid);
+			/* printc("sched: curr %d from spd %d\n", curr->id, spdid); */
 			/* Jiguo: use this to indicate we need
 			 * release, see sched_componnent_take and
 			 * release in s_stub.S */
@@ -1137,8 +1137,8 @@ int sched_component_release(spdid_t spdid)
 
 	// Jiguo: do not print this msg since we might reflect and release the lock
 	if (sched_release_crit_sect(spdid, curr)) {
-		printc("fprr: error releasing spd %d's critical section (contended %d)\n",
-		       spdid, curr->contended_component);
+		printc("fprr: error releasing spd %d's critical section (contended %d, thd %d)\n",
+		       spdid, curr->contended_component, cos_get_thd_id());
 	}
 	sched_switch_thread(0, NULL_EVT);
 	assert(!sched_thd_dependent(curr));

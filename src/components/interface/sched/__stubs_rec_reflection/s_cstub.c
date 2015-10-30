@@ -58,7 +58,7 @@ int __sg_sched_block(spdid_t spdid, int dependency_thd)
 	INIT_LIST(&blk_thd, next, prev);
 	blk_thd.id = cos_get_thd_id();
 	blk_thd.dep_thd = dependency_thd;
-	printc("add to the list..... thd %d\n", cos_get_thd_id());
+	/* printc("add to the list..... thd %d\n", cos_get_thd_id()); */
 	ADD_LIST(&bthds[spdid], &blk_thd, next, prev);
 
 	cos_sched_lock_release();
@@ -67,7 +67,7 @@ int __sg_sched_block(spdid_t spdid, int dependency_thd)
 
 	// remove from list in both normal path and reflect path
 	cos_sched_lock_take();
-	printc("remove from the list..... thd %d\n", cos_get_thd_id());
+	/* printc("remove from the list..... thd %d\n", cos_get_thd_id()); */
 	REM_LIST(&blk_thd, next, prev);
 	cos_sched_lock_release();
 
@@ -83,8 +83,8 @@ int __sg_sched_reflect(spdid_t spdid, int src_spd, int cnt)
 
 	assert(src_spd);
 	cos_sched_lock_take();
-	printc("scheduler server side stub (thd %d)\n", cos_get_thd_id());
-	printc("passed reflection: spd %d src_spd %d\n", spdid, src_spd);
+	/* printc("scheduler server side stub (thd %d)\n", cos_get_thd_id()); */
+	/* printc("passed reflection: spd %d src_spd %d\n", spdid, src_spd); */
 
 	if (!bthds[spdid].next) goto done;
 	if (EMPTY_LIST(&bthds[spdid], next, prev)) goto done;

@@ -46,19 +46,20 @@ static void try_hp(void)
 	unsigned long long j = 0;
 	while(1) {
 	/* while(j++ < 5) { */
-		printc("thread h : %d is doing something\n", cos_get_thd_id());
+		/* printc("thread h : %d is doing something\n", cos_get_thd_id()); */
 		/* printc("thread h : %d is trying to take another lock...\n", cos_get_thd_id()); */
 		/* ec3_ser2_test(); */
 		
 		spin = 0;
-		printc("thread h : %d try to take lock\n", cos_get_thd_id());
-		printc("ser1: lock id %d\n", t_lock.lock_id);
+		/* printc("thread h : %d try to take lock\n", cos_get_thd_id()); */
+		/* printc("ser1: lock id %d\n", t_lock.lock_id); */
+		
 		LOCK1_TAKE();
 		
-		printc("thread h : %d has the lock\n", cos_get_thd_id());
+		/* printc("thread h : %d has the lock\n", cos_get_thd_id()); */
 		LOCK1_RELEASE();
 		
-		printc("thread h : %d released lock\n", cos_get_thd_id());
+		/* printc("thread h : %d released lock\n", cos_get_thd_id()); */
 
 		spin = 1;
 		timed_event_block(cos_spd_id(), 1);
@@ -72,12 +73,12 @@ static void try_mp(void)
 	int i = 0;
 	return;
 	while(1) {
-		printc("thread m : %d try to take lock\n", cos_get_thd_id());
+		/* printc("thread m : %d try to take lock\n", cos_get_thd_id()); */
 
 		LOCK1_TAKE();
-		printc("thread m : %d has the lock\n", cos_get_thd_id());
+		/* printc("thread m : %d has the lock\n", cos_get_thd_id()); */
 		LOCK1_RELEASE();
-		printc("thread m : %d released lock\n", cos_get_thd_id());
+		/* printc("thread m : %d released lock\n", cos_get_thd_id()); */
 		
 		timed_event_block(cos_spd_id(), 1);
 	}
@@ -91,19 +92,19 @@ static void try_lp(void)
 	unsigned long long j = 0;
 	while(1) {
 	/* while(j++ < 5) { */
-		printc("j is %llu\n", j);
-		printc("<<< thread l : %d is doing somethingAAAAA \n", cos_get_thd_id());
-		printc("thread l : %d try to take lock\n", cos_get_thd_id());
+		/* printc("j is %llu\n", j); */
+		/* printc("<<< thread l : %d is doing somethingAAAAA \n", cos_get_thd_id()); */
+		/* printc("thread l : %d try to take lock\n", cos_get_thd_id()); */
 		LOCK1_TAKE();
-		printc("thread l : %d has the lock\n", cos_get_thd_id());
+		/* printc("thread l : %d has the lock\n", cos_get_thd_id()); */
 		
 		/* printc("thread l : %d is trying to take another lock...\n", cos_get_thd_id()); */
 		/* ec3_ser2_test(); */
 		
-		printc("thread l : %d spinning\n", cos_get_thd_id());
+		/* printc("thread l : %d spinning\n", cos_get_thd_id()); */
 		while (spin);
-		printc("thread l : %d is doing something\n", cos_get_thd_id());
-		printc("thread l : %d try to release lock\n", cos_get_thd_id());
+		/* printc("thread l : %d is doing something\n", cos_get_thd_id()); */
+		/* printc("thread l : %d try to release lock\n", cos_get_thd_id()); */
 		LOCK1_RELEASE();
 	}
 	
@@ -124,14 +125,14 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 void
 cos_init(void)
 {
-	printc("ser 1:thd %d is trying to init lock\n", cos_get_thd_id());
+	/* printc("ser 1:thd %d is trying to init lock\n", cos_get_thd_id()); */
 
 	LOCK1_INIT();
 	LOCK2_INIT();
 	/* printc("ser1: lock id %d\n", t_lock.lock_id); */
 	/* printc("ser1: lock2 id %d\n", t_lock2.lock_id);	 */
 
-	printc("after init LOCK\n");
+	/* printc("after init LOCK\n"); */
 
 }
 
@@ -485,6 +486,7 @@ ramfs_test(void)
 	       cos_spd_id(), cos_get_thd_id());
 
 	t1 = fs_tsplit(cos_spd_id(), td_root, params1, strlen(params1), TOR_ALL, evt1);
+	printc("return t1 %d\n", t1);
 	if (t1 < 1) {
 		printc("UNIT TEST FAILED: split failed %d\n", t1);
 		return;
@@ -492,11 +494,13 @@ ramfs_test(void)
 	fs_trelease(cos_spd_id(), t1);
 	
 	t1 = fs_tsplit(cos_spd_id(), td_root, params2, strlen(params2), TOR_ALL, evt1);
+	printc("return t1 %d\n", t1);
 	if (t1 < 1) {
 		printc("UNIT TEST FAILED: split2 failed %d\n", t1); return;
 	}
 
 	t2 = fs_tsplit(cos_spd_id(), t1, params1, strlen(params1), TOR_ALL, evt2);
+	printc("return t2 %d\n", t2);
 	if (t2 < 1) {
 		printc("UNIT TEST FAILED: split3 failed %d\n", t2); return;
 	}
@@ -517,18 +521,21 @@ ramfs_test(void)
 	int max_test;
 	
 	// need test for max number of allowed faults (ureboot)
-	for (max_test = 0; max_test < 2; max_test++) {
+	for (max_test = 0; max_test < 10; max_test++) {
 		printc("\n>>>>>>ramfs test phase 3 start .... (iter %d)\n", max_test);
+		printc("....tsplit 1....\n");
 		t1 = fs_tsplit(cos_spd_id(), td_root, params2, strlen(params2), TOR_ALL, evt1);
-		/* printc("\n[[[[[[.... 2nd tsplit\n"); */
+		printc("....tsplit 1....return t1 %d\n", t1);
+		printc("....tsplit 2....\n");
 		t2 = fs_tsplit(cos_spd_id(), t1, params1, strlen(params1), TOR_ALL, evt2);
 		if (t1 < 1 || t2 < 1) {
 			printc("UNIT TEST FAILED: later splits failed\n");
 			return;
 		}
+		printc("....tsplit 1....return t1 %d\n", t2);
 
-		/* printc("\n[[[[[[.... 1st tread\n"); */
 #ifdef TEST_RAMFS_C3
+		printc("....treadp 1....(tid %d)\n", t1);
 		ret1 = treadp_pack(cos_spd_id(), t1, buffer, 1023);
 #else
 		ret1 = tread_pack(cos_spd_id(), t1, buffer, 1023);
@@ -541,6 +548,7 @@ ramfs_test(void)
 		buffer[0] = '\0';
 
 #ifdef TEST_RAMFS_C3
+		printc("....treadp 2....(tid %d)\n", t2);
 		ret1 = treadp_pack(cos_spd_id(), t2, buffer, 1023);
 #else
 		ret1 = tread_pack(cos_spd_id(), t2, buffer, 1023);
@@ -550,8 +558,10 @@ ramfs_test(void)
 		/* assert(ret1 == strlen(data2)); */
 		printc("read %d (%d): %s (%s)\n", ret1, strlen(data2), buffer, data2);
 		buffer[0] = '\0';
-
+		
+		printc("....trelease 1....(t2 %d)\n", t2);
 		fs_trelease(cos_spd_id(), t2);
+		printc("....trelease 2....(t1 %d)\n", t1);
 		fs_trelease(cos_spd_id(), t1);
 	}
 

@@ -360,8 +360,8 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 	this_spd  = spd_get_by_index(spdid);
 	d_spd     = spd_get_by_index(d_spdid);
 
-	printk("cos_fault: passed this_spd is %d\n", spdid);
-	printk("cos_fault: passed d_spd is %d\n", d_spdid);
+	/* printk("cos_fault: passed this_spd is %d\n", spdid); */
+	/* printk("cos_fault: passed d_spd is %d\n", d_spdid); */
 
 	if (!this_spd || !d_spd) {
 		printk("cos: invalid fault cnt  call for spd %d or spd %d\n",
@@ -410,7 +410,7 @@ fault_cnt_syscall_helper(int spdid, int option, spdid_t d_spdid, unsigned int ca
 
 	switch(option) {
 	case COS_SPD_FAULT_TRIGGER:
-		printk("increase fault counter for spd %d\n", d_spdid);
+		/* printk("increase fault counter for spd %d\n", d_spdid); */
 		d_spd->fault.cnt++;
 		d_spd->reflection.cnt = d_spd->fault.cnt;
 		break;
