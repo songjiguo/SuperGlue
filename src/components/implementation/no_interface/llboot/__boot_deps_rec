@@ -176,12 +176,13 @@ llboot_thd_done(void)
 
 		assert(tid == llboot->recovery_thd);
 		if (rspd) {                     /* the component to be recovered */
-			/* printc("ready to upcall and recover rspd %d (op %d)\n", rspd, op); */
+			printc("ready to upcall and recover rspd %d (op %d, arg %d)\n", 
+			       rspd, op, arg);
 			assert(pthd);
 			llboot->recover_spd = 0;
 			/* the last parameter only for scheduler */
 			/* cos_upcall_args(COS_UPCALL_REBOOT, rspd, llboot->recovery_arg); */
-			cos_upcall_args(op, rspd, llboot->recovery_arg);
+			cos_upcall_args(op, rspd, arg);
 			/* cos_upcall(rspd, arg);  /\* This will escape from the loop *\/ */
 			assert(0);
 		} else {		        /* ...done ureboot... */
@@ -197,7 +198,8 @@ static int second = 0;
 int
 recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 {
-	/* printc("LL: llbooter upcall to spd %d, arg %x thd %d op %d\n", dest, (unsigned int)arg, cos_get_thd_id(), op); */
+	printc("LL: llbooter upcall to spd %d, arg %x thd %d op %d\n", 
+	       dest, (unsigned int)arg, cos_get_thd_id(), op);
 
 	/* /\* printc("recovery_upcall has been called %d times\n",second); *\/ */
 	/* if(second++ >= 20) { */

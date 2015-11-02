@@ -117,17 +117,17 @@ int __sg_lock_component_alloc(spdid_t spd)
 }
 
 
-int __sg_lock_trigger_all(spdid_t spdid, int dest)
+int __sg_lock_reflect(spdid_t spdid)
 {
 	long ret = 0;
 	struct track_lock *tl, *list_head, *tmp;
 	
-	/* printc("thread %d is going to release all locks from component %d\n", */
-	/*        cos_get_thd_id(), dest); */
+	printc("thread %d is going to release all locks from component %d\n",
+	       cos_get_thd_id(), spdid);
 	
 	C_TAKE(cos_spd_id());
 	
-	list_head = &spdlocks[dest].list_head;
+	list_head = &spdlocks[spdid].list_head;
 	if (unlikely(!list_head->next)) goto done;
 	if (unlikely(EMPTY_LIST(list_head, next, prev))) goto done;
 	
@@ -136,7 +136,7 @@ int __sg_lock_trigger_all(spdid_t spdid, int dest)
 		/* printc("found lock id %ld to release\n", tl->lockid); */
 		tmp = FIRST_LIST(tl, next, prev);
 		C_RELEASE(cos_spd_id());
-		lock_component_release(dest, tl->lockid);
+		lock_component_release(spdid, tl->lockid);
 		C_TAKE(cos_spd_id());
 		tl = tmp;
 	}

@@ -223,6 +223,10 @@ cvect_lookup(cvect_t *v, long id)
 	struct cvect_intern *vi;
 
 	assert(v);
+	if (id < 0) {
+		printc("cvect errr: spd %ld eid %ld\n",
+		       cos_spd_id(), id);
+	}
 	assert(id >= 0);
 	vi = __cvect_lookup(v, id);
 	if (!vi) return NULL;

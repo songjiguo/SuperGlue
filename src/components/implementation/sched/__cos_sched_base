@@ -2125,4 +2125,4 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 
 // this is dummy function for export purpose
 // the reflection occurs over the server interface
-int sched_reflect(spdid_t spdid, int thdid, int cnt) { return 0; }
+int sched_reflect(spdid_t spdid) { return 0; }

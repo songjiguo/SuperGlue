@@ -577,7 +577,7 @@ __twmeta(spdid_t spdid, td_t td, const char *key,
 /* extern int lock_trigger_all(spdid_t spdid, int dest);   */
 extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
 extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
-extern int lock_trigger_all(spdid_t spdid, int dest);  
+extern int lock_reflect(spdid_t spdid);  
 
 /* extern void lock_client_fault_notification(spdid_t spdid); */
 
@@ -614,7 +614,7 @@ rd_reflection()
 	 */
 
 	
-	//lock_trigger_all(cos_spd_id(), cos_spd_id());
+	lock_reflect(cos_spd_id());
 
 	/* lock_client_fault_notification(cos_spd_id()); */
 

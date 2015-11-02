@@ -21,7 +21,7 @@
 | | (_) | (__|   < 
 |_|\___/ \___|_|\_\
 ****************************/
-#define EXAMINE_LOCK
+/* #define EXAMINE_LOCK */
 
 #ifdef EXAMINE_LOCK
 /* #define TEST_LOCK_ALLOC */
@@ -69,17 +69,18 @@
 |  __/\ V /| |_ 
  \___| \_/  \__|
 ****************************/
-/* #define EXAMINE_EVT */
+#define EXAMINE_EVT
+
 #ifdef EXAMINE_EVT
 #define EVT_C3            // enable upcall to each client to recover the events
-#endif
 
 /* #define TEST_EVT_SPLIT */
 /* #define TEST_EVT_TRIGGER_BEFORE */
 /* #define TEST_EVT_TRIGGER_AFTER */
 /* #define TEST_EVT_WAIT_BEFORE */
 /* #define TEST_EVT_WAIT_AFTER */
-/* #define TEST_EVT_FREE */
+/* #define TEST_EVT_FREE_BEFORE */
+/* #define TEST_EVT_FREE_AFTER */
 /* #define TEST_EVT_CREATE */
 
 /* #define BENCHMARK_MEAS_SPLIT */
@@ -88,6 +89,7 @@
 /* #define BENCHMARK_MEAS_WAIT */
 /* #define BENCHMARK_MEAS_FREE */
 
+#endif
 
 /****************************
           _              _ 
@@ -143,9 +145,7 @@
 
 #ifdef EXAMINE_RAMFS
 #define TEST_RAMFS_C3    // using cbufp version of treadp and twritep
-#endif
 
-#ifdef EXAMINE_RAMFS
 /* #define TEST_RAMFS_TSPLIT_BEFORE */
 /* #define TEST_RAMFS_TSPLIT_AFTER */
 /* #define TEST_RAMFS_TREADP */

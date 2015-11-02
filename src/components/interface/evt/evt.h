@@ -15,8 +15,6 @@ typedef enum {
 // The following APIs have fault tolerance support
 long evt_split(spdid_t spdid, long parent_evt, int grp);
 
-long c3_evt_split(spdid_t spdid, long parent_evt, int grp, int old_evtid);
-
 void evt_free(spdid_t spdid, long extern_evt);
 long evt_wait(spdid_t spdid, long extern_evt);
 long evt_wait_n(spdid_t spdid, long extern_evt, int n);
@@ -25,13 +23,20 @@ int evt_trigger(spdid_t spdid, long extern_evt);
 // The following APIs have no fault tolerance support
 long evt_create(spdid_t spdid);
 
-long evt_reflection(spdid_t spdid, long evtid);
-int evt_trigger_all(spdid_t spdid);  // trigger all blocked wait threads via evt_wait : Jiguo
-
 long evt_grp_wait(spdid_t spdid);
 int evt_grp_mult_wait(spdid_t spdid, struct cos_array *data);
 int evt_set_prio(spdid_t spdid, long extern_evt, int prio);
 unsigned long *evt_stats(spdid_t spdid, unsigned long *stats);
 int evt_stats_len(spdid_t spdid);
+
+int evt_reflect(spdid_t spdid);
+int evt_upcall_creator(spdid_t spdid, int evtid);
+
+long evt_split_pre(spdid_t spdid, long parent_evt, int grp, int evt_id_old);
+
+#ifdef EVT_C3
+extern void events_replay_all();
+extern void evt_cli_if_recover_upcall_entry(int id);
+#endif
 
 #endif 	    /* !EVT_H */

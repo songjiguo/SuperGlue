@@ -1,0 +1,822 @@
+/**
+ * Copyright 2008 by Boston University.  All rights reserved.
+ * Copyright 2011 by The George Washington University.  All rights reserved.
+ *
+ * Redistribution of this file is permitted under the GNU General
+ * Public License v2.
+ *
+ * Author: Gabriel Parmer, gabep1@cs.bu.edu, 2008.
+ * Author: Gabriel Parmer, gparmer@gwu.edu, 2011.
+ * Author: Gabriel Parmer, gparmer@gwu.edu, 2012: add real groups.
+ */
+
+#define COS_FMT_PRINT
+
+#include <cos_synchronization.h>
+#include <cos_component.h>
+#include <cos_alloc.h>
+#include <cos_debug.h>
+#include <cos_list.h>
+#include <print.h>
+#include <cmap.h>
+#include <errno.h>
+#include <evt.h>
+#include <sched.h>
+
+#include <name_server.h>
+
+
+#if (RECOVERY_ENABLE == 1)
+#include <c3_test.h>
+#endif
+unsigned int swifi_ready = 0;  // explicitly initialize to 0
+
+
+static unsigned long long start, end;
+
+unsigned long long evt_alloc_cnt = 0;
+unsigned long long evt_free_cnt = 0;
+
+#define COS_MEM (92*1024*1024)
+void *mem_addr = (void *)0x80000000;
+static int test_num = 0;
+
+/* Jiguo: A thread might trigger an event that has not been re-created
+ * by a different thread. So if an event is not found when trigger,
+ * the thread will block and woken later by the thread that re-create
+ * * that event. For now, use link list for simplicity and a thread
+ * can * at most block due one missing event -- Not good!!! Unbounded
+ * !!!  This has been changed. See interface explanation */
+
+typedef enum {
+	EVT_GROUP, 
+	EVT_NORMAL
+} evt_t;
+
+typedef enum {
+	EVT_BLOCKED   = 0x1,    /* a thread is blocked on this event */
+	EVT_TRIGGERED = 0x2 	/* has the event been triggered */
+} evt_status_t;
+
+struct evt {
+	evt_t type;
+	evt_status_t status;
+	long eid;
+	struct evt *grp;
+	struct evt *iachildren, *tchildren; /* inactive and triggered children */
+	struct evt *next, *prev;
+	u16_t bthd;	                    /* blocked thread */
+	spdid_t creator;
+
+	int fault_triggered;
+};
+
+#define CSLAB_ALLOC(sz)   alloc_page()
+#define CSLAB_FREE(x, sz) free_page(x)
+#include <cslab.h>
+CSLAB_CREATE(evt, sizeof(struct evt));
+/* A mapping between event ids and actual events */
+/* CMAP_CREATE_STATIC(evt_map); */
+/* lock name start  */
+cos_lock_t evt_lock;
+/* lock name end  */
+
+CVECT_CREATE_STATIC(evt_map);  // Jiguo: use name server to get id
+
+static struct evt *
+__evt_alloc(evt_t t, long parent, spdid_t spdid)
+{
+	struct evt *e = NULL, *p = NULL;
+
+	if (parent) {
+		p = cvect_lookup(&evt_map, parent);
+		/* assert(p);  // Jiguo */
+		/* p = cmap_lookup(&evt_map, parent); */  // Jiguo
+		if (!p)                   goto done;
+		if (p->creator != spdid)  goto done;
+		if (p->type != EVT_GROUP) goto done;
+	}
+
+	/* printc("AAAAAAA\n"); */
+	e = cslab_alloc_evt();    // ????
+	/* printc("evt: cslab_alloc_evt return %p\n", e); */
+
+	/* printc("BBBBBBB (e %p)\n", e); */
+	if (!e) goto done;
+	memset(e, 0, sizeof(struct evt));
+
+	e->type = t;
+	INIT_LIST(e, next, prev);
+	e->grp  = p;
+	e->creator = spdid;
+
+	if (p) {
+		if (p->iachildren) ADD_LIST(p->iachildren, e, next, prev);
+		else p->iachildren = e;
+	}
+
+	/* e->eid = cmap_add(&evt_map, e); */   //Jiguo
+	e->eid = ns_alloc(cos_spd_id(), spdid);
+	assert(e->eid > 0);
+
+	e->fault_triggered = 1;
+
+	// Jiguo added this:
+	/* if (!cvect_lookup(&evt_map, e->eid)) cvect_add(&evt_map, e, e->eid); */
+
+	if (cvect_lookup(&evt_map, e->eid)) cvect_del(&evt_map, e->eid);
+	// old
+	cvect_add(&evt_map, e, e->eid);
+
+	/* evt_alloc_cnt++; */
+	/* if (cos_get_thd_id() != 2) { */
+	/* 	printc("evt_alloc_cnt %llu\n", evt_alloc_cnt); */
+	/* 	printc("evt_free_cnt %llu\n", evt_free_cnt); */
+	/* } */
+
+done:
+	return e;
+}
+
+/* 
+ * This does _not_ free all children of a freed group.  They have to
+ * be freed individually.
+ */
+static int
+__evt_free(spdid_t spdid, long eid)
+{
+	struct evt *e, *c, *f;
+
+	/* e = cmap_lookup(&evt_map, eid); */  // Jiguo
+	e = cvect_lookup(&evt_map, eid);
+
+	if (!e)                  return -EINVAL;
+	if (e->creator != spdid) return -EACCES;
+	if (e->bthd)             return -EAGAIN;
+
+	if (e->iachildren) {
+		f = c = FIRST_LIST(e->iachildren, next, prev);
+		do {
+			c->grp = NULL;
+			/* printc("(7 iach)thd %d remove evt %d\n", cos_get_thd_id(), c->eid); */
+			REM_LIST(c, next, prev);
+		} while (f != (c = FIRST_LIST(e->iachildren, next, prev)));
+		e->iachildren = NULL;
+	}
+	if (e->tchildren) {
+		f = c = FIRST_LIST(e->tchildren, next, prev);
+		do {
+			c->grp = NULL;
+			/* printc("(8 trigg)thd %d remove evt %d\n", cos_get_thd_id(), c->eid); */
+			REM_LIST(c, next, prev);
+		} while (f != (c = FIRST_LIST(e->tchildren, next, prev)));
+		e->tchildren = NULL;
+	}
+	
+	REM_LIST(e, next, prev);
+	/* printc("(9) thd %d remove evt %d\n", cos_get_thd_id(), e->eid); */
+	/* cmap_del(&evt_map, eid); */  // Jiguo
+	cvect_del(&evt_map, eid);
+
+	cslab_free_evt(e);
+
+	/* evt_free_cnt++; */
+	/* if (cos_get_thd_id() != 2) { */
+	/* 	printc("evt_alloc_cnt %llu\n", evt_alloc_cnt); */
+	/* 	printc("evt_free_cnt %llu\n", evt_free_cnt); */
+	/* } */
+
+	return 0;
+}
+
+/* 
+ * Trigger the most specific group with a thread blocked waiting, or
+ * the most generic otherwise.
+ *
+ * Return > 0 for the thread to wake up, 0 for no wakeup, and < 0 for
+ * error.
+ */
+
+/* Jiguo: pass recovery to indicate the status. Need a better way */
+static inline long
+__evt_trigger(spdid_t spdid, long eid, int recovery)
+{
+	struct evt *e, *g, *t = NULL;
+
+	/* e = cmap_lookup(&evt_map, eid); */  // Jiguo
+	e = cvect_lookup(&evt_map, eid);
+	
+	if (unlikely(!e)) {   // changed by Jiguo
+		/* Jiguo: evt_trigger can be called from a different
+		 * spd where the id mappings are not tracked. We add
+		 * this additional invocation to the name server here
+		 * to get the actual server side id if we can not find
+		 * the event when trigger
+		 */
+		assert(cos_get_thd_id() != 2);
+		/* printc("__evt_trigger can not find evt %d by thd %d\n", */
+		/*        eid, cos_get_thd_id()); */
+
+		lock_release(&evt_lock);
+		int actual_evtid = ns_lookup(cos_spd_id(), eid);
+		lock_take(&evt_lock);
+		assert(actual_evtid >= 1);  // the event has been freed by the woken thread ?
+		
+		/* printc("__evt_trigger can not find evt %d, now finds evt %d by thd %d\n", */
+		/*        eid, actual_evtid, cos_get_thd_id()); */
+		e = cvect_lookup(&evt_map, actual_evtid);
+	}
+	assert(e);
+
+	if (!recovery && e->type != EVT_NORMAL) {
+		/* printc("thread %d (from spd %d) is trying to trigger evt %d... but evt type is not EVT_NORMAL\n", cos_get_thd_id(), spdid, eid); */
+		return -EINVAL;
+	}
+	/* go up the tree toward the root... */
+	for (g = e ; g ; g = g->grp) {
+		g->status |= EVT_TRIGGERED;
+		if (likely(!recovery)) g->fault_triggered = 1;  // Jiguo
+		/* add ourselves to the triggered list of our parent,
+		 * and propagate the event up. */
+		if (g->grp) {
+			REM_LIST(g, next, prev);
+			/* FIFO event delivery */
+			if (!g->grp->tchildren) g->grp->tchildren = g;
+			else ADD_END_LIST(g->grp->tchildren, g, next, prev); 
+		}
+		if (!t && (g->status & EVT_BLOCKED || !g->grp)) t = g;
+	}
+	assert(t);
+	t->status |= EVT_TRIGGERED;
+	if (likely(!recovery)) t->fault_triggered = 1; // Jiguo
+	if (t->status & EVT_BLOCKED) {
+		u16_t tid = t->bthd;
+		assert(tid);
+
+		t->status &= ~EVT_BLOCKED;
+		t->bthd    = 0;
+		/* printc("thread %d (from spd %d) has found blocked thd %d to trigger\n", */
+		/*        cos_get_thd_id(), spdid, tid); */
+		return tid;
+	}
+	assert(!t->bthd);
+	
+	/* printc("thread %d (from spd %d) is trying to trigger evt %d... and return 0\n", cos_get_thd_id(), spdid, eid); */
+	return 0;
+}
+
+/* Jiguo: the following text is from evt.c in evt/edge
+ * evt_grp_* functions maintain a mapping between an "event group" and
+ * a set of events.  In our case, we are assuming that an event group
+ * is essentially a thread.  Thus a thread can wait for a set of
+ * events defined by it's "event group".
+ */
+
+/* 
+ * Return the event id if one has been triggered, otherwise 0 and the
+ * thread should be blocked, only to retry this operation when woken.
+ * Negative values denote error values (errno).
+ *
+ * Note: only one thread can block waiting for a specific event at any
+ * time.
+ */
+static inline long
+__evt_wait(spdid_t spdid, long eid)
+{
+	struct evt *e, *g, *c, *t;
+
+	/* e = cmap_lookup(&evt_map, eid); */  // Jiguo
+	e = cvect_lookup(&evt_map, eid);
+	
+	/* printc("__evt_wait: e->fault_triggered %d\n", e->fault_triggered); */
+
+	if (!e)                  return -EINVAL;
+	if (e->bthd)             return -EAGAIN;
+	if (e->creator != spdid) return -EINVAL;   // whey do we need this?  Jiguo
+	assert(!(e->status & EVT_BLOCKED));
+	assert(e->eid);
+
+	if (!(e->status & EVT_TRIGGERED)) {
+		e->status |= EVT_BLOCKED;
+		e->bthd = cos_get_thd_id();
+		/* printc("thd %d is going to change block state\n", cos_get_thd_id()); */
+		return 0;
+	}
+	
+	if (!e->tchildren) {
+		t = e;
+	} else { /* find the "bottom" triggered child */
+		for (c = e->tchildren ; c->tchildren ; c = c->tchildren) ;
+		t = c;
+	}
+	t->status &= ~EVT_TRIGGERED;
+	/* go up from the child, removing "triggered" where appropriate */
+	for (g = t->grp ; g ; g = g->grp) {
+		struct evt *r, *f;
+		int more = 1;
+			
+		assert(g->tchildren);
+		r = g->tchildren;
+		if (EMPTY_LIST(r, next, prev)) {
+			/* printc("(0)thd %d remove \"triggered\" evt %d grp evt %d\n",  */
+			/*        cos_get_thd_id(), r->eid, g->eid); */
+			REM_LIST(r, next, prev);
+			g->tchildren = NULL;
+			g->status &= ~EVT_TRIGGERED;
+		} else {
+			f = FIRST_LIST(r, next, prev);
+			/* printc("(1)thd %d remove \"triggered\" evt %d grp evt %d\n",  */
+			/*        cos_get_thd_id(), r->eid, g->eid); */
+			REM_LIST(r, next, prev);
+			g->tchildren = f;
+			more = 0;
+		}
+		if (g->iachildren) {
+			/* printc("(4)thd %d add alloced new evt %d grp %d\n",  */
+			/*        cos_get_thd_id(), r->eid, g->eid);			 */
+			ADD_LIST(g->iachildren, r, next, prev);
+		}
+		else {
+			/* printc("(5)thd %d set %d to be grp %d's iachidlre\n",  */
+			/*        cos_get_thd_id(), r->eid, g->eid);			 */
+			g->iachildren = r;
+		}
+		if (!more) break;
+	}
+
+	/* Due to the client protocol (e.eg., web server uses the evt
+	 * id to find torrent id), we need find the actual old client
+	 * evt id to return. (t->eid might be the new split evt id and
+	 * not associated with any torrent), or we can track over
+	 * client's interface */
+
+	/* printc("__evt_wait: finally t->fault_triggered %d\n", t->fault_triggered); */
+	/* long tmp_ret = t->eid; */
+	/* if (t->fault_triggered == -1) { */
+	/* 	tmp_ret = t->eid*t->fault_triggered; */
+	/* 	t->fault_triggered = 1; */
+	/* } */
+
+	return t->eid*t->fault_triggered;
+} 
+
+static long 
+__evt_split(spdid_t spdid, long parent, int group)
+{
+	struct evt *e;
+	long ret = -ENOMEM;
+
+	WAIT_FAULT();
+
+	lock_take(&evt_lock);
+
+	e = __evt_alloc((group == 1) ? EVT_GROUP : EVT_NORMAL, parent, spdid);
+	if (!e) goto done;
+	ret = e->eid;
+	assert(ret > 0);
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_SPLIT)
+	/* printc("trigger fault in evt_split: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid); */
+	/* if (spdid == 16 && cos_get_thd_id() == 12 && test_num++ > 5) { */
+	/* if (test_num++ > 300000) { */
+	if (test_num++ >= 0) {
+		printc("trigger fault in evt_split: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+	lock_release(&evt_lock);
+done:
+	return ret;
+}
+
+long evt_split(spdid_t spdid, long parent, int group)
+{
+	return __evt_split(spdid, parent, group);
+}
+
+
+/* This should only be called by the upcall recovery thread. No need
+ * to take the lock (highest priority) */
+static long
+__c3_evt_split(spdid_t spdid, long parent, int group, int old_evtid)
+{
+	struct evt *e;
+	long ret = -ENOMEM;
+
+	/* lock_take(&evt_lock); */  // no need to take the lock
+	assert(cos_get_thd_id() == 2); // only recovery thread calls (eager)
+
+	e = __evt_alloc((group == 1) ? EVT_GROUP : EVT_NORMAL, parent, spdid);
+
+	if (!e) goto done;
+	ret = e->eid;
+	assert(ret > 0);
+	assert(old_evtid && old_evtid != e->eid);
+	e->fault_triggered = -1;
+
+	if (ns_update(cos_spd_id(), old_evtid, e->eid, 0)) assert(0);
+
+	int tmp;
+	if (!group) {  // only trigger events in a group
+		tmp = __evt_trigger(spdid, ret, 1); 
+		assert(!tmp);  // trigger an event right after re-create
+	}
+	
+	/* lock_release(&evt_lock); */
+done:
+	return ret;
+}
+
+long c3_evt_split(spdid_t spdid, long parent, int group, int old_evtid)
+{
+	return __c3_evt_split(spdid, parent, group, old_evtid);
+}
+
+int evt_reflection_creator(spdid_t spdid, int evtid)
+{
+	return 0;
+}
+
+void evt_free(spdid_t spdid, long evt_id)
+{
+	int ret;
+
+	WAIT_FAULT();
+
+	/* lock take start  */
+	lock_take(&evt_lock);
+	/* lock take end  */
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_FREE)
+	if (test_num++ > 300000) {
+		printc("trigger fault in evt_free: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+	/* printc("evt_free called from spd %d: free evt %d (thd %d)\n",  */
+	/*        spdid, evt_id, cos_get_thd_id()); */
+
+	/* int actual_evtid; */
+	/* lock_release(&evt_lock); */
+	/* actual_evtid = ns_lookup(cos_spd_id(), evt_id); */
+	/* lock_take(&evt_lock); */
+
+	/* printc("evt_wait: ret %d actual_evtid %d (by thd %d)\n", */
+	/*        ret, actual_evtid, cos_get_thd_id()); */
+
+	/* ret = __evt_free(spdid, actual_evtid); */   // Jiguo: test this later??
+	ret = __evt_free(spdid, evt_id);
+
+	// Jiguo: free must be in the same spd as split
+	/* if (!ret) { */
+	/* 	lock_release(&evt_lock); */
+	/* 	ns_free(cos_spd_id(), spdid, evt_id); */
+	/* 	/\* ns_free(cos_spd_id(), evt_id); *\/ */
+	/* 	return; */
+	/* } */
+
+	/* lock release start  */	
+	lock_release(&evt_lock);
+	/* lock release end  */	
+
+	if (!ret) ns_free(cos_spd_id(), spdid, evt_id);
+	return;
+}
+
+long evt_wait_n(spdid_t spdid, long evt_id, int n) {
+	assert(0);
+	return -1;
+}
+
+
+long evt_wait(spdid_t spdid, long evt_id)
+{
+	long ret;
+
+	/* printc("evt_wait: passed in evt_id %d by thd %d (called from spd %d)\n", */
+	/*        evt_id, cos_get_thd_id(), spdid); */
+
+	WAIT_FAULT();
+
+	do {
+		lock_take(&evt_lock);
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_BEFORE)
+		/* printc("trigger fault in evt_wait before (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
+		/* if (spdid == 20 && cos_get_thd_id() == 15 && test_num++ > 50) { */
+		if (test_num++ > 4) {
+			printc("trigger fault in evt_wait before (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
+			assert(0);
+		}
+#endif
+		ret = __evt_wait(spdid, evt_id);
+
+		lock_release(&evt_lock);
+
+		/* printc("evt_wait: before sched_block (thd %d and ret %d) \n", */
+		/*        cos_get_thd_id(), ret); */
+
+		/* /\* return evt might be a different triggered one, we */
+		/*  * need return the actual server side id *\/ */
+		/* int actual_ret; */
+		/* if (ret > 0) { */
+		/* 	/\* printc("evt_wait: ns_lookup for evt %d by thd %d\n", *\/ */
+		/* 	/\*        ret, cos_get_thd_id()); *\/ */
+		/* 	actual_ret = ns_lookup(cos_spd_id(), ret); */
+		/* 	/\* printc("evt_wait: ret %d actual_ret %d (by thd %d)\n", *\/ */
+		/* 	/\*        ret, actual_ret, cos_get_thd_id()); *\/ */
+		/* 	ret = actual_ret; */
+		/* } */
+		
+		if (!ret && 0 > sched_block(cos_spd_id(), 0)) BUG();
+		
+		/* printc("evt_wait: after sched_block (thd %d and ret %d) \n", */
+		/*        cos_get_thd_id(), ret); */
+		
+#if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_AFTER)
+		/* printc("trigger fault in evt_wait after (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
+		/* if (spdid == 20 && cos_get_thd_id() == 15 && test_num++ > 50) { */
+
+		if (test_num++ > 500000) {
+			printc("trigger fault in evt_wait after (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
+			assert(0);
+		}
+#endif
+
+	} while (!ret);
+
+	return ret;
+}
+
+int
+evt_trigger(spdid_t spdid, long evt_id)
+{
+	int ret;
+
+	WAIT_FAULT();
+
+	lock_take(&evt_lock);
+
+	/* printc("evt_trigger: passed in evt_id %d by thd %d\n", evt_id, cos_get_thd_id()); */
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_BEFORE)
+	/* printc("trigger fault in evt_trigger before: thd %d passed spd %d (evt %d)\n", */
+	/*        cos_get_thd_id(), spdid, evt_id); */
+	/* if (spdid == 17 && cos_get_thd_id() == 10 && test_num++ > 5000) { */
+
+	/* if (test_num++ > 500000) { */
+	if (test_num++ > 2) {
+		printc("trigger fault in evt_trigger before: thd %d passed spd %d (evt %d)\n",
+		       cos_get_thd_id(), spdid, evt_id);
+		assert(0);
+	}
+#endif
+	
+	ret = __evt_trigger(spdid, evt_id, 0);
+	lock_release(&evt_lock);
+
+
+	/* printc("evt_trigger: ns_lookup return actual id %d (passed in evt_id %d ret from __evt_trigger is %d)\n", actual_evtid, evt_id, ret); */
+	
+	if (ret > 0) {
+		/* printc("evt_trigger: thd %d is trying to wake up thread ret %d (evt %d)\n", */
+		/*        cos_get_thd_id(), ret, evt_id); */
+		sched_wakeup(cos_spd_id(), ret);
+	}
+	/*  The reflection might have waoken up the blocked thread, so
+	 *  we do not check the return value-- Jiguo */ 
+	/* if (ret && sched_wakeup(cos_spd_id(), ret)) BUG(); */
+
+#if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_AFTER)
+	/* if (spdid == 17 && cos_get_thd_id() == 10 && test_num++ > 20000) { */
+	if (test_num++ > 500000) {
+		printc("trigger fault in evt_trigger after: thd %d passed spd %d (evt %d)\n",
+		       cos_get_thd_id(), spdid, evt_id);
+		assert(0);
+	}
+#endif
+
+	return ret;  // should return ret, instead of 0  -- Jiguo // not used still
+}
+
+extern int sched_reflect(spdid_t spdid, int src_spd, int cnt);
+extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
+extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
+extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
+extern int lock_trigger_all(spdid_t spdid, int dest);  
+
+static void
+rd_reflection()
+{
+	int count_obj = 0; // reflected objects
+	int dest_spd = cos_spd_id();
+
+	lock_take(&evt_lock);  // take the lock to ensure all threads can be woken
+
+	/* // remove the mapped page for evt spd */
+	/* vaddr_t addr; */
+	/* count_obj = mman_reflect(cos_spd_id(), dest_spd, 1); */
+	/* /\* printc("evt relfects on mmgr: %d objs\n", count_obj); *\/ */
+	/* while (count_obj--) { */
+	/* 	addr = mman_reflect(cos_spd_id(), dest_spd, 0); */
+	/* 	/\* printc("evt mman_release: %p addr\n", (void *)addr); *\/ */
+	/* 	assert(addr); */
+	/* 	memset(addr, 0, PAGE_SIZE);  // zero out anything on this page before release */
+
+	/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
+	/* } */
+
+	/* // to reflect all threads blocked from evt component, such as evt_wait */
+	/* int wake_thd; */
+	/* count_obj = sched_reflect(cos_spd_id(), dest_spd, 1); */
+	/* /\* printc("evt relfects on sched: %d objs\n", count_obj); *\/ */
+	/* while (count_obj--) { */
+	/* 	wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0); */
+	/* 	/\* printc("thread %d wake_thd %d\n", cos_get_thd_id(), wake_thd); *\/ */
+	/* 	sched_wakeup(cos_spd_id(), wake_thd); */
+	/* } */
+
+	/* thread might hold the lock when the server fails. We need
+	 * release these locks. Like timed_evt or lock, we could check
+	 * the owner of the lock and decide to lock_component_release
+	 * during each object recovery. However, take/release API of
+	 * lock component do require lock_id explicitly and this lock
+	 * id is not known (tracked) on the client interface (evt). So
+	 * for now, we still track who have been blocked due to the
+	 * lock contention in evt on the lock interface. And call
+	 * trigger_all to release that lock during the recovery.
+	 
+	 Note: maybe we should change the lock component API to not
+	 pass lock id, just use the owner thread id to identify the
+	 lock meta data structure?
+	 */
+	lock_trigger_all(cos_spd_id(), cos_spd_id());
+
+	lock_release(&evt_lock);
+
+	return;
+}
+
+static int rec_thd = 0;
+static int first = 0;
+
+void
+cos_init(void)
+{
+	union sched_param sp;
+
+	if (cos_get_thd_id() == rec_thd) {
+
+		/* // remove the mapped page for evt spd */
+		/* int count_obj = 0; // reflected objects */
+		/* int dest_spd = cos_spd_id(); */
+		/* vaddr_t addr; */
+		/* count_obj = mman_reflect(cos_spd_id(), dest_spd, 1); */
+		/* /\* printc("evt relfects on mmgr: %d objs\n", count_obj); *\/ */
+		/* while (count_obj--) { */
+		/* 	addr = mman_reflect(cos_spd_id(), dest_spd, 0); */
+		/* 	/\* printc("evt mman_release: %p addr\n", (void *)addr); *\/ */
+		/* 	assert(addr); */
+		/* 	memset(addr, 0, PAGE_SIZE);  // zero out anything on this page before release */
+			
+		/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
+		/* } */
+		/* assert(!valloc_reset_hp(cos_spd_id(), cos_spd_id())); */
+		/* printc("back from valloc_reset_hp thd %d\n", cos_get_thd_id()); */
+
+		evt_free_cnt = 0;
+		evt_alloc_cnt = 0;
+
+#ifdef BENCHMARK_MEAS_WAIT
+		rdtscll(start);
+#endif		
+
+		ns_upcall(cos_spd_id());
+
+#ifdef BENCHMARK_MEAS_WAIT
+		rdtscll(end);
+		printc("recovery an event group cost: %llu\n", end - start);
+#endif
+
+		/* printc("back from ns_upcall thd %d\n", cos_get_thd_id()); */
+		rd_reflection();
+		/* printc("back from reflection thd %d\n", cos_get_thd_id()); */
+		return;
+	}
+	
+	if (first == 0) {
+		first = 1;
+
+		/* struct evt tmp; */
+		/* printc("evt: size of evt %d\n", sizeof(tmp)); */  //--> 40
+		/* // test memory expansion */
+		/* int i = 0; */
+		/* struct evt *tmp; */
+		/* for (i = 0; i< 1024; i++) { */
+		/* 	tmp = cslab_alloc_evt(); */
+		/* 	printc("evt: cslab_alloc_evt return %p (i %d)\n", */
+		/* 	       tmp, i); */
+		/* } */
+		/* return; */
+
+
+
+		/* int ret; */
+		/* if ((ret = cos_vas_cntl(COS_VAS_SPD_EXPAND, cos_spd_id(), */
+		/* 			(long)cos_get_heap_ptr(), COS_MEM))) { */
+		/* 	printc("ERROR: vas cntl returned %d\n", ret); */
+		/* } */
+
+		/* printc("spd %d heap pointer %p\n", cos_spd_id(), cos_get_heap_ptr()); */
+
+		lock_static_init(&evt_lock);
+
+		/* cmap_init_static(&evt_map); */  // Jiguo
+		/* assert(0 == cmap_add(&evt_map, (void*)1)); */  // Jiguo
+		cvect_init_static(&evt_map);
+
+		/* Jiguo: switch to upcall thread and do rdreflection and
+		 * other recovery. This will end up with the eager style
+		 * recovery for all events. The reason is as following: the
+		 * higher prio thread might block on an event if that even has
+		 * not been rebuilt since the fault. One approach is to block
+		 * the thread in evt_trigger when the event is not
+		 * found. However, it is not predictable, and even unbounded
+		 * if the thread that created the event has lower prio and
+		 * never call event manager again. In order to achieve the
+		 * predictable recovery, we need upcall into each component
+		 * and rebuild the event, using recovery thread to maintain
+		 * the proper priority inheritance.
+		 *
+		 * However, here is the issue: event manager is loaded by the
+		 * booter, not llbooter. Therefore, we need call the llbooter
+		 * to switch to the recovery thread after the component is
+		 * u-rebooted (via normal pgfault handler). Then the thread is
+		 * actually the thread that is trapped by the fault. It is the
+		 * default thread used to recreate the component. However,
+		 * this does not matter as long as we ensure that the thread
+		 * always switches to/from the recovery thread (which has the
+		 * highest prio). Another reason to do here is because we know
+		 * this is special upcall + normal booter only for event
+		 * manager and we can reflect on evt_ns. It is kind between
+		 * the sched/mm and other services, and can not use on-demand.
+		 *
+		 * Remember that the recovery thread can not do sched_wakeup
+	 
+		 */
+		if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
+			sp.c.type = SCHEDP_PRIO;
+			sp.c.value = 3;
+			rec_thd = sched_create_thd(cos_spd_id(), sp.v, 0, 0);
+			printc("creates a recovery thread %d @ prio 3\n", rec_thd);
+		}
+	}
+}
+
+long
+evt_create(spdid_t spdid) { return -1; }
+
+long 
+evt_grp_create(spdid_t spdid, long parent) { return -1; }
+
+int 
+evt_set_prio(spdid_t spdid, long extern_evt, int prio) { return -1; }
+
+/* Wait on a group of events (like epoll) */
+long evt_grp_wait(spdid_t spdid) { return -1; }
+
+/* As above, but return more than one event notifications */
+int 
+evt_grp_mult_wait(spdid_t spdid, struct cos_array *data) { return -1; }
+
+unsigned long *evt_stats(spdid_t spdid, unsigned long *stats) { return NULL; }
+int evt_stats_len(spdid_t spdid) { return 0; }
+
+long evt_reflection(spdid_t spdid, long extern_evt) { return 0;}
+int evt_trigger_all(spdid_t spdid) {return 0;}
+
+void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
+{
+	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p\n", */
+	/*        t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3); */
+	switch (t) {
+	case COS_UPCALL_THD_CREATE:
+	{
+		cos_init();
+		break;
+	}
+	case COS_UPCALL_SWIFI_BEFORE:   // prepare for swifi
+	{
+		swifi_ready = 1; // now other thread can spin for inject fault
+		break;
+	}
+	case COS_UPCALL_SWIFI_AFTER:   // allow other thread to proceed 
+	{
+		swifi_ready = 0; // now other thread can continue
+		break;
+	}
+	default:
+		return;
+	}
+	return;
+}

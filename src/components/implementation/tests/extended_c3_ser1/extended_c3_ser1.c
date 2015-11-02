@@ -12,7 +12,7 @@
 
 #include <c3_test.h>
 #include <ec3_ser2.h>
-/* #include <ec3_ser3.h> */
+#include <ec3_ser3.h>
 
 volatile unsigned long long overhead_start, overhead_end;
 
@@ -150,16 +150,28 @@ cos_init(void)
 
 // evt id is 2
 
+long evt0;
 long evt1;
+long evt2;
 static int test_num1 = 0;
-static int test_num2 = 0;
+static int test_num2 = 1;
+#define TEST_NUM 10000
 static void try_hp(void)
 {
 	long wait_ret = 0;
-	evt1 = evt_split(cos_spd_id(), 0, 0);
+	evt0 = evt_split(cos_spd_id(), 0, 1);
+	assert(evt0 > 0);
+	printc("evt0 -- %d is created\n", evt0);
+	
+	evt1 = evt_split(cos_spd_id(), evt0, 0);
 	assert(evt1 > 0);
+	printc("evt1 -- %d is created\n", evt1);
 
-	while(1) {
+	evt2 = evt_split(cos_spd_id(), evt0, 0);
+	assert(evt2 > 0);
+	printc("evt2 -- %d is created\n", evt2);
+
+	while(test_num1++ < TEST_NUM) {
 		/* printc("\n**** split (%d) ****\n", test_num1); */
 		/* printc("(ser1) thread h : %d is creating evts\n", cos_get_thd_id()); */
 		/* rdtscll(overhead_start); */
@@ -168,11 +180,13 @@ static void try_hp(void)
 
 		/* rdtscll(overhead_start); */
 	wait:
-		wait_ret = evt_wait(cos_spd_id(), evt1);
+		wait_ret = evt_wait(cos_spd_id(), evt0);
+		/* printc("[[evt_wait return %d]]\n", wait_ret); */
 		if (unlikely(wait_ret < 0)) goto wait;
 
 		/* rdtscll(overhead_end); */
-		/* printc("evt_wait...evt_trigger...back to wait..\n"); */
+		/* printc("evt_wait...triggered(evt%d)...back to wait..(iter %d)\n",  */
+		/*        wait_ret, test_num1); */
 
 		/* ec3_ser2_pass(evt1);  // go to evt_wait */
 		/* printc("\n**** free (%d) ****\n", test_num1); */
@@ -182,15 +196,20 @@ static void try_hp(void)
 		/* printc("evt_free...overhead %llu\n", overhead_end - overhead_start); */
 
 	}
+	printc("ser1: call evt_free...to finish the test\n");
+	test_num2 = 0;
 	evt_free(cos_spd_id(), evt1);
+	evt_free(cos_spd_id(), evt2);
 
 	return;
 }
 
 static void try_mp(void)
 {
-	while(1) {
-		ec3_ser3_pass(evt1);  // go to evt_trigger
+	int i = 0;
+	while(test_num2) {
+		if (i == 0) {ec3_ser3_pass(evt1); i = 1;}
+		if (i == 1) {ec3_ser3_pass(evt2); i = 0;}
 	}
 	return;
 }
@@ -198,9 +217,10 @@ static void try_mp(void)
 vaddr_t ec3_ser1_test(int low, int mid, int hig)
 {
 	if (cos_get_thd_id() == hig) {
-		printc("\n<< Test start in spd %d ... >>>\n\n", cos_get_thd_id());
+		printc("\n<< Event test start in spd %ld (thd %d) ... >>>\n", 
+		       cos_spd_id(), cos_get_thd_id());
 		try_hp();
-		printc("\n<< ... Test done in spd %d >>>\n\n", cos_get_thd_id());
+		printc("\n<< ... Event test done !!!>>>\n\n");
 	}
 
 	if (cos_get_thd_id() == mid) try_mp();
@@ -209,14 +229,10 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 	return 0;
 }
 
-#ifdef EVT_C3
-void events_replay_all();
-#endif
-
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
-	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p\n", */
-	/*        t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3); */
+	printc("upcall type %d, core %ld, thd %d, args %p %p %p\n",
+	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
 	
 	switch (t) {
 	case COS_UPCALL_THD_CREATE:
@@ -227,8 +243,11 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		/* printc("test_ser1: upcall to recover the event (thd %d, spd %ld)\n", */
 		/*        cos_get_thd_id(), cos_spd_id()); */
 #ifdef EVT_C3
-		events_replay_all();
+		/* evt_cli_if_recover_upcall_entry(*(int *)arg3); */
+		printc("ser1: caling events_replay_all %d\n", (int)arg1);
+		events_replay_all((int)arg1);
 #endif
+
 		break;
 	default:
 		return;

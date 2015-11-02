@@ -1,1 +1,1 @@
-__IDL_s_stub.S
+__s_stub.S

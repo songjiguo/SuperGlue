@@ -626,10 +626,6 @@ periodic_wake_get_period(unsigned short int tid)
 	return 0;
 }
 
-#ifdef EVT_C3
-void events_replay_all();
-#endif
-
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
 	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p\n", */
@@ -652,6 +648,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		printc("conn_mgr: upcall to recover the event (thd %d, spd %ld)\n",
 		       cos_get_thd_id(), cos_spd_id());
 #ifdef EVT_C3
+		/* evt_cli_if_recover_upcall_entry(*(int *)arg3); */
 		events_replay_all();
 #endif
 		break;

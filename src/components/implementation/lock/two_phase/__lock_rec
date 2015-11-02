@@ -585,7 +585,7 @@ void cos_init()
 	}
 }
 
-extern int sched_reflect(spdid_t spdid, int src_spd, int cnt);
+extern int sched_reflect(spdid_t spdid);
 extern int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
 extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
 extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
@@ -608,6 +608,7 @@ rd_reflection()
 		mman_release_page(cos_spd_id(), addr, dest_spd);
 	}
 
+	sched_reflect(cos_spd_id());
 	// to reflect all threads blocked from lock component
 	/* int wake_thd; */
 	/* count_obj = sched_reflect(cos_spd_id(), dest_spd, 1); */
@@ -624,7 +625,7 @@ rd_reflection()
 	return;
 }
 
-int lock_trigger_all(spdid_t spdid, int dest) {return 0;}
+int lock_reflect(spdid_t spdid) {return 0;}
 
 void lock_client_fault_notification(spdid_t spdid) {return;}
 
