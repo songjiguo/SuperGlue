@@ -6,7 +6,4 @@
 .text	
 cos_asm_server_stub_spdid(ns_alloc)
 cos_asm_server_stub_spdid(ns_free)
-cos_asm_server_stub_spdid(ns_lookup)
-cos_asm_server_stub_spdid(ns_reflection)
-cos_asm_server_stub_spdid(ns_update)
 cos_asm_server_stub_spdid(ns_upcall)

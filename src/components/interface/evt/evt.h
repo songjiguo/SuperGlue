@@ -31,11 +31,10 @@ int evt_stats_len(spdid_t spdid);
 
 int evt_reflect(spdid_t spdid);
 int evt_upcall_creator(spdid_t spdid, int evtid);
-
-long evt_split_pre(spdid_t spdid, long parent_evt, int grp, int evt_id_old);
+long evt_split_exist(spdid_t spdid, long parent_evt, int grp, int existing_id);
 
 #ifdef EVT_C3
-extern void events_replay_all();
+extern void events_replay_all(int id);
 extern void evt_cli_if_recover_upcall_entry(int id);
 #endif
 

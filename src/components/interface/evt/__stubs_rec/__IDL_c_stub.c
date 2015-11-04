@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Fri Oct 30 18:42:10 2015 */
+/* IDL generated code ver 0.1 ---  Mon Nov  2 20:22:07 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -33,16 +33,38 @@ struct desc_track {
 
 static volatile unsigned long global_fault_cnt = 0;
 
-/* tracking thread state for data recovery */
-//CVECT_CREATE_STATIC(rd_vect);
-COS_MAP_CREATE_STATIC(evt_desc_maps);
+static int first_map_init = 0;
+
+CVECT_CREATE_STATIC(evt_desc_maps);
 CSLAB_CREATE(evt_slab, sizeof(struct desc_track));
+
+static inline struct desc_track *call_desc_lookup(int id)
+{
+	return (struct desc_track *)cvect_lookup(&evt_desc_maps, id);
+}
+
+static inline struct desc_track *call_desc_alloc(int id)
+{
+	struct desc_track *desc = NULL;
+	desc = cslab_alloc_evt_slab();
+	assert(desc);
+	cvect_add(&evt_desc_maps, desc, id);
+	return desc;
+}
+
+static inline void call_desc_dealloc(struct desc_track *desc)
+{
+	assert(desc);
+	if (cvect_del(&evt_desc_maps, desc->evtid))
+		assert(0);
+	cslab_free_evt_slab(desc);
+	return;
+}
 
 enum state_codes { state_evt_split, state_evt_free, state_evt_wait,
 	    state_evt_trigger, state_null };
 
-extern void call_recover_upcall(int dest_spd, int id);
-
+static inline void call_map_init();
 static inline void block_cli_if_reflection_creator(int id);
 static inline void block_cli_if_recover(int id);
 static inline void block_cli_if_basic_id(int id);
@@ -80,41 +102,6 @@ static inline void block_cli_if_desc_update_evt_free(int id);
 static inline void block_cli_if_recover_subtree(int id);
 static inline int block_cli_if_track_evt_free(int ret, spdid_t spdid,
 					      long evtid);
-
-static inline struct desc_track *call_desc_lookup(int id)
-{
-	/* return (struct desc_track *)cvect_lookup(&rd_vect, id); */
-	return (struct desc_track *)cos_map_lookup(&evt_desc_maps, id);
-}
-
-static inline struct desc_track *call_desc_alloc()
-{
-	struct desc_track *desc = NULL;
-	int map_id = 0;
-
-	while (1) {
-		desc = cslab_alloc_evt_slab();
-		assert(desc);
-		map_id = cos_map_add(&evt_desc_maps, desc);
-		desc->evtid = map_id;
-		desc->server_evtid = -1;	// reset to -1
-		if (map_id >= 2)
-			break;
-	}
-	assert(desc && desc->evtid >= 1);
-	return desc;
-}
-
-static inline void call_desc_dealloc(struct desc_track *desc)
-{
-	assert(desc);
-	int id = desc->evtid;
-	desc->server_evtid = -1;	// reset to -1
-	assert(desc);
-	cslab_free_evt_slab(desc);
-	cos_map_del(&evt_desc_maps, id);
-	return;
-}
 
 static inline void call_desc_cons(struct desc_track *desc, int id,
 				  spdid_t spdid, long parent_evtid, int grp)
@@ -159,9 +146,18 @@ static inline struct desc_track *call_desc_update(int id, int next_state)
 	return desc;
 }
 
+static inline void call_map_init()
+{
+	if (unlikely(!first_map_init)) {
+		first_map_init = 1;
+		cvect_init_static(&evt_desc_maps);
+	}
+	return;
+}
+
 static inline void block_cli_if_reflection_creator(int id)
 {
-	evt_reflection_creator(cos_spd_id(), id);
+	evt_upcall_creator(cos_spd_id(), id);
 }
 
 static inline void block_cli_if_recover_upcall(int id)
@@ -183,9 +179,11 @@ static inline void block_cli_if_basic_id(int id)
 
 	int retval = 0;
  again:
-	retval = evt_split(desc->spdid, desc->parent_evtid, desc->grp);
+	retval =
+	    evt_split_oldid(desc->spdid, desc->parent_evtid, desc->grp,
+			    desc->server_evtid);
 	//TODO: define the error code for non-recovered parent
-	// thinking...
+	// thinking...2222
 	if (retval == -EINVAL) {
 		id = desc->parent_evtid;
 		call_desc_update(id, state_evt_split);
@@ -210,7 +208,6 @@ static inline void block_cli_if_recover(int id)
 	/* } else { */
 	/*      block_cli_if_basic_id(id); */
 	/* } */
-
 	block_cli_if_basic_id(id);
 }
 
@@ -270,7 +267,7 @@ static inline int block_cli_if_track_evt_split(int ret, spdid_t spdid,
 	if (ret == -EINVAL)
 		return ret;
 
-	struct desc_track *desc = call_desc_alloc();
+	struct desc_track *desc = call_desc_alloc(ret);
 	assert(desc);
 	call_desc_cons(desc, ret, spdid, parent_evtid, grp);
 	desc->state = state_evt_split;
@@ -382,9 +379,7 @@ CSTUB_FN(long, evt_wait)(struct usr_inv_cap * uc, spdid_t spdid, long evtid) {
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!evt_desc_maps.data.depth)) {
-		cos_map_init_static(&evt_desc_maps);
-	}
+	call_map_init();
 
 	block_cli_if_desc_update_evt_wait(evtid);
 
@@ -405,10 +400,7 @@ CSTUB_FN(long, evt_split)(struct usr_inv_cap * uc, spdid_t spdid,
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!evt_desc_maps.data.depth)) {
-		cos_map_init_static(&evt_desc_maps);
-	}
-
+	call_map_init();
  redo:
 	block_cli_if_desc_update_evt_split();
 
@@ -429,10 +421,7 @@ CSTUB_FN(int, evt_free)(struct usr_inv_cap * uc, spdid_t spdid, long evtid) {
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!evt_desc_maps.data.depth)) {
-		cos_map_init_static(&evt_desc_maps);
-	}
-
+	call_map_init();
  redo:
 	block_cli_if_desc_update_evt_free(evtid);
 
@@ -451,9 +440,7 @@ CSTUB_FN(int, evt_trigger)(struct usr_inv_cap * uc, spdid_t spdid, long evtid) {
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!evt_desc_maps.data.depth)) {
-		cos_map_init_static(&evt_desc_maps);
-	}
+	call_map_init();
 
 	block_cli_if_desc_update_evt_trigger(evtid);
 

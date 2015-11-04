@@ -57,7 +57,7 @@ CVECT_CREATE_STATIC(evt_map);
 cos_lock_t evt_lock;
 
 static struct evt *
-__evt_alloc(evt_t t, long parent, spdid_t spdid)
+__evt_alloc(evt_t t, long parent, spdid_t spdid, int existing_id, int *erro_code)
 {
 	struct evt *e = NULL, *p = NULL;
 
@@ -65,7 +65,10 @@ __evt_alloc(evt_t t, long parent, spdid_t spdid)
 	if (parent) {
 		p = cvect_lookup(&evt_map, parent);
 		printc("1.1....\n");
-		if (!p)                   goto done;
+		if (!p) {
+			erro_code = -EINVAL;
+			goto done;
+		}
 		printc("1.2....\n");
 		if (p->creator != spdid)  goto done;
 		if (p->type != EVT_GROUP) goto done;
@@ -83,8 +86,11 @@ __evt_alloc(evt_t t, long parent, spdid_t spdid)
 		else               p->iachildren = e;
 	}
 
-	e->eid = ns_alloc(cos_spd_id(), spdid);
-	assert(e->eid > 0);
+	e->eid = ns_alloc(cos_spd_id(), spdid, existing_id);
+	/* when recover, the id might have been deleted and can not be
+	 * rebuilt anymore. Return NULL in this case */
+	if (e->eid <= 0) return NULL;
+	/* assert(e->eid > 0); */
 	cvect_add(&evt_map, e, e->eid);
 done:
 	return e;
@@ -144,34 +150,17 @@ __evt_trigger(spdid_t spdid, long eid)
 
 	if (unlikely(!e)) {   // changed by Jiguo
 		/* Jiguo: evt_trigger can be called from a different
-		 * spd where the id mappings are not tracked. We add
-		 * this additional invocation to the name server here
-		 * to get the actual server side id if we can not find
-		 * the event when trigger
+		 * spd where the id mappings are not tracked. We call
+		 * the name server to find the creator and upcall into
+		 * the creator to recreate the evt
+		 * If can not see e, it means e has not been recreated
 		 */
 		assert(cos_get_thd_id() != 2);
-		/* printc("__evt_trigger can not find evt %d by thd %d\n", */
-		/*        eid, cos_get_thd_id()); */
-	again:
+		printc("cant not find evt id %d by thd %d\n", eid, cos_get_thd_id());
 		lock_release(&evt_lock);
-		int actual_evtid = ns_lookup(cos_spd_id(), eid);
+		ns_upcall(spdid, eid);
 		lock_take(&evt_lock);
-		assert(actual_evtid >= 1);  // the event has been freed by the woken thread ?
-		
-		/* printc("cant not find evt %d, now finds evt %d by thd %d\n", */
-		/*        eid, actual_evtid, cos_get_thd_id()); */
-		e = cvect_lookup(&evt_map, actual_evtid);
-
-		// if !e, there must be some old link between this eid
-		// and the other id
-		if (unlikely(!e)) {
-			printc("cant not find \"actual\" evt id %d by thd %d\n",
-			       actual_evtid, cos_get_thd_id());
-			lock_release(&evt_lock);
-			ns_upcall(spdid, eid);
-			lock_take(&evt_lock);
-			goto again;
-		}
+		e = cvect_lookup(&evt_map, eid);
 	}
 	assert(e);	
 
@@ -262,14 +251,18 @@ __evt_wait(spdid_t spdid, long eid)
 	return t->eid;
 } 
 
-long evt_split(spdid_t spdid, long parent, int group)
+static long 
+__evt_split(spdid_t spdid, long parent, int group, int existing_id)
 {
 	struct evt *e;
 	long ret = -ENOMEM;
 
 	printc("1....\n");
 	lock_take(&evt_lock);
-	e = __evt_alloc(group ? EVT_GROUP : EVT_NORMAL, parent, spdid);
+	int ERRO_CODE = 0;
+	e = __evt_alloc(group ? EVT_GROUP : EVT_NORMAL, parent, spdid, 
+			existing_id, &ERRO_CODE);
+	printc("__evt_split: ERRO_CODE %d\n", ERRO_CODE);
 	if (!e) goto done;
 	printc("2....e->eid %d\n", e->eid);
 	ret = e->eid;
@@ -288,6 +281,17 @@ done:
 	printc("evt_split is returning....ret %d\n", ret);
 
 	return ret;
+}
+
+long evt_split(spdid_t spdid, long parent, int group)
+{
+	return __evt_split(spdid, parent, group, 0);
+}
+
+long 
+evt_split_exist(spdid_t spdid, long parent, int group, int existing_id) 
+{
+	return __evt_split(spdid, parent, group, existing_id);
 }
 
 void evt_free(spdid_t spdid, long evt_id)
@@ -477,6 +481,5 @@ long __evt_create(spdid_t spdid) {return 0;}
 
 int evt_reflection(spdid_t spdid) {return 0;}
 int evt_upcall_creator(spdid_t spdid, int evtid) {return 0;}
-long evt_split_pre(spdid_t spdid, long parent_evt, int grp, int evt_id_old) {return 0;}
 
 

@@ -245,7 +245,8 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 #ifdef EVT_C3
 		/* evt_cli_if_recover_upcall_entry(*(int *)arg3); */
 		printc("ser1: caling events_replay_all %d\n", (int)arg1);
-		events_replay_all((int)arg1);
+		/* events_replay_all((int)arg1); */
+		evt_cli_if_recover_upcall_entry((int)arg1);
 #endif
 
 		break;

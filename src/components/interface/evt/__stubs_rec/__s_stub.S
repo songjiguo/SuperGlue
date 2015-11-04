@@ -11,6 +11,7 @@
 .text	
 cos_asm_server_stub_spdid(evt_create)
 cos_asm_server_fn_stub_spdid(evt_split, __sg_evt_split)
+cos_asm_server_fn_stub_spdid(evt_split_exist, __sg_evt_split_exist)
 cos_asm_server_stub_spdid(evt_free)
 //cos_asm_server_stub_spdid(evt_wait)
 cos_asm_server_stub_spdid(evt_grp_wait)
@@ -24,4 +25,3 @@ cos_asm_server_fn_stub_spdid(evt_wait, __sg_evt_wait)
 
 cos_asm_server_fn_stub_spdid(evt_reflection, __sg_evt_reflection)
 cos_asm_server_fn_stub(evt_upcall_creator, __sg_evt_upcall_creator)
-cos_asm_server_fn_stub_spdid(evt_split_pre, __sg_evt_split_pre)

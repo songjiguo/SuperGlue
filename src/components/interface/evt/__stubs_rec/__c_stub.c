@@ -38,7 +38,6 @@ static unsigned long global_fault_cnt;
 /* recovery data structure for evt */
 struct rec_data_evt {
 	spdid_t       spdid;   // where the event is created
-	spdid_t       thdid;   // which thread creates this event
 	long          c_evtid;
 	long          s_evtid;
 
@@ -176,13 +175,15 @@ again:
 		if (rd_parent) pevtid = rd_parent->s_evtid;
 	}
 
-	id = evt_split_pre(rd->spdid, pevtid, rd->grp, rd->s_evtid);
-	if (id == -ENOMEM) {
+	id = evt_split_exist(rd->spdid, pevtid, rd->grp, rd->s_evtid);
+	if (id == -EINVAL) {
 		/* printc("the parent id (%d) needs to be created now!!!!\n", */
 		/* 	rd->p_evtid); */
 		rd_update(rd->p_evtid, EVT_SPLIT);
 		goto again;
 	}
+	if (id < 0) return NULL;
+
 	assert(id);
 	/* printc("cli: update s_evtid %d\n", id); */
 	rd->s_evtid = id;
@@ -191,14 +192,12 @@ done:
 	return rd;
 }
 
-void 
-events_replay_all(int evtid)
+void
+evt_cli_if_recover_upcall_entry(int evtid)
 {
-	/* struct rec_data_evt *rde = NULL; */
-	/* assert(rde); */
-	/* rd_recover_state(rde); */
 	assert(rd_update(evtid, EVT_SPLIT));
 	return;
+	
 }
 
 /************************************/
@@ -368,12 +367,11 @@ CSTUB_FN(int, evt_free) (struct usr_inv_cap *uc,
 		cvect_init_static(&rec_evt_map);
 		first = 1;
 	}
-
 redo:
 	printc("evt cli: evt_free(1) %d (evt id %ld in spd %ld)\n",
 	       cos_get_thd_id(), extern_evt, cos_spd_id());
         rd = rd_update(extern_evt, EVT_STATE_FREE);
-	assert(rd);
+	if (!rd) return 0;  // id has been freed before the fault occurs
 	
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid);
 	if (unlikely (fault)) {

@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Fri Oct 30 18:42:10 2015 */
+/* IDL generated code ver 0.1 ---  Mon Nov  2 20:22:07 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -8,9 +8,6 @@
 #include <cos_list.h>
 #include <cstub.h>
 #include <evt.h>
-
-#include <cos_synchronization.h>
-extern cos_lock_t evt_lock;
 
 struct track_block {
 	int evtid;
@@ -23,7 +20,6 @@ static inline int block_ser_if_block_track_evt_wait(spdid_t spdid, long evtid)
 	int ret = 0;
 	struct track_block tb;	// track on stack
 
-	lock_take(&evt_lock);
 	;
 
 	if (unlikely(!tracking_block_list[spdid].next)) {
@@ -33,17 +29,14 @@ static inline int block_ser_if_block_track_evt_wait(spdid_t spdid, long evtid)
 	tb.evtid = evtid;
 	ADD_LIST(&tracking_block_list[spdid], &tb, next, prev);
 
-	lock_release(&evt_lock);
 	;
 
 	ret = evt_wait(spdid, evtid);
 
-	lock_take(&evt_lock);
 	;
 
 	REM_LIST(&tb, next, prev);
 
-	lock_release(&evt_lock);
 	;
 
 	return ret;
@@ -58,7 +51,6 @@ static inline void block_ser_if_client_fault_notification(int spdid)
 {
 	struct track_block *tb;
 
-	lock_take(&evt_lock);
 	;
 
 	if (!tracking_block_list[spdid].next)
@@ -70,17 +62,14 @@ static inline void block_ser_if_client_fault_notification(int spdid)
 	     tb != &tracking_block_list[spdid];
 	     tb = FIRST_LIST(tb, next, prev)) {
 
-		lock_release(&evt_lock);
 		;
 
 		evt_trigger(spdid, tb->evtid);
 
-		lock_take(&evt_lock);
 		;
 	}
 
  done:
-	lock_release(&evt_lock);
 	;
 
 	return;

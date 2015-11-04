@@ -99,8 +99,9 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		/* printc("popcgi: upcall to recover the event (thd %d, spd %ld)\n", */
 		/*        cos_get_thd_id(), cos_spd_id()); */
 #ifdef EVT_C3
-		/* evt_cli_if_recover_upcall_entry(*(int *)arg3); */
-		events_replay_all();
+		/* events_replay_all((int)arg1); */
+		evt_cli_if_recover_upcall_entry(*(int *)arg1);
+		
 #endif
 		break;
 	default:

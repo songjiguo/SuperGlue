@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Fri Oct 30 18:42:10 2015 */
+/* IDL generated code ver 0.1 ---  Mon Nov  2 20:22:07 2015 */
 
 
 /* How IDL know when to use simple stack or stack? */

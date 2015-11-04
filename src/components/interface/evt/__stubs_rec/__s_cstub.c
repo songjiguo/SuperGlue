@@ -31,14 +31,12 @@ static int first_interface_lock = 0;
 
 extern int ns_update(spdid_t spdid, int new_id, int old_id);
 
-long __sg_evt_split_pre(spdid_t spdid, long parent, int group, long old_evtid)
+long __sg_evt_split_exist(spdid_t spdid, long parent, int group, long existing_id)
 {
 	long ret = 0;
-	/* printc("ser:evt_split_pre passed in parent %d grp %d old_evtid %d\n",  */
-	/*        parent, group, old_evtid); */
-	
-	ret = evt_split(spdid, parent, group);
-	if (ret > 0) ns_update(spdid, ret, old_evtid);
+	printc("ser:evt_split_exist passed in parent %d grp %d existing_id %d\n",
+	       parent, group, existing_id);
+	ret = evt_split_exist(spdid, parent, group, existing_id);
 	
 	return ret;
 }
