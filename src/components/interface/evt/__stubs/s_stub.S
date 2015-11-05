@@ -21,5 +21,3 @@ cos_asm_server_stub_spdid(evt_set_prio)
 
 cos_asm_server_stub_spdid(evt_stats)
 cos_asm_server_stub_spdid(evt_stats_len)
-
-cos_asm_server_stub_spdid(evt_trigger_all)

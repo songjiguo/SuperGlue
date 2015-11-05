@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Mon Nov  2 20:22:07 2015 */
+/* IDL generated code ver 0.1 ---  Thu Nov  5 12:52:22 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -19,6 +19,8 @@ extern void free_page(void *ptr);
 #define CVECT_ALLOC() alloc_page()
 #define CVECT_FREE(x) free_page(x)
 #include <cvect.h>
+
+volatile unsigned long long ubenchmark_start, ubenchmark_end;
 
 struct desc_track {
 	spdid_t spdid;
@@ -48,6 +50,7 @@ static inline struct desc_track *call_desc_alloc(int id)
 	struct desc_track *desc = NULL;
 	desc = cslab_alloc_evt_slab();
 	assert(desc);
+	desc->evtid = id;
 	cvect_add(&evt_desc_maps, desc, id);
 	return desc;
 }
@@ -65,7 +68,7 @@ enum state_codes { state_evt_split, state_evt_free, state_evt_wait,
 	    state_evt_trigger, state_null };
 
 static inline void call_map_init();
-static inline void block_cli_if_reflection_creator(int id);
+static inline void block_cli_if_upcall_creator(int id);
 static inline void block_cli_if_recover(int id);
 static inline void block_cli_if_basic_id(int id);
 static inline void block_cli_if_recover_upcall(int id);
@@ -77,28 +80,32 @@ static inline int block_cli_if_invoke_evt_split(spdid_t spdid,
 						int ret, long *fault,
 						struct usr_inv_cap *uc);
 
-static inline void block_cli_if_desc_update_evt_split();
+static inline void block_cli_if_desc_update_pre_evt_split(int id);
+static inline int block_cli_if_desc_update_post_fault_evt_split(int id);
 static inline int block_cli_if_track_evt_split(int ret, spdid_t spdid,
 					       long parent_evtid, int grp);
 static inline int block_cli_if_invoke_evt_wait(spdid_t spdid, long evtid,
 					       int ret, long *fault,
 					       struct usr_inv_cap *uc);
 
-static inline void block_cli_if_desc_update_evt_wait(int id);
+static inline void block_cli_if_desc_update_pre_evt_wait();
+static inline int block_cli_if_desc_update_post_fault_evt_wait(int id);
 static inline int block_cli_if_track_evt_wait(int ret, spdid_t spdid,
 					      long evtid);
 static inline int block_cli_if_invoke_evt_trigger(spdid_t spdid, long evtid,
 						  int ret, long *fault,
 						  struct usr_inv_cap *uc);
 
-static inline void block_cli_if_desc_update_evt_trigger(int id);
+static inline void block_cli_if_desc_update_pre_evt_trigger();
+static inline int block_cli_if_desc_update_post_fault_evt_trigger(int id);
 static inline int block_cli_if_track_evt_trigger(int ret, spdid_t spdid,
 						 long evtid);
 static inline int block_cli_if_invoke_evt_free(spdid_t spdid, long evtid,
 					       int ret, long *fault,
 					       struct usr_inv_cap *uc);
 
-static inline void block_cli_if_desc_update_evt_free(int id);
+static inline void block_cli_if_desc_update_pre_evt_free(int id);
+static inline int block_cli_if_desc_update_post_fault_evt_free(int id);
 static inline void block_cli_if_recover_subtree(int id);
 static inline int block_cli_if_track_evt_free(int ret, spdid_t spdid,
 					      long evtid);
@@ -125,9 +132,12 @@ static inline struct desc_track *call_desc_update(int id, int next_state)
 	unsigned int from_state = 0;
 	unsigned int to_state = 0;
 
+	if (id == 0)
+		return NULL;	/* root id */
+
 	desc = call_desc_lookup(id);
 	if (unlikely(!desc)) {
-		block_cli_if_reflection_creator(id);
+		block_cli_if_upcall_creator(id);
 		goto done;
 	}
 
@@ -135,7 +145,7 @@ static inline struct desc_track *call_desc_update(int id, int next_state)
 
 	if (likely(desc->fault_cnt == global_fault_cnt))
 		goto done;
-	desc->fault_cnt = global_fault_cnt;
+	/* desc->fault_cnt = global_fault_cnt; */
 
 	// State machine transition under the fault
 	block_cli_if_recover(id);
@@ -153,11 +163,6 @@ static inline void call_map_init()
 		cvect_init_static(&evt_desc_maps);
 	}
 	return;
-}
-
-static inline void block_cli_if_reflection_creator(int id)
-{
-	evt_upcall_creator(cos_spd_id(), id);
 }
 
 static inline void block_cli_if_recover_upcall(int id)
@@ -180,7 +185,7 @@ static inline void block_cli_if_basic_id(int id)
 	int retval = 0;
  again:
 	retval =
-	    evt_split_oldid(desc->spdid, desc->parent_evtid, desc->grp,
+	    evt_split_exist(desc->spdid, desc->parent_evtid, desc->grp,
 			    desc->server_evtid);
 	//TODO: define the error code for non-recovered parent
 	// thinking...2222
@@ -191,7 +196,8 @@ static inline void block_cli_if_basic_id(int id)
 	}
 
 	assert(retval);
-	desc->state = state_evt_split;
+	desc->state = state_evt_split;	// set the state to the initial state
+	desc->fault_cnt = global_fault_cnt;	// set the fault counter to the global
 	block_cli_if_recover_data(desc);
 }
 
@@ -211,6 +217,11 @@ static inline void block_cli_if_recover(int id)
 	block_cli_if_basic_id(id);
 }
 
+static inline void block_cli_if_upcall_creator(int id)
+{
+	evt_upcall_creator(cos_spd_id(), id);
+}
+
 void evt_cli_if_recover_upcall_entry(int id)
 {
 	block_cli_if_recover_upcall(id);
@@ -225,18 +236,24 @@ static inline void block_cli_if_save_data(int id, void *data)
 	call_save_data(id, data);
 }
 
+static inline void block_cli_if_desc_update_pre_evt_wait()
+{
+}
+
 static inline int block_cli_if_track_evt_wait(int ret, spdid_t spdid,
 					      long evtid)
 {
 	struct desc_track *desc = call_desc_lookup(evtid);
-	assert(desc);
+	if (desc) {
+	}
 
 	return ret;
 }
 
-static inline void block_cli_if_desc_update_evt_wait(int id)
+static inline int block_cli_if_desc_update_post_fault_evt_wait(int id)
 {
 	call_desc_update(id, state_evt_wait);
+	return 0;
 }
 
 static inline int block_cli_if_invoke_evt_wait(spdid_t spdid, long evtid,
@@ -260,6 +277,11 @@ static inline int block_cli_if_invoke_evt_wait(spdid_t spdid, long evtid,
 	return ret;
 }
 
+static inline void block_cli_if_desc_update_pre_evt_split(int id)
+{
+	call_desc_update(id, state_evt_split);
+}
+
 static inline int block_cli_if_track_evt_split(int ret, spdid_t spdid,
 					       long parent_evtid, int grp)
 {
@@ -275,8 +297,9 @@ static inline int block_cli_if_track_evt_split(int ret, spdid_t spdid,
 	return desc->evtid;
 }
 
-static inline void block_cli_if_desc_update_evt_split()
+static inline int block_cli_if_desc_update_post_fault_evt_split(int id)
 {
+	return 1;
 }
 
 static inline int block_cli_if_invoke_evt_split(spdid_t spdid,
@@ -300,23 +323,18 @@ static inline int block_cli_if_invoke_evt_split(spdid_t spdid,
 	return ret;
 }
 
+static inline void block_cli_if_desc_update_pre_evt_free(int id)
+{
+	call_desc_update(id, state_evt_free);
+}
+
 static inline void block_cli_if_recover_subtree(int id)
 {
 }
 
-static inline int block_cli_if_track_evt_free(int ret, spdid_t spdid,
-					      long evtid)
+static inline int block_cli_if_desc_update_post_fault_evt_free(int id)
 {
-	struct desc_track *desc = call_desc_lookup(evtid);
-	assert(desc);
-	call_desc_dealloc(desc);
-
-	return ret;
-}
-
-static inline void block_cli_if_desc_update_evt_free(int id)
-{
-	call_desc_update(id, state_evt_free);
+	return 1;
 }
 
 static inline int block_cli_if_invoke_evt_free(spdid_t spdid, long evtid,
@@ -340,18 +358,34 @@ static inline int block_cli_if_invoke_evt_free(spdid_t spdid, long evtid,
 	return ret;
 }
 
-static inline int block_cli_if_track_evt_trigger(int ret, spdid_t spdid,
-						 long evtid)
+static inline int block_cli_if_track_evt_free(int ret, spdid_t spdid,
+					      long evtid)
 {
 	struct desc_track *desc = call_desc_lookup(evtid);
-	assert(desc);
+	if (desc)
+		call_desc_dealloc(desc);
 
 	return ret;
 }
 
-static inline void block_cli_if_desc_update_evt_trigger(int id)
+static inline void block_cli_if_desc_update_pre_evt_trigger()
+{
+}
+
+static inline int block_cli_if_track_evt_trigger(int ret, spdid_t spdid,
+						 long evtid)
+{
+	struct desc_track *desc = call_desc_lookup(evtid);
+	if (desc) {
+	}
+
+	return ret;
+}
+
+static inline int block_cli_if_desc_update_post_fault_evt_trigger(int id)
 {
 	call_desc_update(id, state_evt_trigger);
+	return 0;
 }
 
 static inline int block_cli_if_invoke_evt_trigger(spdid_t spdid, long evtid,
@@ -375,81 +409,135 @@ static inline int block_cli_if_invoke_evt_trigger(spdid_t spdid, long evtid,
 	return ret;
 }
 
-CSTUB_FN(long, evt_wait)(struct usr_inv_cap * uc, spdid_t spdid, long evtid) {
+static int evt_wait_ubenchmark_flag;
+CSTUB_FN(long, evt_wait) (struct usr_inv_cap * uc, spdid_t spdid, long evtid) {
 	long fault = 0;
 	int ret = 0;
 
 	call_map_init();
 
-	block_cli_if_desc_update_evt_wait(evtid);
+ redo:
+	block_cli_if_desc_update_pre_evt_wait(evtid);
+
+	rdtscll(ubenchmark_end);
+	if (evt_wait_ubenchmark_flag) {
+		evt_wait_ubenchmark_flag = 0;
+		printc("evt_wait:recover per object end-end cost: %llu\n",
+		       ubenchmark_end - ubenchmark_start);
+	}
 
 	ret = block_cli_if_invoke_evt_wait(spdid, evtid, ret, &fault, uc);
 	if (unlikely(fault)) {
 
-		CSTUB_FAULT_UPDATE();
-		block_cli_if_desc_update_evt_wait(evtid);
+		evt_wait_ubenchmark_flag = 1;
+		rdtscll(ubenchmark_start);
 
+		CSTUB_FAULT_UPDATE();
+		if (block_cli_if_desc_update_post_fault_evt_wait(evtid)) {
+			goto redo;
+		}
 	}
 	ret = block_cli_if_track_evt_wait(ret, spdid, evtid);
 
 	return ret;
 }
 
-CSTUB_FN(long, evt_split)(struct usr_inv_cap * uc, spdid_t spdid,
-			  long parent_evtid, int grp) {
+static int evt_split_ubenchmark_flag;
+CSTUB_FN(long, evt_split) (struct usr_inv_cap * uc, spdid_t spdid,
+			   long parent_evtid, int grp) {
 	long fault = 0;
 	int ret = 0;
 
 	call_map_init();
+
  redo:
-	block_cli_if_desc_update_evt_split();
+	block_cli_if_desc_update_pre_evt_split(parent_evtid);
+
+	rdtscll(ubenchmark_end);
+	if (evt_split_ubenchmark_flag) {
+		evt_split_ubenchmark_flag = 0;
+		printc("evt_split:recover per object end-end cost: %llu\n",
+		       ubenchmark_end - ubenchmark_start);
+	}
 
 	ret =
 	    block_cli_if_invoke_evt_split(spdid, parent_evtid, grp, ret, &fault,
 					  uc);
 	if (unlikely(fault)) {
 
+		evt_split_ubenchmark_flag = 1;
+		rdtscll(ubenchmark_start);
+
 		CSTUB_FAULT_UPDATE();
-		goto redo;
+		if (block_cli_if_desc_update_post_fault_evt_split(parent_evtid)) {
+			goto redo;
+		}
 	}
 	ret = block_cli_if_track_evt_split(ret, spdid, parent_evtid, grp);
 
 	return ret;
 }
 
-CSTUB_FN(int, evt_free)(struct usr_inv_cap * uc, spdid_t spdid, long evtid) {
+static int evt_free_ubenchmark_flag;
+CSTUB_FN(int, evt_free) (struct usr_inv_cap * uc, spdid_t spdid, long evtid) {
 	long fault = 0;
 	int ret = 0;
 
 	call_map_init();
+
  redo:
-	block_cli_if_desc_update_evt_free(evtid);
+	block_cli_if_desc_update_pre_evt_free(evtid);
+
+	rdtscll(ubenchmark_end);
+	if (evt_free_ubenchmark_flag) {
+		evt_free_ubenchmark_flag = 0;
+		printc("evt_free:recover per object end-end cost: %llu\n",
+		       ubenchmark_end - ubenchmark_start);
+	}
 
 	ret = block_cli_if_invoke_evt_free(spdid, evtid, ret, &fault, uc);
 	if (unlikely(fault)) {
 
+		evt_free_ubenchmark_flag = 1;
+		rdtscll(ubenchmark_start);
+
 		CSTUB_FAULT_UPDATE();
-		goto redo;
+		if (block_cli_if_desc_update_post_fault_evt_free(evtid)) {
+			goto redo;
+		}
 	}
 	ret = block_cli_if_track_evt_free(ret, spdid, evtid);
 
 	return ret;
 }
 
-CSTUB_FN(int, evt_trigger)(struct usr_inv_cap * uc, spdid_t spdid, long evtid) {
+static int evt_trigger_ubenchmark_flag;
+CSTUB_FN(int, evt_trigger) (struct usr_inv_cap * uc, spdid_t spdid, long evtid) {
 	long fault = 0;
 	int ret = 0;
 
 	call_map_init();
 
-	block_cli_if_desc_update_evt_trigger(evtid);
+ redo:
+	block_cli_if_desc_update_pre_evt_trigger(evtid);
+
+	rdtscll(ubenchmark_end);
+	if (evt_trigger_ubenchmark_flag) {
+		evt_trigger_ubenchmark_flag = 0;
+		printc("evt_trigger:recover per object end-end cost: %llu\n",
+		       ubenchmark_end - ubenchmark_start);
+	}
 
 	ret = block_cli_if_invoke_evt_trigger(spdid, evtid, ret, &fault, uc);
 	if (unlikely(fault)) {
 
-		CSTUB_FAULT_UPDATE();
-		block_cli_if_desc_update_evt_trigger(evtid);
+		evt_trigger_ubenchmark_flag = 1;
+		rdtscll(ubenchmark_start);
 
+		CSTUB_FAULT_UPDATE();
+		if (block_cli_if_desc_update_post_fault_evt_trigger(evtid)) {
+			goto redo;
+		}
 	}
 	ret = block_cli_if_track_evt_trigger(ret, spdid, evtid);
 

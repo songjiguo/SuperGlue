@@ -122,8 +122,8 @@ int __sg_lock_reflect(spdid_t spdid)
 	long ret = 0;
 	struct track_lock *tl, *list_head, *tmp;
 	
-	printc("thread %d is going to release all locks from component %d\n",
-	       cos_get_thd_id(), spdid);
+	/* printc("thread %d is going to release all locks from component %d\n", */
+	/*        cos_get_thd_id(), spdid); */
 	
 	C_TAKE(cos_spd_id());
 	

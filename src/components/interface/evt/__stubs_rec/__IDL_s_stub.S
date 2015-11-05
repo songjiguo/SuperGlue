@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Mon Nov  2 20:22:07 2015 */
+/* IDL generated code ver 0.1 ---  Thu Nov  5 12:52:22 2015 */
 
 
 /* How IDL know when to use simple stack or stack? */
@@ -8,6 +8,7 @@
 .text
     
 cos_asm_server_fn_stub_spdid(evt_wait,__ser_evt_wait)
+cos_asm_server_fn_stub_spdid(evt_split_exist,__ser_evt_split_exist)
 cos_asm_server_fn_stub_spdid(evt_client_fault_notification,__ser_evt_client_fault_notification)
 cos_asm_server_stub_spdid(evt_split)
 cos_asm_server_stub_spdid(evt_trigger)
@@ -18,4 +19,4 @@ cos_asm_server_stub_spdid(evt_create)
 cos_asm_server_stub_spdid(evt_stats) 
 cos_asm_server_stub_spdid(evt_stats_len)
 
-cos_asm_server_stub_spdid(evt_reflection_creator)
+cos_asm_server_stub_spdid(evt_upcall_creator)

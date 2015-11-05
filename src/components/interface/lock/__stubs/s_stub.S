@@ -1,1 +1,1 @@
-../__stubs_rec/s_stub.S
+__s_stub.S

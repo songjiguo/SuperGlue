@@ -23,6 +23,9 @@
 #include <evt.h>
 #include <sched.h>
 
+#include <name_server.h>
+extern int lock_reflect(spdid_t spdid);
+
 #include <cvect.h>
 
 static int test_num = 0;
@@ -54,22 +57,24 @@ struct evt {
 CSLAB_CREATE(evt, sizeof(struct evt));
 /* A mapping between event ids and actual events */
 CVECT_CREATE_STATIC(evt_map);
-cos_lock_t evt_lock;
 
+/* lock name start */
+cos_lock_t evt_lock;
+/* lock name end */
+
+
+// Jiguo: need error_code to return different situation (e.g, parent not presented)
 static struct evt *
-__evt_alloc(evt_t t, long parent, spdid_t spdid, int existing_id, int *erro_code)
+__evt_alloc(evt_t t, long parent, spdid_t spdid, int existing_id, int *error_code)
 {
 	struct evt *e = NULL, *p = NULL;
 
-	printc("1.0....parent %d\n", parent);
 	if (parent) {
 		p = cvect_lookup(&evt_map, parent);
-		printc("1.1....\n");
 		if (!p) {
-			erro_code = -EINVAL;
+			*error_code = -EINVAL;
 			goto done;
 		}
-		printc("1.2....\n");
 		if (p->creator != spdid)  goto done;
 		if (p->type != EVT_GROUP) goto done;
 	}
@@ -156,7 +161,7 @@ __evt_trigger(spdid_t spdid, long eid)
 		 * If can not see e, it means e has not been recreated
 		 */
 		assert(cos_get_thd_id() != 2);
-		printc("cant not find evt id %d by thd %d\n", eid, cos_get_thd_id());
+		/* printc("cant not find evt id %ld by thd %d\n", eid, cos_get_thd_id()); */
 		lock_release(&evt_lock);
 		ns_upcall(spdid, eid);
 		lock_take(&evt_lock);
@@ -257,28 +262,30 @@ __evt_split(spdid_t spdid, long parent, int group, int existing_id)
 	struct evt *e;
 	long ret = -ENOMEM;
 
-	printc("1....\n");
+        /* lock take start */
 	lock_take(&evt_lock);
-	int ERRO_CODE = 0;
+        /* lock take end */
+	int error_code = 0;
 	e = __evt_alloc(group ? EVT_GROUP : EVT_NORMAL, parent, spdid, 
-			existing_id, &ERRO_CODE);
-	printc("__evt_split: ERRO_CODE %d\n", ERRO_CODE);
+			existing_id, &error_code);
+	if (error_code < 0) ret = error_code;
 	if (!e) goto done;
-	printc("2....e->eid %d\n", e->eid);
 	ret = e->eid;
 	assert(ret > 0);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_SPLIT)
 	/* printc("test_num %d\n", test_num); */
 	if (test_num++ > 1 && cos_get_thd_id() != 2) {
-		printc("trigger fault in evt_split: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid);
+		/* printc("trigger fault in evt_split: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spdid); */
 		assert(0);
 	}
 #endif
 
 done:
+        /* lock release start */
 	lock_release(&evt_lock);
-	printc("evt_split is returning....ret %d\n", ret);
+        /* lock release end */
+	/* printc("evt_split is returning....ret %ld\n", ret); */
 
 	return ret;
 }
@@ -302,8 +309,8 @@ void evt_free(spdid_t spdid, long evt_id)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_FREE_BEFORE)
 	if (test_num++ > 0) {
-		printc("trigger fault in evt_free before: thd %d spd %ld passed spd %d\n", 
-		       cos_get_thd_id(), cos_spd_id(), spdid);
+		/* printc("trigger fault in evt_free before: thd %d spd %ld passed spd %d\n",  */
+		/*        cos_get_thd_id(), cos_spd_id(), spdid); */
 		assert(0);
 	}
 #endif
@@ -315,8 +322,8 @@ void evt_free(spdid_t spdid, long evt_id)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_FREE_AFTER)
 	if (test_num++ > 0) {
-		printc("trigger fault in evt_free after: thd %d spd %ld passed spd %d\n", 
-		       cos_get_thd_id(), cos_spd_id(), spdid);
+		/* printc("trigger fault in evt_free after: thd %d spd %ld passed spd %d\n",  */
+		/*        cos_get_thd_id(), cos_spd_id(), spdid); */
 		assert(0);
 	}
 #endif
@@ -333,12 +340,16 @@ long evt_wait(spdid_t spdid, long evt_id)
 {
 	long ret;
 
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_EVT
+	if (cos_get_thd_id() == 13) return 0;
+#endif
+
 	do {
 		lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_BEFORE)
 		if (test_num++ > 2000) {
-			printc("trigger fault in evt_wait before (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
+			/* printc("trigger fault in evt_wait before (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
 			assert(0);
 		}
 #endif
@@ -350,7 +361,7 @@ long evt_wait(spdid_t spdid, long evt_id)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_AFTER)
 		if (test_num++ > 2000) {
-			printc("trigger fault in evt_wait after (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid);
+			/* printc("trigger fault in evt_wait after (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
 			assert(0);
 		}
 #endif
@@ -368,8 +379,8 @@ evt_trigger(spdid_t spdid, long evt_id)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_BEFORE)
 	if (test_num++ > 2000) {
-		printc("trigger fault in evt_trigger before: thd %d passed spd %d (evt %d)\n",
-		       cos_get_thd_id(), spdid, evt_id);
+		/* printc("trigger fault in evt_trigger before: thd %d passed spd %d (evt %d)\n", */
+		/*        cos_get_thd_id(), spdid, evt_id); */
 		assert(0);
 	}
 #endif
@@ -380,8 +391,8 @@ evt_trigger(spdid_t spdid, long evt_id)
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_AFTER)
 	if (test_num++ > 2000) {
-		printc("trigger fault in evt_trigger after: thd %d passed spd %d (evt %d)\n",
-		       cos_get_thd_id(), spdid, evt_id);
+		/* printc("trigger fault in evt_trigger after: thd %d passed spd %d (evt %d)\n", */
+		/*        cos_get_thd_id(), spdid, evt_id); */
 		assert(0);
 	}
 #endif
@@ -451,9 +462,9 @@ cos_init(void)
 	cvect_init_static(&evt_map);
 
 	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
-		printc("\nramfs reflection start!!!\n");
+		/* printc("\evt reflection start!!!\n"); */
 		rd_reflection();
-		printc("ramfs reflection done!!!\n\n");
+		/* printc("evt reflection done!!!\n\n"); */
 	}
 
 }

@@ -74,6 +74,9 @@
 #ifdef EXAMINE_EVT
 #define EVT_C3            // enable upcall to each client to recover the events
 
+/* #define BENCHMARK_MEAS_INV_OVERHEAD_EVT */
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_EVT
+#else
 /* #define TEST_EVT_SPLIT */
 /* #define TEST_EVT_TRIGGER_BEFORE */
 /* #define TEST_EVT_TRIGGER_AFTER */
@@ -82,6 +85,8 @@
 /* #define TEST_EVT_FREE_BEFORE */
 /* #define TEST_EVT_FREE_AFTER */
 /* #define TEST_EVT_CREATE */
+
+#endif
 
 /* #define BENCHMARK_MEAS_SPLIT */
 /* #define BENCHMARK_MEAS_CREATE */

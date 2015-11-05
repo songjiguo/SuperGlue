@@ -79,8 +79,8 @@ int __sg_sched_reflect(spdid_t spdid)
 	struct blocked_thd *blk_thd;
 	int ret = 0;
 
-	printc("scheduler server side stub (thd %d from spd %d)\n", 
-	       cos_get_thd_id(), spdid);
+	/* printc("scheduler server side stub (thd %d from spd %d)\n",  */
+	/*        cos_get_thd_id(), spdid); */
 
 	cos_sched_lock_take();
 	/* printc("scheduler server side stub (thd %d)\n", cos_get_thd_id()); */

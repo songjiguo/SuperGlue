@@ -161,15 +161,15 @@ static void try_hp(void)
 	long wait_ret = 0;
 	evt0 = evt_split(cos_spd_id(), 0, 1);
 	assert(evt0 > 0);
-	printc("evt0 -- %d is created\n", evt0);
+	printc("evt0 -- %ld is created\n", evt0);
 	
 	evt1 = evt_split(cos_spd_id(), evt0, 0);
 	assert(evt1 > 0);
-	printc("evt1 -- %d is created\n", evt1);
+	printc("evt1 -- %ld is created\n", evt1);
 
 	evt2 = evt_split(cos_spd_id(), evt0, 0);
 	assert(evt2 > 0);
-	printc("evt2 -- %d is created\n", evt2);
+	printc("evt2 -- %ld is created\n", evt2);
 
 	while(test_num1++ < TEST_NUM) {
 		/* printc("\n**** split (%d) ****\n", test_num1); */
@@ -179,11 +179,28 @@ static void try_hp(void)
 		/* printc("evt_split...overhead %llu\n", overhead_end - overhead_start); */
 
 		/* rdtscll(overhead_start); */
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_EVT
+		unsigned long long infra_overhead_start;
+		unsigned long long infra_overhead_end;
+	meas:
+		rdtscll(infra_overhead_start);
+	wait:
+		wait_ret = evt_wait(cos_spd_id(), evt0);
+		if (unlikely(wait_ret < 0)) goto wait;
+
+		if (cos_get_thd_id() == 13) {
+			rdtscll(infra_overhead_end);
+			printc("infra_overhead (evt_wait) cost %llu\n",
+			       infra_overhead_end - infra_overhead_start);
+			goto meas;
+		}
+#else
 	wait:
 		wait_ret = evt_wait(cos_spd_id(), evt0);
 		/* printc("[[evt_wait return %d]]\n", wait_ret); */
 		if (unlikely(wait_ret < 0)) goto wait;
-
+#endif
 		/* rdtscll(overhead_end); */
 		/* printc("evt_wait...triggered(evt%d)...back to wait..(iter %d)\n",  */
 		/*        wait_ret, test_num1); */
@@ -231,8 +248,8 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 
 void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 {
-	printc("upcall type %d, core %ld, thd %d, args %p %p %p\n",
-	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
+	/* printc("upcall type %d, core %ld, thd %d, args %p %p %p\n", */
+	/*        t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3); */
 	
 	switch (t) {
 	case COS_UPCALL_THD_CREATE:
@@ -244,7 +261,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		/*        cos_get_thd_id(), cos_spd_id()); */
 #ifdef EVT_C3
 		/* evt_cli_if_recover_upcall_entry(*(int *)arg3); */
-		printc("ser1: caling events_replay_all %d\n", (int)arg1);
+		/* printc("ser1: caling events_replay_all %d\n", (int)arg1); */
 		/* events_replay_all((int)arg1); */
 		evt_cli_if_recover_upcall_entry((int)arg1);
 #endif

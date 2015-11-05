@@ -34,7 +34,7 @@ static int test_num = 0;
 int fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 {
 	unsigned long r_ip; 	/* the ip to return to */
-	printc("pgfault notifier: spdid %d fault_addr %p flags %d ip %p (thd %d)\n", spdid, fault_addr, flags, ip, cos_get_thd_id());
+	/* printc("pgfault notifier: spdid %d fault_addr %p flags %d ip %p (thd %d)\n", spdid, fault_addr, flags, ip, cos_get_thd_id()); */
 	
 	int tid = cos_get_thd_id();
 	
@@ -46,8 +46,8 @@ int fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip
 		assert(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0));
 		assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));
 		assert(!cos_thd_cntl(COS_THD_INVFRM_SET_IP, tid, 1, r_ip-8));
-		printc("pgfault notifier returning...spdid %d (thd %d)\n", 
-		       spdid, cos_get_thd_id());
+		/* printc("pgfault notifier returning...spdid %d (thd %d)\n",  */
+		/*        spdid, cos_get_thd_id()); */
 	}
 
 	if (test_num++ > 100) {

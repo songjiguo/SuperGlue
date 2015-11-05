@@ -32,6 +32,8 @@ extern void free_page(void *ptr);
 #define CVECT_FREE(x) free_page(x)
 #include <cvect.h>
 
+volatile unsigned long long ubenchmark_start, ubenchmark_end;
+
 /* global fault counter, only increase, never decrease */
 static unsigned long global_fault_cnt;
 
@@ -150,11 +152,17 @@ rd_update(int evtid, int state)
         struct rec_data_evt *rd_parent = NULL;
 	int id, pevtid;
 
+	// root
+	if (!evtid) {
+		/* printc("found the root, just return and create\n"); */
+		return;
+	}
+
 	/* printc("AAAAA\n"); */
         rd = rdevt_lookup(evtid);
 	/* printc("BBBBB\n"); */
 	if (unlikely(!rd)) {
-		printc("cli: evt_upcal_creator %d\n", evtid);
+		/* printc("cli: evt_upcal_creator %d\n", evtid); */
 		evt_upcall_creator(cos_spd_id(), evtid);
 		goto done;
 	}
@@ -166,23 +174,22 @@ rd_update(int evtid, int state)
 	rd->fcnt = global_fault_cnt;
 
 	/* printc("cli:rd_recover_state\n"); */
-	print_rde_info(rd);
+	/* print_rde_info(rd); */
 
 again:
 	pevtid = rd->p_evtid;
-	if (pevtid) {
-		rd_parent = rdevt_lookup(pevtid);
-		if (rd_parent) pevtid = rd_parent->s_evtid;
-	}
 
-	id = evt_split_exist(rd->spdid, pevtid, rd->grp, rd->s_evtid);
+	id = evt_split_exist(rd->spdid, pevtid, rd->grp, evtid);
 	if (id == -EINVAL) {
 		/* printc("the parent id (%d) needs to be created now!!!!\n", */
 		/* 	rd->p_evtid); */
-		rd_update(rd->p_evtid, EVT_SPLIT);
+		rd_update(pevtid, EVT_SPLIT);
 		goto again;
 	}
-	if (id < 0) return NULL;
+	if (id < 0) {  // has been freed
+		rdevt_dealloc(rd);
+		return NULL;
+	}
 
 	assert(id);
 	/* printc("cli: update s_evtid %d\n", id); */
@@ -221,24 +228,10 @@ CSTUB_FN(long, evt_create) (struct usr_inv_cap *uc,
 redo:
         /* printc("evt cli: evt_create %d\n", cos_get_thd_id()); */
 
-#ifdef BENCHMARK_MEAS_CREATE
-	rdtscll(meas_end);
-	printc("end measuring.....\n");
-	if (meas_flag) {
-		meas_flag = 0;
-		printc("recovery an event cost: %llu\n", meas_end - meas_start);
-	}
-#endif		
-
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
 		/* printc("see a fault during evt_create (thd %d in spd %ld)\n", */
 		/*        cos_get_thd_id(), cos_spd_id()); */
-#ifdef BENCHMARK_MEAS_CREATE
-		meas_flag = 1;
-		printc("start measuring.....\n");
-		rdtscll(meas_start);
-#endif		
 		/* CSTUB_FAULT_UPDATE(); */
 		goto redo;
 	}
@@ -262,29 +255,25 @@ CSTUB_FN(long, evt_split) (struct usr_inv_cap *uc,
         struct rec_data_evt *rd = NULL;
         struct rec_data_evt *rd_parent = NULL;
         long ser_eid, cli_eid;
-	long p_evt = parent_evt;
 
         if (first == 0) {
 		cvect_init_static(&rec_evt_map);
 		first = 1;
 	}
 redo:
-	if (parent_evt) {
-		rd_parent = rdevt_lookup(parent_evt);
-		if (rd_parent) p_evt = rd_parent->s_evtid;
-	}
+	rd_update(parent_evt, EVT_SPLIT);
 
-	CSTUB_INVOKE(ret, fault, uc, 3, spdid, p_evt, grp);
+	CSTUB_INVOKE(ret, fault, uc, 3, spdid, parent_evt, grp);
 	if (unlikely (fault)){
 		/* printc("evt_split sees a fault\n"); */
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
 	/* printc("cli: evt_split ret %d\n", ret); */
-	if (ret < 0) {
-		rd_update(parent_evt, EVT_SPLIT);
-		goto redo;
-	}
+	/* if (ret < 0) { */
+	/* 	rd_update(parent_evt, EVT_SPLIT); */
+	/* 	goto redo; */
+	/* } */
 	
 	rd = rdevt_alloc(ret);
 	assert(rd);
@@ -293,7 +282,7 @@ redo:
 	return ret;
 }
 
-
+static int evt_wait_ubenchmark_flag;
 CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
 			  spdid_t spdid, long extern_evt)
 {
@@ -309,17 +298,26 @@ CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
 		first = 1;
 	}
 
-redo:
-        rd = rd_update(extern_evt, EVT_STATE_WAITING);
-	assert(rd);
-	/* printc("evt cli: evt_wait thd %d in spd %ld (extern_evt %d rd->evt id %ld)\n", */
-	/*        cos_get_thd_id(), cos_spd_id(), extern_evt, rd->s_evtid); */
+	rdtscll(ubenchmark_end);
+	if (evt_wait_ubenchmark_flag) {
+		evt_wait_ubenchmark_flag = 0;
+		printc("evt_wait (man):recover per object end-end cost: %llu\n",
+		       ubenchmark_end - ubenchmark_start);
+	}
 
-	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid);
+	/* printc("evt cli: evt_wait thd %d in spd %ld (extern_evt %d)\n", */
+	/*        cos_get_thd_id(), cos_spd_id(), extern_evt); */
+
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
         if (unlikely (fault)){
+		printc("cli: see a fault during evt_wait evt %d (thd %d in spd %ld)\n",
+		       extern_evt, cos_get_thd_id(), cos_spd_id());
+		evt_wait_ubenchmark_flag = 1;
+		rdtscll(ubenchmark_start);
+
 		CSTUB_FAULT_UPDATE();
-		rd = rd_update(extern_evt, EVT_STATE_WAITING);
-		ret = -1;
+		rd_update(extern_evt, EVT_STATE_WAITING);
+		return -1;
         }
 
 	return ret;
@@ -338,16 +336,16 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
 		first = 1;
 	}
 
-redo:
 	/* printc("evt cli: evt_trigger thd %d from spd %ld (evt id %ld)\n",  */
 	/*        cos_get_thd_id(), cos_spd_id(), extern_evt); */
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
 	if (unlikely(fault)){
-		printc("cli: see a fault during evt_trigger evt %d (thd %d in spd %ld)\n",
-		       extern_evt, cos_get_thd_id(), cos_spd_id());
+		/* printc("cli: see a fault during evt_trigger evt %d (thd %d in spd %ld)\n", */
+		/*        extern_evt, cos_get_thd_id(), cos_spd_id()); */
 		CSTUB_FAULT_UPDATE();
-		rd = rd_update(extern_evt, EVT_STATE_TRIGGER);
+		rd_update(extern_evt, EVT_STATE_TRIGGER);
+		return -1;
 	}
 
 	return 0;
@@ -368,19 +366,19 @@ CSTUB_FN(int, evt_free) (struct usr_inv_cap *uc,
 		first = 1;
 	}
 redo:
-	printc("evt cli: evt_free(1) %d (evt id %ld in spd %ld)\n",
-	       cos_get_thd_id(), extern_evt, cos_spd_id());
-        rd = rd_update(extern_evt, EVT_STATE_FREE);
-	if (!rd) return 0;  // id has been freed before the fault occurs
+	rd_update(extern_evt, EVT_STATE_FREE);
+	if (!rd) return 0;
+	/* printc("evt cli: evt_free(1) %d (evt id %ld in spd %ld)\n", */
+	/*        cos_get_thd_id(), extern_evt, cos_spd_id()); */
 	
-	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_evtid);
+	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
 	if (unlikely (fault)) {
-		printc("see a fault during evt_free (thd %d in spd %ld)\n",
-		       cos_get_thd_id(), cos_spd_id());
+		/* printc("see a fault during evt_free (thd %d in spd %ld)\n", */
+		/*        cos_get_thd_id(), cos_spd_id()); */
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
-	
+
 	rdevt_dealloc(rd);
 
 	return ret;
