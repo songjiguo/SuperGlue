@@ -153,21 +153,23 @@ __evt_trigger(spdid_t spdid, long eid)
 
 	e = cvect_lookup(&evt_map, eid);
 
-	if (unlikely(!e)) {   // changed by Jiguo
-		/* Jiguo: evt_trigger can be called from a different
-		 * spd where the id mappings are not tracked. We call
-		 * the name server to find the creator and upcall into
-		 * the creator to recreate the evt
-		 * If can not see e, it means e has not been recreated
-		 */
-		assert(cos_get_thd_id() != 2);
-		/* printc("cant not find evt id %ld by thd %d\n", eid, cos_get_thd_id()); */
-		lock_release(&evt_lock);
-		ns_upcall(spdid, eid);
-		lock_take(&evt_lock);
-		e = cvect_lookup(&evt_map, eid);
-	}
-	assert(e);	
+	/* if (unlikely(!e)) {   // changed by Jiguo */
+	/* 	/\* Jiguo: evt_trigger can be called from a different */
+	/* 	 * spd where the id mappings are not tracked. We call */
+	/* 	 * the name server to find the creator and upcall into */
+	/* 	 * the creator to recreate the evt */
+	/* 	 * If can not see e, it means e has not been recreated */
+	/* 	 *\/ */
+
+	/* 	// TODO: remove this to the interface */
+	/* 	assert(cos_get_thd_id() != 2); */
+	/* 	printc("cant not find evt id %ld by thd %d\n", eid, cos_get_thd_id()); */
+	/* 	lock_release(&evt_lock); */
+	/* 	ns_upcall(spdid, eid); */
+	/* 	lock_take(&evt_lock); */
+	/* 	e = cvect_lookup(&evt_map, eid); */
+	/* } */
+	/* assert(e);	// remove this Jiguo. Then interface should handle this */
 
 	/* can't trigger groups */
 	if (!e || e->type != EVT_NORMAL) return -EINVAL;
@@ -387,7 +389,10 @@ evt_trigger(spdid_t spdid, long evt_id)
 
 	ret = __evt_trigger(spdid, evt_id);
 	lock_release(&evt_lock);
-	if (ret && sched_wakeup(cos_spd_id(), ret)) BUG();
+
+        // change this to return error code
+	if (ret > 0 && sched_wakeup(cos_spd_id(), ret)) BUG(); 
+
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_AFTER)
 	if (test_num++ > 2000) {
@@ -397,7 +402,7 @@ evt_trigger(spdid_t spdid, long evt_id)
 	}
 #endif
 
-	return 0;
+	return ret; // Jiguo: return possible error code
 }
 
 

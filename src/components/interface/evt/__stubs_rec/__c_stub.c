@@ -338,7 +338,7 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
 
 	/* printc("evt cli: evt_trigger thd %d from spd %ld (evt id %ld)\n",  */
 	/*        cos_get_thd_id(), cos_spd_id(), extern_evt); */
-
+redo:
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
 	if (unlikely(fault)){
 		/* printc("cli: see a fault during evt_trigger evt %d (thd %d in spd %ld)\n", */
@@ -348,8 +348,15 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
 		return -1;
 	}
 
-	return 0;
-	/* return ret; */
+	/* trigger has not tracking to tell if a descriptor exists, so
+	 * when it is called, we might just return -EVINAL from the
+	 * evt component after it has been recovered before. Notice
+	 * that this logic is used to be in the evt component, not it
+	 * is moved here, this is why we call evt_upcall_creator*/
+	if (unlikely(ret == -EINVAL)) goto redo;
+
+	/* return 0; */
+	return ret;  // remember to check this when debug the web server
 }
 
 CSTUB_FN(int, evt_free) (struct usr_inv_cap *uc,

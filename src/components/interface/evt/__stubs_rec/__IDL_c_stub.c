@@ -137,6 +137,7 @@ static inline struct desc_track *call_desc_update(int id, int next_state)
 
 	desc = call_desc_lookup(id);
 	if (unlikely(!desc)) {
+		printc("cli: call_desc_update calling upcall creator\n");
 		block_cli_if_upcall_creator(id);
 		goto done;
 	}
@@ -191,6 +192,7 @@ static inline void block_cli_if_basic_id(int id)
 	// thinking...2222
 	if (retval == -EINVAL) {
 		id = desc->parent_evtid;
+		printc("1\n");
 		call_desc_update(id, state_evt_split);
 		goto again;
 	}
@@ -252,6 +254,7 @@ static inline int block_cli_if_track_evt_wait(int ret, spdid_t spdid,
 
 static inline int block_cli_if_desc_update_post_fault_evt_wait(int id)
 {
+	printc("3\n");
 	call_desc_update(id, state_evt_wait);
 	return 0;
 }
@@ -379,11 +382,18 @@ static inline int block_cli_if_track_evt_trigger(int ret, spdid_t spdid,
 	if (desc) {
 	}
 
+	if (ret == -EINVAL) {
+		printc("this is a test\n");
+		call_desc_update(evtid, state_evt_trigger);
+		ret = -ELOOP;
+	}
+
 	return ret;
 }
 
 static inline int block_cli_if_desc_update_post_fault_evt_trigger(int id)
 {
+	printc("2\n");
 	call_desc_update(id, state_evt_trigger);
 	return 0;
 }
@@ -540,6 +550,11 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap * uc, spdid_t spdid, long evtid) 
 		}
 	}
 	ret = block_cli_if_track_evt_trigger(ret, spdid, evtid);
+
+	if (unlikely(ret == -ELOOP)) {
+		printc("ELOOP..... go to do it again\n");
+		goto redo;
+	}
 
 	return ret;
 }

@@ -19,4 +19,5 @@ cos_asm_server_stub_spdid(evt_create)
 cos_asm_server_stub_spdid(evt_stats) 
 cos_asm_server_stub_spdid(evt_stats_len)
 
-cos_asm_server_stub_spdid(evt_upcall_creator)
+//cos_asm_server_stub_spdid(evt_upcall_creator)
+cos_asm_server_fn_stub(evt_upcall_creator, __sg_evt_upcall_creator)	

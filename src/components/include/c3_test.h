@@ -80,7 +80,7 @@
 /* #define TEST_EVT_SPLIT */
 /* #define TEST_EVT_TRIGGER_BEFORE */
 /* #define TEST_EVT_TRIGGER_AFTER */
-/* #define TEST_EVT_WAIT_BEFORE */
+#define TEST_EVT_WAIT_BEFORE
 /* #define TEST_EVT_WAIT_AFTER */
 /* #define TEST_EVT_FREE_BEFORE */
 /* #define TEST_EVT_FREE_AFTER */

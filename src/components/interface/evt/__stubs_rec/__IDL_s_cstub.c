@@ -99,3 +99,14 @@ void __ser_evt_client_fault_notification(int spdid)
 	block_ser_if_client_fault_notification(spdid);
 	return;
 }
+
+extern int ns_upcall(spdid_t spdid, int id);
+
+int __sg_evt_upcall_creator(spdid_t spdid, int evtid)
+{
+	int ret = 0;
+	printc("ser: evt_upcall_creator calling ns_upcall\n");
+	ns_upcall(spdid, evtid);
+	
+	return ret;
+}
