@@ -7,6 +7,7 @@
 #include <torrent.h>
 #include <periodic_wake.h>
 #include <timed_blk.h>
+#include <valloc.h>
 
 #include <mem_mgr.h>
 
@@ -403,45 +404,95 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 |_| |_| |_|_| |_| |_|
 ****************************/
 
+/* configuration: client component c1, c2 and c3 c1 has N pages. A
+   page in c1 is aliased to 2 pages in c2 and aliased to a page in
+   c3. One of pages in c2 is aliased to other 2 pages in c3. And the
+   other page in c2 is aliased to the 2 other pages in the same
+   component c2   
+*/
+
 #ifdef EXAMINE_MM
 
-#define PAGE_NUM 10
-vaddr_t s_addr[PAGE_NUM];
-vaddr_t d_addr[PAGE_NUM];
+vaddr_t s_addr[1];
+vaddr_t d_addr[4];
 
 static void
 test_mmpage()
 {
 	int i;
 	unsigned long long loopi = 0;
-	for (i = 0; i<PAGE_NUM; i++) {
-		s_addr[i] = (vaddr_t)cos_get_vas_page();
-		d_addr[i] = ec3_ser2_test();
-		/* printc("s_addr[%d] -> %p\n", i, s_addr[i]); */
-		/* printc("d_addr[%d] -> %p\n", i, d_addr[i]); */
-	}
 
-
-	// For fault coverage test, this has to be a loop See revoke (small change for this)
-	for (i = 0; i<PAGE_NUM; i++) {
-		printc("thread %d calls get_page in spd %ld\n",
-		       cos_get_thd_id(), cos_spd_id());
-
-		mman_get_page(cos_spd_id(), s_addr[i], 0);
-		
-		printc("thread %d calls alias_page in spd %ld\n",
-		       cos_get_thd_id(), cos_spd_id());
-		
-		if (!mman_alias_page(cos_spd_id(), s_addr[i], 
-				     cos_spd_id()+1, d_addr[i], MAPPING_RW)) assert(0);
-
-		printc("thread %d calls revoke_page in spd %ld\n",
-		       cos_get_thd_id(), cos_spd_id());
-		
-		mman_revoke_page(cos_spd_id(), s_addr[i], 0);
-	}
+	printc("1\n");
+	/* s_addr[0] = (vaddr_t)cos_get_vas_page(); */
+	s_addr[0] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
+	vaddr_t ret = mman_get_page(cos_spd_id(), s_addr[0], MAPPING_RW);
+	if (ret != s_addr[0]) assert(0);
+	printc("\n[[[ser1: root returned addr %p]]]\n\n", s_addr[0]);
 	
+	/* ec3_ser2_test(); // dummy call for now */
+	d_addr[0] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1);
+	printc("ser1: 1st returned addr %p\n", d_addr[0]);
+	
+	if (d_addr[0] != mman_alias_page(cos_spd_id(), s_addr[0], 
+					 cos_spd_id()+1, d_addr[0], MAPPING_RW))
+		assert(0);
+
+	d_addr[1] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1);
+	printc("ser1: 2nd returned addr %p\n", d_addr[1]);
+	if (d_addr[1] != mman_alias_page(cos_spd_id(), s_addr[0], 
+					 cos_spd_id()+1, d_addr[1], MAPPING_RW))
+		assert(0);
+
+
+	printc("2\n");
+	
+	ec3_ser2_test(d_addr[0]);  // 2 local alias in next component
+	ec3_ser2_test(d_addr[1]);  // 2 remote alias in next component
+
+	/* we allow mman_alias_page to do this for another component,
+	 * if change the s_stub.S */
+
+	/* d_addr[1] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1); */
+	/* if (d_addr[1] != mman_alias_page(cos_spd_id()+1, d_addr[0], */
+	/* 				 cos_spd_id()+1, d_addr[1], MAPPING_RW)) */
+	/* 	assert(0); */
+	
+	/* while(1); */
+
+
+	/* d_addr[2] = ec3_ser2_test(0); */
+	d_addr[2] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+2, 1);
+	printc("ser1: 3rd returned addr %p\n", d_addr[2]);
+	if (d_addr[2] != mman_alias_page(cos_spd_id(), s_addr[0], 
+					 cos_spd_id()+2, d_addr[2], MAPPING_RW))
+		assert(0);
+
+	
+	printc("ser1: revoking page %p\n", s_addr[0]);
+	if (mman_revoke_page(cos_spd_id(), s_addr[0], 0)) assert(0);
+
 	return;
+
+	/* // For fault coverage test, this has to be a loop See revoke (small change for this) */
+	/* for (i = 0; i<10; i++) { */
+	/* 	printc("thread %d calls get_page in spd %ld\n", */
+	/* 	       cos_get_thd_id(), cos_spd_id()); */
+
+	/* 	mman_get_page(cos_spd_id(), s_addr[i], 0); */
+		
+	/* 	printc("thread %d calls alias_page in spd %ld\n", */
+	/* 	       cos_get_thd_id(), cos_spd_id()); */
+		
+	/* 	if (!mman_alias_page(cos_spd_id(), s_addr[i],  */
+	/* 			     cos_spd_id()+1, d_addr[i], MAPPING_RW)) assert(0); */
+
+	/* 	printc("thread %d calls revoke_page in spd %ld\n", */
+	/* 	       cos_get_thd_id(), cos_spd_id()); */
+		
+	/* 	mman_revoke_page(cos_spd_id(), s_addr[i], 0); */
+	/* } */
+	
+	/* return; */
 }
 
 vaddr_t ec3_ser1_test(int low, int mid, int hig)
@@ -450,12 +501,15 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 		printc("\n<< high thd %d is in MM testing... >>>\n",
 		       cos_get_thd_id());
 		
-		int i = 0;
-		/* while(i++ < 1000) { /\* 80 x 10 x 4k  < 4M *\/ */
-		while(i++ < 80) { /* 80 x 10 x 4k  < 4M */
-			test_mmpage();
-		}
-		
+		test_mmpage();
+
+		/* int i = 0; */
+		/* /\* while(i++ < 1000) { /\\* 80 x 10 x 4k  < 4M *\\/ *\/ */
+		/* while(i++ < 80) { /\* 80 x 10 x 4k  < 4M *\/ */
+		/* 	test_mmpage(); */
+		/* } */
+		printc("\n<< thd %d  MM testing done!... >>>\n\n",
+		       cos_get_thd_id());
 	}
 	
 	return 0;
@@ -469,8 +523,9 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	switch (t) {
 	case COS_UPCALL_REBOOT:
 	{
-		printc("thread %d passing arg1 %p here (t %d)\n", 
-		       cos_get_thd_id(), arg1, t);
+		printc("thread %d passing arg1 %p here (type %d spd %ld)\n", 
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		
 #ifdef MM_C3
 		alias_replay((vaddr_t)arg1);
 #endif

@@ -528,3 +528,7 @@ void cos_init(void)
 
 	return;
 }
+
+// Jiguo: mem_mgr needs valloc as the name server, so create a dummy
+//        function here
+int valloc_upcall(spdid_t spdid, vaddr_t addr){return 0;}

@@ -176,9 +176,6 @@ int mman_release_page(spdid_t spd, vaddr_t addr, int flags)
 	return 0;
 }
 
-// dummy function for the reflection Jiguo: fault
-vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt) {return 0;}
-
 void mman_print_stats(void)
 {
 	int i, j, k, l;
@@ -216,3 +213,8 @@ void mman_print_stats(void)
  * that they can be used to produce aliases.  This will allow for
  * shared memory, which we don't really support quite yet.
  */
+
+// dummy function for the reflection
+vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt) {return 0;}
+long __mman_alias_page_exist(spdid_t s_spd, vaddr_t s_addr, 
+			     u32_t d_spd_flags, vaddr_t d_addr) {return 0;}

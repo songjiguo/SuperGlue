@@ -351,7 +351,7 @@ redo:
 	/* trigger has not tracking to tell if a descriptor exists, so
 	 * when it is called, we might just return -EVINAL from the
 	 * evt component after it has been recovered before. Notice
-	 * that this logic is used to be in the evt component, not it
+	 * that this logic is used to be in the evt component, now it
 	 * is moved here, this is why we call evt_upcall_creator*/
 	if (unlikely(ret == -EINVAL)) goto redo;
 

@@ -147,19 +147,17 @@ ns_upcall(spdid_t spdid, int id)
 	/*        i, spd_evts_cnt[i]); */
 
 	en = mapping_find(id);
-	assert(en);
+	if (!en) goto done;
+
 	int dest_spd = en->creator;
 	/* printc("evt_ns: ready to upcall (thd %d upcall to %d for evt id %d)\n", */
 	/*        cos_get_thd_id(), dest_spd, id); */
 	UNLOCK();
-	
 	recovery_upcall(cos_spd_id(), COS_UPCALL_RECEVT, dest_spd, id);
-	
-	/* LOCK(); */
-	/* } */
-/* done: */
-	/* UNLOCK(); */
+	LOCK();
 
+done:
+	UNLOCK();
 	return ret;
 }
 

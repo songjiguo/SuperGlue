@@ -7,6 +7,9 @@
 #include <periodic_wake.h>
 #include <timed_blk.h>
 
+#include <valloc.h>
+#include <mem_mgr.h>
+
 #include <c3_test.h>
 
 // test evt: 10 and 13, 11 and 12
@@ -152,33 +155,71 @@ int ec3_ser2_pass(long id)
 
 #endif
 
-
+/****************************
+ _ __ ___  _ __ ___  
+| '_ ` _ \| '_ ` _ \ 
+| | | | | | | | | | |
+|_| |_| |_|_| |_| |_|
+****************************/
 #ifdef EXAMINE_MM
 
-#define PAGE_NUM 10
-vaddr_t addr[PAGE_NUM];
+#include <ec3_ser3.h>
 
 static int first = 1;
-static int index = 0;
 
-vaddr_t ec3_ser2_test(void)
+vaddr_t ec3_ser2_test(vaddr_t addr)
 {
-	vaddr_t ret;
-	int idx = 0;
-
-	/* printc("\n<<< ... Ser2 MM test in spd %d >>>>\n\n", */
-	/*        cos_spd_id(), cos_get_thd_id()); */
 	
+	vaddr_t local_addr1 = 0, local_addr2 = 0;
+	vaddr_t remote_addr1 = 0, remote_addr2 = 0;
+
 	if (first) {
-		first = 0;
-		for (idx = 0; idx < PAGE_NUM; idx++) {
-			addr[idx]  = (vaddr_t)cos_get_vas_page();
-		}
+		first  = 0;
+	
+		printc("spd %ld local aliasing (addr %p)\n", cos_spd_id(), addr);
+
+		local_addr1 = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
+		if (local_addr1 != mman_alias_page(cos_spd_id(), addr,
+						   cos_spd_id(), local_addr1, MAPPING_RW))
+			assert(0);
+		local_addr2 = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
+		if (local_addr2 != mman_alias_page(cos_spd_id(), addr,
+						   cos_spd_id(), local_addr2, MAPPING_RW))
+			assert(0);
+	} else {
+		printc("spd %ld remote aliasing\n", cos_spd_id());
+		remote_addr1 = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1);	
+		if (remote_addr1 != mman_alias_page(cos_spd_id(), addr, 
+						   cos_spd_id()+1, remote_addr1, MAPPING_RW))
+			assert(0);		
+		remote_addr2 = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1);	
+		if (remote_addr2 != mman_alias_page(cos_spd_id(), addr, 
+						   cos_spd_id()+1, remote_addr2, MAPPING_RW))
+			assert(0);		
 	}
-	ret = addr[index%PAGE_NUM];
-	index++;
-	/* printc("kevin: addr %p\n", ret); */
-	return ret;
+	
+	return local_addr1;
+
+/* } */
+/* 	printc("5\n"); */
+/* 	if (fourth) { */
+/* 		fourth = 0; */
+/* 		root_addr2 = (vaddr_t)cos_get_vas_page(); */
+/* 		return root_addr2; */
+/* 	} */
+
+/* 	if (fifth) { */
+/* 		fifth = 0; */
+/* 		local_addr1 = (vaddr_t)ec3_ser3_test(); */
+/* 		if (local_addr1 != mman_alias_page(cos_spd_id(), root_addr2,  */
+/* 						   cos_spd_id(), local_addr1, MAPPING_RW)) */
+/* 			assert(0);		 */
+/* 		local_addr2 = (vaddr_t)ec3_ser3_test(); */
+/* 		if (local_addr2 != mman_alias_page(cos_spd_id(), root_addr2,  */
+/* 						   cos_spd_id(), local_addr2, MAPPING_RW)) */
+/* 			assert(0);		 */
+/* 	} */
+
 }
 
 

@@ -2,7 +2,7 @@ C_OBJS=valloc.o
 ASM_OBJS=
 COMPONENT=va.o
 INTERFACES=valloc
-DEPENDENCIES=printc mem_mgr vas_mgr cinfo sched lock ll_log
+DEPENDENCIES=printc mem_mgr vas_mgr cinfo sched lock recovery_upcall ll_log
 IF_LIB=
 
 include ../../Makefile.subsubdir

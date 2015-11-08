@@ -69,7 +69,7 @@
 |  __/\ V /| |_ 
  \___| \_/  \__|
 ****************************/
-#define EXAMINE_EVT
+/* #define EXAMINE_EVT */
 
 #ifdef EXAMINE_EVT
 #define EVT_C3            // enable upcall to each client to recover the events
@@ -128,7 +128,7 @@
 | | | | | | | | | | |
 |_| |_| |_|_| |_| |_|
 ****************************/
-/* #define EXAMINE_MM */
+#define EXAMINE_MM
 
 #ifdef EXAMINE_MM
 #define MM_C3            // enable upcall to each client to recover the pages

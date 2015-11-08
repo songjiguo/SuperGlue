@@ -112,6 +112,8 @@ void *valloc_alloc(spdid_t spdid, spdid_t dest, unsigned long npages)
 
 	LOCK();
 
+	/* printc("spd %d called in valloc_alloc\n", spdid); */
+
 	trac = cos_vect_lookup(&spd_vect, dest);
 	if (!trac) {
 		if (__valloc_init(dest) ||
@@ -228,4 +230,44 @@ void cos_init(void *arg)
 	} else {
 		prints("vas_mgr: not expecting more than one bootstrap.");
 	}
+}
+
+
+/* Jiguo: add the logic here to use valloc as the name server for
+ * mem_mgr. The basic logic is that on the fault recovery path, the
+ * client calls here to make an upcall to the creator of an alias. The
+ * implicit logic of aliasing is that a client will call valloc_alloc
+ * first, then do the aliasing from the same component after
+ * successfully obtaining the virtual address returned from
+ * valloc. This is similar to the event service case, except one
+ * thing: event component depends on the name server, and in mem_mgr
+ * case, the name server depends on the mem_mgr. So need figure out a
+ * way to generate how the interface calls this function */
+
+/* The function used to upcall to each client to rebuild each alias
+ * state. See evt_ns.c as well. */
+#include <recovery_upcall.h>
+
+int
+valloc_upcall(spdid_t spdid, vaddr_t addr)
+{
+	int ret = -1;
+	spdid_t dest_spd = 0;
+	printc("called from spd %d\n", spdid);
+	
+	LOCK();
+
+	/* dest_spd = creator_find(addr); */
+
+	if (!dest_spd) goto done;
+	/* printc("valloc: ready to upcall (thd %d upcall to %d for alias %p)\n", */
+	/*        cos_get_thd_id(), dest_spd, addr); */
+	UNLOCK();
+	recovery_upcall(cos_spd_id(), COS_UPCALL_RECOVERY, dest_spd, addr);
+	LOCK();	
+
+	ret = 0;
+done:
+	UNLOCK();
+	return ret;
 }

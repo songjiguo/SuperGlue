@@ -3607,15 +3607,17 @@ cos_syscall_mmap_cntl(int spdid, long op_flags_dspd, vaddr_t daddr, unsigned lon
 	dspd_id  = op_flags_dspd & 0x0000FFFF;
 	this_spd = spd_get_by_index(spdid);
 	spd      = spd_get_by_index(dspd_id);
-	/* printk("cos: mmap cntl call for spd %d for spd %d @ vaddr %x\n", */
-	/*        spdid, dspd_id, (unsigned int)daddr); */
+	/* if (dspd_id == 17 || dspd_id == 18 || dspd_id == 19) { */
+	/* 	printk("cos: mmap cntl call for spd %d for spd %d @ vaddr %x\n", */
+	/* 	       spdid, dspd_id, (unsigned int)daddr); */
+	/* } */
 
 	/* TODO: (Jiguo)
 	   use ENONEMPTY or EEXIST to tell the different situations for fault tolerance
 	*/
 	if (virtual_namespace_query(daddr) != spd) {
-		/* printk("cos: (this spd %d) spd %d -- spd %d @ vaddr %x\n", */
-		/*        spdid, dspd_id, virtual_namespace_query(daddr), (unsigned int)daddr); */
+		printk("cos: (this spd %d) spd %d -- spd %d @ vaddr %x\n",
+		       spdid, dspd_id, virtual_namespace_query(daddr), (unsigned int)daddr);
 		return -ENOENT;
 	}
 	

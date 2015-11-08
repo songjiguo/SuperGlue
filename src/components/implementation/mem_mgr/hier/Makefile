@@ -2,7 +2,7 @@ C_OBJS=mem_man.o
 ASM_OBJS=
 COMPONENT=mh.o
 INTERFACES=mem_mgr
-DEPENDENCIES=printc mem_mgr
+DEPENDENCIES=printc mem_mgr valloc_local
 FN_PREPEND=parent_
 
 include ../../Makefile.subsubdir

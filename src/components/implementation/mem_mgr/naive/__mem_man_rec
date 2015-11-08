@@ -300,7 +300,7 @@ __mapping_crt(struct mapping *p, struct frame *f, spdid_t dest,
 	/* printc("mapping_crt 1 (dest %d, idx %d)\n", dest, idx); */
 	/* no vas structure for this spd yet... */
 	if (!cv) {
-		/* printc("mapping_crt: cvas_alloc for spd %d\n", dest); */
+		printc("mapping_crt: cvas_alloc for spd %d\n", dest);
 		cv = cvas_alloc(dest);
 		if (!cv) goto done;
 		assert(cv == cvas_lookup(dest));
@@ -308,7 +308,7 @@ __mapping_crt(struct mapping *p, struct frame *f, spdid_t dest,
 	assert(cv->pages);
 	/* printc("mapping_crt 2.1 (dest %d idx %d)\n", dest, idx); */
 	if (cvect_lookup(cv->pages, idx)) {
-		printc("mapping_crt 2.5\n");
+		/* printc("mapping_crt 2.5\n"); */
 		cvect_del(cv->pages, idx);
 		/* goto collision; */
 	}
@@ -318,21 +318,24 @@ __mapping_crt(struct mapping *p, struct frame *f, spdid_t dest,
 	/* printc("mapping_crt 3\n"); */
 	if (!m) goto collision;
 	
-	cslab_mapping_reset(m);  // Jiguo: clear up all old content in case after a fault
-	
+	/* cslab_mapping_reset(m);  // Jiguo: clear up all old content in case after a fault */
 	/* if (m->c) printc("\nthis is impossible !!!!!\n\n"); */
-	
-	/* During the recovery, the page for the same frame id is
-	 * already in the page table. So no need to grant again  */
-	if (grant) {
-	again:
-		if (cos_mmap_cntl(COS_MMAP_GRANT, flags, dest, to, frame_index(f))) {
-			/* printc("mem_man: could not grant at %x:%d\n", dest, (int)to); */
-			/* C^3 MM: after fault, we might need revoke and try again */
-			cos_mmap_cntl(COS_MMAP_REVOKE, 0, dest, to, 0);
-			/* goto no_mapping; */
-			goto again;
-		}
+	/* /\* During the recovery, the page for the same frame id is */
+	/*  * already in the page table. So no need to grant again  *\/ */
+	/* if (grant) { */
+	/* again: */
+	/* 	if (cos_mmap_cntl(COS_MMAP_GRANT, flags, dest, to, frame_index(f))) { */
+	/* 		/\* printc("mem_man: could not grant at %x:%d\n", dest, (int)to); *\/ */
+	/* 		/\* C^3 MM: after fault, we might need revoke and try again *\/ */
+	/* 		cos_mmap_cntl(COS_MMAP_REVOKE, 0, dest, to, 0); */
+	/* 		/\* goto no_mapping; *\/ */
+	/* 		goto again; */
+	/* 	} */
+	/* } */
+
+	if (cos_mmap_cntl(COS_MMAP_GRANT, flags, dest, to, frame_index(f))) {
+		printc("mem_man: could not grant at %x:%d\n", dest, (int)to);
+		goto no_mapping;
 	}
 
 	/* printc("mapping_crt 4\n"); */
@@ -386,8 +389,11 @@ __mapping_destroy(struct mapping *m)
 {
 	struct comp_vas *cv;
 	int idx;
-	/* printc("mapping_destroy: m->spd %d m->addr %x\n\n", m->spdid, (unsigned int)m->addr); */
 	assert(m);
+	/* if (m->spdid == 17 || m->spdid == 18 || m->spdid == 19) { */
+	/* 	printc("mapping_destroy: m->spd %d m->addr %x\n\n",  */
+	/* 	       m->spdid, (unsigned int)m->addr); */
+	/* } */
 	assert(EMPTY_LIST(m, _s, s_));
 	assert(m->p == NULL);
 	assert(m->c == NULL);
@@ -500,20 +506,28 @@ vaddr_t __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vadd
 	
 	WAIT_FAULT();
 
-	/* printc("in alias function\n"); */
+	if (s_spd != 5) {
+		printc("__mman_alias_page: s_spd %d s_addr %p d_spd %d d_addr %p\n",
+		       s_spd, s_addr, d_spd, d_addr);
+	}
+		
 	LOCK();
 
 	m = mapping_lookup(s_spd, s_addr);
 	if (unlikely(!m)) {
-		int fr_idx = (int)cos_mmap_introspect(COS_MMAP_INTROSPECT_FRAME, 
-						      0, s_spd, s_addr, 0);
-		printc("alias: can not find m. Intro frame fr_idx is %d\n", fr_idx);
-		if (!fr_idx) goto done;    // real an error, otherwise create a new map
-		assert(fr_idx);
-		m = __mapping_crt(NULL, &frames[fr_idx], s_spd, s_addr, flags, 0);
-		assert(m == mapping_lookup(s_spd,s_addr));
+		printc("__mman_alias_page: can not find mapping for s_spd %d s_addr %p\n",
+		       s_spd, s_addr);
+		ret = -EINVAL;
+		goto done;
+		/* int fr_idx = (int)cos_mmap_introspect(COS_MMAP_INTROSPECT_FRAME,  */
+		/* 				      0, s_spd, s_addr, 0); */
+		/* printc("alias: can not find m. Intro frame fr_idx is %d\n", fr_idx); */
+		/* if (!fr_idx) goto done;    // real an error, otherwise create a new map */
+		/* assert(fr_idx); */
+		/* m = __mapping_crt(NULL, &frames[fr_idx], s_spd, s_addr, flags, 0); */
+		/* assert(m == mapping_lookup(s_spd,s_addr)); */
 	}
-	/* printc("in alias function.....2\n"); */
+
 	assert(m && m->f);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MM_ALIAS_PAGE)
@@ -524,7 +538,6 @@ vaddr_t __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vadd
 #endif
 
 	n = mapping_crt(m, m->f, d_spd, d_addr, flags);
-	/* printc("in alias function.....3\n"); */
 	if (!n) goto done;
 	assert(n->addr  == d_addr);
 	assert(n->spdid == d_spd);
@@ -532,6 +545,9 @@ vaddr_t __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vadd
 	ret = d_addr;
 done:
 	UNLOCK();
+	if (s_spd != 5) {
+		printc("in alias function.....return %d\n", ret);
+	}
 	return ret;
 }
 
@@ -613,8 +629,8 @@ int mman_revoke_page(spdid_t spd, vaddr_t addr, int flags)
 
 	mapping_del_children(m);
 
-	/* For fault coverage test only :jiguo */
-	mapping_del(m);    // this should not be in revoke -- Jiguo
+	/* /\* For fault coverage test only :jiguo *\/ */
+	/* mapping_del(m);    // this should not be in revoke -- Jiguo */
 done:
 	UNLOCK();
 	return ret;
@@ -668,6 +684,8 @@ void mman_release_all(void)
 
 // dummy function for the reflection
 vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt) {return 0;}
+long __mman_alias_page_exist(spdid_t s_spd, vaddr_t s_addr, 
+			     u32_t d_spd_flags, vaddr_t d_addr) {return 0;}
 
 /*******************************/
 /*** The base-case scheduler ***/

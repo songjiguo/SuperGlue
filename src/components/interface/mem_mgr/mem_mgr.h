@@ -34,4 +34,8 @@ void mman_print_stats(void);
 
 vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
 
+/* change the type to long, so we can return the error code*/
+long __mman_alias_page_exist(spdid_t s_spd, vaddr_t s_addr, 
+			     u32_t d_spd_flags, vaddr_t d_addr);
+
 #endif 	    /* !MEM_MGR_H */

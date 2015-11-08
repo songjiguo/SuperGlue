@@ -12,3 +12,4 @@ cos_asm_server_stub_spdid(valloc_alloc)
 cos_asm_server_stub_spdid(valloc_free)
 
 cos_asm_server_stub_spdid(valloc_reset_hp)
+cos_asm_server_stub_spdid(valloc_upcall)

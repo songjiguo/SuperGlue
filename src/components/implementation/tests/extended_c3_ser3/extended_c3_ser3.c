@@ -17,4 +17,10 @@ int ec3_ser3_pass(long id)
 	return 0;
 }
 
+vaddr_t ec3_ser3_test(void)
+{
+	vaddr_t ret = (vaddr_t)cos_get_vas_page();
+	return ret;
+}
+
 

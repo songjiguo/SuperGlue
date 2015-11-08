@@ -50,3 +50,11 @@ valloc_free(spdid_t spdid, spdid_t dest, void *addr, unsigned long npages)
 extern void *valloc_alloc(spdid_t spdid, spdid_t dest, unsigned long npages);
 extern int valloc_free(spdid_t spdid, spdid_t dest, void *addr, unsigned long npages);
 #endif
+
+
+/* Jiguo: for recovering alias */ 
+int
+valloc_upcall(spdid_t spdid, vaddr_t addr)
+{
+	return 0;
+}
