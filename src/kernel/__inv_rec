@@ -182,7 +182,8 @@ ipc_walk_static_cap(unsigned int capability, vaddr_t sp,
 	curr_frame = &thd->stack_base[thd->stack_ptr];
 	dest_spd = cap_entry->destination;
 
-	/* printk("a lots invocation(thd %d)....from %d to %d\n", thd->thread_id, spd_get_index(curr_spd), spd_get_index(dest_spd)); */
+	/* printk("a lots invocation(thd %d)....from %d to %d\n",  */
+	/*        thd->thread_id, spd_get_index(curr_spd), spd_get_index(dest_spd)); */
 
 	if (unlikely(!dest_spd || curr_spd == CAP_FREE || curr_spd == CAP_ALLOCATED_UNUSED)) {
 		printk("cos: Attempted use of unallocated capability.\n");
@@ -3610,6 +3611,7 @@ cos_syscall_mmap_cntl(int spdid, long op_flags_dspd, vaddr_t daddr, unsigned lon
 	/* if (dspd_id == 17 || dspd_id == 18 || dspd_id == 19) { */
 	/* 	printk("cos: mmap cntl call for spd %d for spd %d @ vaddr %x\n", */
 	/* 	       spdid, dspd_id, (unsigned int)daddr); */
+	/* 	printk("cos: mmap cntl -- op %d flags %d\n", op, flags); */
 	/* } */
 
 	/* TODO: (Jiguo)
@@ -3655,11 +3657,11 @@ cos_syscall_mmap_cntl(int spdid, long op_flags_dspd, vaddr_t daddr, unsigned lon
 		 * forces demand paging to not be used (explicitly
 		 * writing all of the pages itself).
 		 */
-		if (chal_pgtbl_add(spd->spd_info.pg_tbl, daddr, page, flags)) {
-			printk("cos: mmap grant into %d @ %x -- could not add entry to page table.\n", 
+		if ((ret = chal_pgtbl_add(spd->spd_info.pg_tbl, daddr, page, flags))) {
+			printk("cos: mmap grant into %d @ %x -- could not add entry to page table\n", 
 			       dspd_id, (unsigned int)daddr);
-			ret = -1;
-			break;
+			printk("daddr %p cos_paddr_to_cap(pa) %d this_spd->pfn_base %d (spd %d)\n",
+			       daddr, cos_paddr_to_cap(page), this_spd->pfn_base, spdid);
 		} /* else { */
 		/* 	if (dspd_id == 3) { */
 		/* 		printk("cos: mmap grant into %d @ %x added to the page table\n", dspd_id, (unsigned int)daddr); */
@@ -3686,9 +3688,13 @@ cos_syscall_mmap_cntl(int spdid, long op_flags_dspd, vaddr_t daddr, unsigned lon
 			break;
 		}
 		ret = cos_paddr_to_cap(pa) - this_spd->pfn_base;
-	
-		// Jiguo: FT 
-		if (cos_is_rootpage(dspd_id, daddr, ret)) cos_remove_root_info(ret);
+		/* printk("daddr %p cos_paddr_to_cap(pa) %d this_spd->pfn_base %d (spd %d)", */
+		/*        daddr, cos_paddr_to_cap(pa), this_spd->pfn_base, spdid); */
+		/* printk("cos: MMAP_REVOKE -- ret %d\n", ret); */
+
+		/* Jiguo: remove the tracking information when release
+		 * the root page */
+		if (cos_is_rootpage(dspd_id, daddr, ret, flags)) cos_remove_root_info(ret);
 
 		cos_meas_event(COS_MAP_REVOKE);
 
@@ -3709,7 +3715,7 @@ cos_syscall_mmap_cntl(int spdid, long op_flags_dspd, vaddr_t daddr, unsigned lon
 		assert(spdid == 3);  // test only, make sure it is from MM
 		/* if (dspd_id == 3) printk("daddr %p is added as root page (mem_id %d)\n",  */
 		/* 			 daddr, mem_id); */
-		ret = cos_add_root_info(dspd_id, daddr, mem_id);
+		ret = cos_add_root_info(dspd_id, daddr, mem_id, flags);
 		break;
 	}
 	case COS_MMAP_TLBFLUSH:
@@ -3739,9 +3745,6 @@ cos_syscall_mmap_introspect(int spdid, long op_flags_dspd, vaddr_t daddr, unsign
 
 	assert(this_spd);
 	if (dspd_id > 0) spd = spd_get_by_index(dspd_id);	
-
-	/* if (dspd_id) printk("cos: mmap introspect call for spd %d for spd %d @ vaddr %x\n", */
-	/*        spdid, dspd_id, (unsigned int)daddr); */
 	
 	mem_id += this_spd->pfn_base;
 	if (mem_id < this_spd->pfn_base || /* <- check for overflow? */
@@ -3753,46 +3756,30 @@ cos_syscall_mmap_introspect(int spdid, long op_flags_dspd, vaddr_t daddr, unsign
 	}
 	
 	switch(op) {
-	case COS_MMAP_INTROSPECT_FRAME:
+	case COS_MMAP_INTROSPECT_FRAME: /* find frame id for given vaddr*/
 	{
 		paddr_t pa;
 		int frame_num;
 		if (!spd) return -EINVAL;
 
-		printk("cos:intro frame daddr %p\n", daddr);
+		/* printk("cos:intro frame daddr %p\n", daddr); */
 		pa  = chal_pgtbl_get_paddr(spd->spd_info.pg_tbl, daddr);
 		if (!pa) return -EINVAL;
 		
 		ret = cos_paddr_to_cap(pa) - this_spd->pfn_base;		
 		break;
 	}
-	case COS_MMAP_INTROSPECT_INDEX:  // find reserved frame id and remove ids for mm
+	case COS_MMAP_RESET_MM_FRAME:  // remove frames that are allocated to mm
 	{
-		int root_spd, i;
-		paddr_t page;
-		/* printk("look up index (spdid %d)\n", spdid); */
-		/* cos_print_memory(); */
-		for (i = mem_id ; i < COS_MAX_MEMORY-1 ; i++) {
-			root_spd = cos_lookup_root_spd(i);
-			if (!root_spd) continue;
-			if (root_spd == spdid) {   // MM component
-				vaddr_t tmp = cos_lookup_root_page(i);
-				/* printk("cos: mem_id %d tmp %p (spdid %d)\n", i, tmp, spdid); */
-				cos_remove_root_info(i);
-				page = cos_access_page(i);
-				if (0 == page) return -EINVAL;
-				if (!chal_pgtbl_rem(this_spd->spd_info.pg_tbl, tmp))
+		int i;
+		for (i = 0 ; i < COS_MAX_MEMORY ; i++) {
+			if (cos_lookup_root_spd(i) == spdid && 
+			    cos_lookup_root_page(i) && 
+			    cos_access_page(i)) {
+				if (!chal_pgtbl_rem(this_spd->spd_info.pg_tbl, 
+						    cos_lookup_root_page(i)))
 					return -EINVAL;
-				/* ret = i - this_spd->pfn_base; */
-				/* break; */
-			}
-			else {
-				ret = i - this_spd->pfn_base;
-				/* printk("cos: intro index 3 (i %d spd %d)\n", i, root_spd); */
-				/* printk("cos: intro index 3 (this_spd->pfn_base %d)\n", */
-				/*        this_spd->pfn_base); */
-				/* printk("cos: intro index 3 (ret %d)\n", ret); */
-				return ret;
+				cos_remove_root_info(i);
 			}
 		}
 		break;
@@ -3818,13 +3805,15 @@ cos_syscall_mmap_introspect(int spdid, long op_flags_dspd, vaddr_t daddr, unsign
 		}
 		ret = 0;
 		break;
+	}		
+	case COS_MMAP_INTROSPECT_FLAGS:
+	{
+		short int root_flags;
 
-		/* mem_id += this_spd->pfn_base; */
-		/* root_spd = cos_lookup_root_spd(mem_id); */
-		/* if (0 == root_spd) return 0; */
-		/* /\* printk("cos: try find root spd -- could not get rooted spd.\n"); *\/ */
-		/* ret = root_spd; */
-		/* break; */
+		mem_id += this_spd->pfn_base;
+		root_flags = cos_lookup_root_flags(mem_id);
+		ret = root_flags;
+		break;
 	}		
 	default:
 		ret = -1;

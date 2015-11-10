@@ -23,6 +23,7 @@ void cos_init_memory(void)
 		// Jiguo: init FT?
 		cos_pages[i].rt_spdid = 0;
 		cos_pages[i].rt_vaddr = (vaddr_t) 0;
+		cos_pages[i].flags    = 0;
 	}
 
 	return;
@@ -85,11 +86,15 @@ paddr_t cos_access_page(unsigned long cap_no)
  */
 
 int
-cos_add_root_info(int spdid, vaddr_t vaddr, unsigned long frame_id)
+cos_add_root_info(int spdid, vaddr_t vaddr, unsigned long frame_id, short int flags)
 {	
-	/* if (spdid != 5) printk("cos: root info added spd %d addr %p at frame %lu\n", spdid, vaddr, frame_id); */
+	/* if (spdid != 5) { */
+	/* 	printk("cos: root info added spd %d addr %p at frame %lu flags %d\n",  */
+	/* 	       spdid, vaddr, frame_id, flags); */
+	/* } */
 	cos_pages[frame_id].rt_spdid = spdid;
 	cos_pages[frame_id].rt_vaddr = vaddr;
+	cos_pages[frame_id].flags    = flags;
 	return 0;
 }
 int
@@ -98,6 +103,7 @@ cos_remove_root_info(unsigned long frame_id)
 	/* printk("cos: root info removed at frame %lu\n", frame_id); */
 	cos_pages[frame_id].rt_spdid = 0;
 	cos_pages[frame_id].rt_vaddr = 0;
+	cos_pages[frame_id].flags    = 0;
 	return 0;
 }
 
@@ -116,12 +122,20 @@ cos_lookup_root_spd(unsigned long frame_id)
 }
 
 int 
-cos_is_rootpage(int spdid, vaddr_t vaddr, unsigned long frame_id)
+cos_lookup_root_flags(unsigned long frame_id)
+{
+	/* printk("cos: root info lookup fr_id %d spdid %d\n", frame_id, cos_pages[frame_id].rt_spdid); */
+	return cos_pages[frame_id].flags;
+}
+
+int 
+cos_is_rootpage(int spdid, vaddr_t vaddr, unsigned long frame_id, short int flags)
 {
 	int ret = 0;
 
 	if ((cos_pages[frame_id].rt_spdid == spdid) &&
-	    (cos_pages[frame_id].rt_vaddr == vaddr))
+	    (cos_pages[frame_id].rt_vaddr == vaddr) &&
+	    (cos_pages[frame_id].flags    == flags))
 		ret = 1;
 
 	return ret;

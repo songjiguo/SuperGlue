@@ -198,17 +198,17 @@ static int second = 0;
 int
 recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 {
-	/* printc("LL: llbooter upcall to spd %d, arg %x thd %d op %d\n",  */
-	/*        dest, (unsigned int)arg, cos_get_thd_id(), op); */
+	printc("LL: llbooter upcall to spd %d, arg %x thd %d op %d\n",
+	       dest, (unsigned int)arg, cos_get_thd_id(), op);
 
-	/* /\* printc("recovery_upcall has been called %d times\n",second); *\/ */
-	/* if(second++ >= 20) { */
-	/* 	printc("Yusheng\n"); */
-	/* 	sched_exit(); */
-	/* } */
+	/* printc("recovery_upcall has been called %d times\n",second); */
+	if(second++ >= 20) {
+		printc("Yusheng\n");
+		sched_exit();
+	}
 
 	if(op == COS_UPCALL_HOMEAGAIN) {
-		/* printc("Restart execution in home spd\n"); */
+		printc("Restart execution in home spd\n");
 		cos_upcall_args(op, dest, arg);
 		sched_exit();		
 	}
@@ -216,12 +216,15 @@ recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 	struct llbooter_per_core *llboot = PERCPU_GET(llbooter);
 	
 	assert(llboot);
+
 	/* if any fault occurs during recovery, we exit (assume no
 	 * fault can happen during recovery) */
 	if (cos_get_thd_id() == llboot->recovery_thd) {
 		printc("Kevin\n");
+		cos_upcall_args(op, dest, arg);
 		sched_exit();
 	}
+
 	/* the following ensures that prev_thd is always the highest
 	 * prio thread */
 	llboot->prev_thd     = cos_get_thd_id();
@@ -339,6 +342,19 @@ fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	
 	int tid = cos_get_thd_id();
 	printc("<< LL fault notification handler (tid %d) >>\n", tid);
+
+	printc("fault_flt_notif_handler has been called %d times\n", second);
+	if(second++ >= 10) {
+		printc("Yusheng\n");
+		sched_exit();
+	}
+
+	/* when no fault addrss, just kill the system. For example, mm
+	 * fails and when the system exist, scheduler will call
+	 * parent_sched_exit and see the fault. But we do not need to
+	 * recover anyway. So exit -- Jiguo */
+	if (!fault_addr) sched_exit();
+
 	if(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0)) {
 		printc("llbooter: remove the invfrm_ip\n");
 		assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));

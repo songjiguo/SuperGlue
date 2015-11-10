@@ -1,7 +1,9 @@
 #include <cos_component.h>
 #include <print.h>
 #include <sched.h>
-#include <mem_mgr.h>
+
+#include <mem_mgr_large.h>
+#include <valloc.h>
 
 #include <evt.h>
 
@@ -19,8 +21,41 @@ int ec3_ser3_pass(long id)
 
 vaddr_t ec3_ser3_test(void)
 {
-	vaddr_t ret = (vaddr_t)cos_get_vas_page();
+	/* do not return valloc address */
+	vaddr_t ret = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
 	return ret;
 }
 
 
+void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
+{
+	switch (t) {
+	case COS_UPCALL_REBOOT:
+	{
+		printc("thread %d passing arg1 %p here (type %d spd %ld)\n", 
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		break;
+	}
+	case COS_UPCALL_RECOVERY:
+	{
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n", 
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+#ifdef MM_C3
+		mm_cli_if_recover_upcall_entry((vaddr_t)arg1);
+#endif
+		break;
+	}
+	case COS_UPCALL_RECOVERY_SUBTREE:
+	{
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n", 
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+#ifdef MM_C3
+		mm_cli_if_recover_subtree_upcall_entry((vaddr_t)arg1);
+#endif
+		break;
+	}
+	default:
+		return;
+	}
+	return;
+}

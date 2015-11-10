@@ -33,9 +33,13 @@ mman_alias_page(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr, in
 void mman_print_stats(void);
 
 vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
+vaddr_t mman_get_page_exist(spdid_t spd, vaddr_t addr, int flags);
+vaddr_t __mman_alias_page_exist(spdid_t s_spd, vaddr_t s_addr, 
+				u32_t d_spd_flags, vaddr_t d_addr);
 
-/* change the type to long, so we can return the error code*/
-long __mman_alias_page_exist(spdid_t s_spd, vaddr_t s_addr, 
-			     u32_t d_spd_flags, vaddr_t d_addr);
+#ifdef EVT_C3
+extern void mm_cli_if_recover_upcall_entry(vaddr_t addr);
+extern void mm_cli_if_recover_subtree_upcall_entry(vaddr_t addr);
+#endif
 
 #endif 	    /* !MEM_MGR_H */

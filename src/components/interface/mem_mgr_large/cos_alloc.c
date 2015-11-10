@@ -105,6 +105,8 @@ REGPARM(1) void *do_mmap(size_t size) {
 
 #ifdef USE_VALLOC
 	hp = valloc_alloc(cos_spd_id(), cos_spd_id(), s/PAGE_SIZE);
+	/* printc("cos_alloc do_mmap: use alloc get hp %p (in spd %ld)\n",  */
+	/*        hp, cos_spd_id()); */
 	if (!hp) return NULL;
 #else
 	massert(size <= PAGE_SIZE);

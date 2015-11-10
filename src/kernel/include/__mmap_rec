@@ -12,9 +12,10 @@
 #include "shared/consts.h"
 
 struct cos_page {
-	int rt_spdid;             // rooted spd
-	vaddr_t rt_vaddr;         // rooted vpage for addr
-	paddr_t addr;
+	int		rt_spdid;	// root spd
+	vaddr_t		rt_vaddr;	// root addr
+	short int	flags;          // root flags 
+	paddr_t		addr;
 };
 
 void cos_init_memory(void);
@@ -28,11 +29,10 @@ int cos_paddr_to_cap(paddr_t pa);
 
 /* Jiguo: C^3 MM only */
 void cos_print_memory(void);
-int cos_add_root_info(int spdid, vaddr_t vaddr, unsigned long frame_id);
-int cos_remove_root_info(unsigned long frame_id);
 vaddr_t cos_lookup_root_page(unsigned long frame_id);
 int cos_lookup_root_spd(unsigned long frame_id);
-
-int cos_is_rootpage(int spdid, vaddr_t vaddr, unsigned long frame_id);
-
+int cos_lookup_root_flags(unsigned long frame_id);
+int cos_remove_root_info(unsigned long frame_id);
+int cos_is_rootpage(int spdid, vaddr_t vaddr, unsigned long frame_id, short int flags);
+int cos_add_root_info(int spdid, vaddr_t vaddr, unsigned long frame_id, short int flags);
 #endif

@@ -5,6 +5,9 @@
 #include <res_spec.h>
 #include <sched.h>
 
+#include <mem_mgr_large.h>
+#include <valloc.h>
+
 #include <periodic_wake.h>
 #include <timed_blk.h>
 

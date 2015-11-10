@@ -13,10 +13,11 @@
 #include <cos_debug.h>
 #include <print.h>
 
-#include <mem_mgr.h>
+#include <valloc.h>
+
 #include <cstub.h>
 
-#include <valloc.h>
+static int first = 0;  // for cvect
 
 extern void *alloc_page(void);
 extern void free_page(void *ptr);
@@ -38,21 +39,21 @@ static unsigned long global_fault_cnt;
 
 /* recovery data structure for each created alias */
 struct rec_data_mm {
-	vaddr_t d_addr;      // this is the tracking id
-	vaddr_t s_addr;      // this is the parent
-
-	spdid_t s_spd;      // this should be just cos_spd_id()
-	unsigned int d_spd_flags;
-
-	unsigned int  state;
-	unsigned long fcnt;
+	vaddr_t		d_addr;	// this is the tracking id
+	vaddr_t		s_addr;	// this is the parent
+	spdid_t		s_spd;  // this should be just cos_spd_id()
+	unsigned int	d_spd_flags;
+	unsigned int	state;
+	unsigned long	fcnt;
 	
 	struct rec_data_mm *next, *prev;
 };
 
-/* recovery data structure for subtree tracking of a parent */
+/* recovery data structure for subtree tracking of a parent (root id) */
 struct parent_rec_data_mm {
+	spdid_t spdid;
 	vaddr_t addr;
+	int	flags;
 	struct rec_data_mm *head;
 };
 
@@ -67,6 +68,7 @@ enum {
 /* slab allocator and cvect for tracking pages */
 /**********************************************/
 CVECT_CREATE_STATIC(parent_rec_mm_vect);
+/* cvect_t *parent_rec_mm_vect; */
 CSLAB_CREATE(parent_rdmm, sizeof(struct parent_rec_data_mm));
 
 static struct parent_rec_data_mm *
@@ -80,10 +82,13 @@ parent_rdmm_alloc(vaddr_t addr)
 {
 	struct parent_rec_data_mm *rd;
 
+	/* printc("cli: parent_rdmm_alloc cslab_alloc_parent_rdmm...1\n"); */
 	rd = cslab_alloc_parent_rdmm();
+	/* printc("cli: parent_rdmm_alloc cslab_alloc_parent_rdmm...2\n"); */
 	assert(rd);
 	rd->addr = addr;
 
+	printc("cli: parent_rdmm_alloc cvect_add...id %d\n", vaddr2id(addr));
 	if (cvect_add(&parent_rec_mm_vect, rd, vaddr2id(addr))) assert(0);
 
 	return rd;
@@ -100,6 +105,7 @@ parent_rdmm_dealloc(struct parent_rec_data_mm *rd)
 	return;
 }
 
+/* cvect_t *rec_mm_vect; */
 CVECT_CREATE_STATIC(rec_mm_vect);
 CSLAB_CREATE(rdmm, sizeof(struct rec_data_mm));
 
@@ -114,9 +120,13 @@ rdmm_alloc(vaddr_t addr)
 {
 	struct rec_data_mm *rd;
 
+	/* printc("cli: rdmm_alloc cslab_alloc_rdmm....1\n"); */
 	rd = cslab_alloc_rdmm();
+	/* printc("cli: rdmm_alloc cslab_alloc_rdmm....2\n"); */
 	assert(rd);
 
+	printc("cli: rdmm_alloc cvect_add...(addr %p)id %d\n", 
+	       addr, vaddr2id(addr));
 	if (cvect_add(&rec_mm_vect, rd, vaddr2id(addr))) assert(0);
 
 	return rd;
@@ -133,20 +143,20 @@ rdmm_dealloc(struct rec_data_mm *rd)
 	return;
 }
 
-/* void */
-/* print_rd_info(struct rec_data_mm *rd) */
-/* { */
-/* 	assert(rd); */
+static void
+print_rd_info(struct rec_data_mm *rd)
+{
+	assert(rd);
 	
-/* 	printc("rd->s_spd %d\n",rd->s_spd); */
-/* 	printc("rd->s_addr %d\n",rd->s_addr); */
-/* 	printc("rd->d_spd_flags %p\n",rd->d_spd_flags); */
-/* 	printc("rd->d_addr %d\n",rd->d_addr); */
-/* 	printc("rd->fcnt %ld\n",rd->fcnt); */
-/* 	printc("global_fault_cnt %ld \n",global_fault_cnt); */
+	printc("rd->s_spd %d\n",rd->s_spd);
+	printc("rd->s_addr %p\n",rd->s_addr);
+	printc("rd->d_spd_flags %p\n",rd->d_spd_flags);
+	printc("rd->d_addr %p\n",rd->d_addr);
+	printc("rd->fcnt %ld\n",rd->fcnt);
+	printc("global_fault_cnt %ld \n",global_fault_cnt);
 	
-/* 	return; */
-/* } */
+	return;
+}
 
 static void
 rd_cons(struct rec_data_mm *rd, spdid_t s_spd, vaddr_t s_addr, 
@@ -178,9 +188,15 @@ parent_rd_cons(struct rec_data_mm *rd, vaddr_t s_addr)
 	if (!parent_rd) {
 		parent_rd = parent_rdmm_alloc(s_addr);
 		assert(parent_rd);
+		printc("in spd %ld a rd is added as the head of (s_addr %p)\n", 
+		       cos_spd_id(), s_addr);
+		print_rd_info(rd);
 		parent_rd->head = rd;
 	} else {
 		assert(parent_rd && parent_rd->head);
+		printc("in spd %ld a rd is added to the list of (s_addr %p)\n", 
+		       cos_spd_id(), s_addr);
+		print_rd_info(rd);
 		ADD_LIST(parent_rd->head, rd, next, prev);
 	}
 
@@ -192,14 +208,18 @@ rd_update(vaddr_t addr, int state)
 {
         struct rec_data_mm *rd = NULL;
 	long ret = 0;
-
+	
+	printc("cli: rd_update %p\n", addr);
 	if (unlikely(!(rd = rdmm_lookup(addr)))) goto done;  // local root
+	printc("check fcnt: rd->fcnt %d global_fault_cnt %d\n", 
+	       rd->fcnt, global_fault_cnt);
 	if (likely(rd->fcnt == global_fault_cnt)) goto done;
 	rd->fcnt = global_fault_cnt;
 
-	printc("thd %d: ready to replay......in spd spd %ld\n", 
+	printc("cli: thd %d ready to replay......in spd spd %ld\n", 
 	       cos_get_thd_id(), cos_spd_id());
-	
+
+	print_rd_info(rd);
 again:	
 	ret = __mman_alias_page_exist(rd->s_spd, rd->s_addr, rd->d_spd_flags, rd->d_addr);
 	if (ret == -EINVAL) {
@@ -223,12 +243,15 @@ rd_recover_child(struct rec_data_mm *rd)
 
 	assert(rd && rd->s_spd == cos_spd_id());
 
+	printc("thd %d: rd_recover_child in spd %ld ....\n", cos_get_thd_id(), cos_spd_id());
+	print_rd_info(rd);
+
 	ret = __mman_alias_page_exist(rd->s_spd, rd->s_addr, rd->d_spd_flags, rd->d_addr);
 	if (ret > 0 && ret != (long)rd->d_addr) assert(0);
 	
 	d_spd = rd->d_spd_flags >> 16;
 	if (d_spd != cos_spd_id()) {
-		valloc_upcall(d_spd, rd->d_addr);
+		valloc_upcall(d_spd, rd->d_addr, REC_SUBTREE);
 	}
 	
 	return 0;
@@ -241,9 +264,12 @@ rd_update_subtree(vaddr_t addr, int state)
 	struct parent_rec_data_mm *parent_rd;
 	vaddr_t s_addr;
 	
-	printc("thd %d: ready to replay subtree......in spd spd %ld\n", 
-	       cos_get_thd_id(), cos_spd_id());
-
+	printc("thd %d: ready to replay subtree root......in spd %ld (addr %p)\n", 
+	       cos_get_thd_id(), cos_spd_id(), addr);
+	
+	/* no need, since child could recover the parent already */
+	rd_update(addr, state);
+	
 	/* There is no need to remove the entries from the list here,
 	 * since the revoke function on the normal path will remove
 	 * them anyway */
@@ -286,17 +312,43 @@ rd_remove(vaddr_t addr)
 }
 
 void 
-alias_replay(vaddr_t addr, int subtree)
+mm_cli_if_recover_upcall_entry(vaddr_t addr)
 {
+	struct rec_data_mm *rdmm = NULL;
+	struct parent_rec_data_mm *prdmm = NULL;
+	vaddr_t ret;
+	printc("now we are going to recover addr %p (parent type)\n", addr);
 	assert(addr);
-	if (subtree) {
-		rd_update_subtree(addr, PAGE_STATE_ALIAS);
+	if (!(rdmm = rdmm_lookup(addr))) {
+		/* prdmm = parent_rdmm_lookup(addr); */
+                /* /\* a root page that is never aliased *\/ */
+		/* if (!prdmm) valloc_upcall(cos_spd_id(), addr); */
+		/* /\* if (!prdmm) goto done; *\/ */
+
+		/* This function is going to recreate the mapping for
+		 * the root page. Note that the root page must be in
+		 * the page table already (spdid, flags etc can be
+		 * introspected from the kernel on the server side, if
+		 * necessary, though it does not seem to need)*/
+		ret = mman_get_page_exist(cos_spd_id(), addr, 0);
+		if (ret != addr) assert(0);
 	} else {
-		rd_update(addr, PAGE_STATE_ALIAS);
+		printc("cli: found record for addr %p\n", addr);
+		assert(rdmm);
+		ret = __mman_alias_page_exist(rdmm->s_spd, rdmm->s_addr, 
+					      rdmm->d_spd_flags, rdmm->d_addr);
+		assert(ret == rdmm->d_addr);
 	}
+done:
 	return;
 }
 
+void 
+mm_cli_if_recover_subtree_upcall_entry(vaddr_t addr)
+{
+	printc("now we are going to recover addr %p (subtree type)\n", addr);
+	return rd_update_subtree(addr, PAGE_STATE_ALIAS);
+}
 /************************************/
 /******  client stub functions ******/
 /************************************/
@@ -306,23 +358,28 @@ CSTUB_FN(vaddr_t, mman_get_page) (struct usr_inv_cap *uc,
 {
 	long fault = 0;
 	long ret;
+	struct parent_rec_data_mm *parent_rd = NULL;
 
-	unsigned long long start, end;
+        if (first == 0) {
+		cvect_init_static(&rec_mm_vect);
+		cvect_init_static(&parent_rec_mm_vect);
+		first = 1;
+	}
+
 redo:
-	/* if (cos_spd_id() != 5) { */
-	/* 	printc("mm cli: call mman_get_page addr %p\n", addr); */
-	/* } */
 	
-	CSTUB_INVOKE(ret, fault, uc, 3,  spdid,addr, flags);
+	CSTUB_INVOKE(ret, fault, uc, 3, spdid, addr, flags);
         if (unlikely (fault)){
 		printc("found a fault in mman_get_page!!!!!\n");
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
 
+done:
 	return ret;
 }
 
+static int aaaaa= 0;
 CSTUB_FN(vaddr_t, __mman_alias_page) (struct usr_inv_cap *uc,
 				      spdid_t s_spd, vaddr_t s_addr, 
 				      unsigned int d_spd_flags, vaddr_t d_addr)
@@ -331,17 +388,22 @@ CSTUB_FN(vaddr_t, __mman_alias_page) (struct usr_inv_cap *uc,
 	long ret;
 
 	unsigned long long start, end;
-        struct rec_data_mm *rd, *dest, *parent_rd;
+        struct rec_data_mm *rd, *dest;
+        struct parent_rec_data_mm *parent_rd;
+
+        if (first == 0) {
+		cvect_init_static(&rec_mm_vect);
+		cvect_init_static(&parent_rec_mm_vect);
+		first = 1;
+	}
 
 redo:
-	if (cos_spd_id() == 5) goto con;   // do not track booter for now
-
-	printc("cli: mman_alias_page 1\n");
+	if (cos_spd_id() == 5) goto con;
 	
-	rd = rd_update(s_addr, PAGE_STATE_REVOKE);
-
-	printc("cli: mman_alias_page s_spd %d s_addr %p d_spd %d d_addr %p\n",
-	       s_spd, s_addr, d_spd_flags >> 16,  d_addr);
+	rd = rd_update(s_addr, PAGE_STATE_ALIAS);
+	
+	/* printc("cli: mman_alias_page s_spd %d s_addr %p d_spd %d d_addr %p\n", */
+	/*        s_spd, s_addr, d_spd_flags >> 16,  d_addr); */
 con:	
 	CSTUB_INVOKE(ret, fault, uc, 4,  s_spd, s_addr, d_spd_flags, d_addr);
         if (unlikely (fault)){
@@ -350,32 +412,33 @@ con:
 		goto redo;
 	}
 
+	if (cos_spd_id() == 5) goto done;
+
 	if (ret == -EINVAL) {
 		/*if we can not find the creator, it must be the root
 		 * page since the root page comes from the
 		 * mman_get_page function, not by alias (so it is not
 		 * tracked in valloc)*/
-		if (valloc_upcall(s_spd, s_addr)) {
-			/* cos_introspect....rootpage */
-		}
+		valloc_upcall(s_spd, s_addr, REC_PARENT);
 		goto redo;
 	}
+
 	
-	if (cos_spd_id() == 5) goto done;   // do not track booter for now
-	printc("cli: mman_alias_page 2 (in spd %ld, ret %d)\n", cos_spd_id(), ret);
+	/* printc("cli: mman_alias_page 2 (in spd %ld, ret %p)\n", cos_spd_id(), ret); */
+	if (likely(!rdmm_lookup(d_addr))) {
+		rd = rdmm_alloc(d_addr);
+		assert(rd);
+		rd_cons(rd, s_spd, s_addr, d_spd_flags, d_addr, PAGE_STATE_ALIAS);
 
-	rd = rdmm_alloc(d_addr);
-	assert(rd);
-	rd_cons(rd, s_spd, s_addr, d_spd_flags, d_addr, PAGE_STATE_ALIAS);
-
-	printc("cli: mman_alias_page 3\n");
-	/* track sub tree here */
-	parent_rd_cons(rd, s_addr);
+		/* track sub tree here */
+		parent_rd_cons(rd, s_addr);
+	}
 
 done:	
 	return ret;
 }
 
+static int bbbbb= 0;
 CSTUB_FN(vaddr_t, mman_revoke_page) (struct usr_inv_cap *uc,
 				     spdid_t spdid, vaddr_t addr, int flags)
 {
@@ -383,14 +446,22 @@ CSTUB_FN(vaddr_t, mman_revoke_page) (struct usr_inv_cap *uc,
 	long ret;
 	
 	struct rec_data_mm *rd = NULL;
+
+        if (first == 0) {
+		cvect_init_static(&rec_mm_vect);
+		cvect_init_static(&parent_rec_mm_vect);
+		first = 1;
+	}
+
+	/* if (cos_spd_id() == 5) goto con; */
 	
 redo:
-	if (cos_spd_id() == 5) goto cont;   // do not track booter -- hack
 
-	rd_update(addr, PAGE_STATE_REVOKE);
+	rd_update_subtree(addr, PAGE_STATE_REVOKE);
+	/* rd_update(addr, PAGE_STATE_REVOKE); */
 	
-cont:
-	printc("cli: mman_revoke_page 1\n");
+	/* printc("cli: mman_revoke_page 1\n"); */
+con:
 	CSTUB_INVOKE(ret, fault, uc, 3,  spdid, addr, flags);
         if (unlikely (fault)){
 		printc("found a fault in mman_revoke_page!!!!\n");
@@ -398,12 +469,14 @@ cont:
 		goto redo;
 	}
 
-	if (cos_spd_id() == 5) goto done;   // do not track booter for now
+	/* if (cos_spd_id() == 5) goto done; */
 
-	if (ret == -EINVAL) {
-		rd_update_subtree(addr, PAGE_STATE_REVOKE);
-		goto redo;
-	}
+	/* if (ret == -EINVAL) { */
+	/* 	assert(0); */
+	/* 	if (bbbbb++ > 5) assert(0); */
+	/* 	rd_update_subtree(addr, PAGE_STATE_REVOKE); */
+	/* 	goto redo; */
+	/* } */
 
 
 	/* here is one issue: if we always remove all tracking
@@ -417,7 +490,37 @@ cont:
 	 * rd is not reomved here. release_page does.*/
 	/* rdmm_dealloc(rd); */
 done:
-	printc("cli: mman_revoke_page return %d\n", ret);
+	/* printc("cli: mman_revoke_page return %d\n", ret); */
 	return ret;
 }
 
+
+CSTUB_FN(vaddr_t, __mman_alias_page_exist) (struct usr_inv_cap *uc,
+					    spdid_t s_spd, vaddr_t s_addr, 
+					    unsigned int d_spd_flags, vaddr_t d_addr)
+{
+	long fault = 0;
+	long ret;
+
+redo:
+	
+	rd_update(s_addr, PAGE_STATE_REVOKE);
+	
+	CSTUB_INVOKE(ret, fault, uc, 4,  s_spd, s_addr, d_spd_flags, d_addr);
+        if (unlikely (fault)){
+		printc("found a fault in mman_alias_page_exist!!!!\n");
+		CSTUB_FAULT_UPDATE();
+		goto redo;
+	}
+
+	if (ret == -EINVAL) {
+		/*if we can not find the creator, it must be the root
+		 * page since the root page comes from the
+		 * mman_get_page function, not by alias (so it is not
+		 * tracked in valloc)*/
+		valloc_upcall(s_spd, s_addr, REC_PARENT);
+		goto redo;
+	}
+
+	return ret;
+}

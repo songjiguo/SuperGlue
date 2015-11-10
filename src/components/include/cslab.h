@@ -158,7 +158,9 @@ __cslab_mem_alloc(struct cslab_freelist *fl, int obj_sz, int max_objs)
 
 	s = fl->list;
 	if (unlikely(!s)) {
+		/* printc("AAAA\n"); */
 		s = CSLAB_ALLOC(CSLAB_MEM_ALLOC_SZ);
+		/* printc("BBBB\n"); */
 		if (unlikely(!s)) return NULL;
 		__cslab_init(s, fl, obj_sz, max_objs);
 	}
@@ -166,6 +168,7 @@ __cslab_mem_alloc(struct cslab_freelist *fl, int obj_sz, int max_objs)
 	/* find an empty slot */
 	bm  = s->bitmap;
 	idx = bitmap_one(bm, CSLAB_BITMAP_SIZE);
+	/* printc("idx %d (in spd %ld)\n", idx, cos_spd_id()); */
 	assert(idx > -1 && idx < max_objs);
 	bitmap_unset(bm, idx);
 	mem = __cslab_mem_first(s) + (idx * obj_sz);

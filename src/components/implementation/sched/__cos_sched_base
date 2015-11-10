@@ -2127,6 +2127,6 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 // the reflection occurs over the server interface
 int sched_reflect(spdid_t spdid) { return 0; }
 
-// Jiguo: mem_mgr needs valloc as the name server, so create a dummy
-//        function here
-int valloc_upcall(spdid_t spdid, vaddr_t addr){return 0;}
+/* // Jiguo: mem_mgr needs valloc as the name server, so create a dummy */
+/* //        function here */
+/* int valloc_upcall(spdid_t spdid, vaddr_t addr){return 0;} */

@@ -184,6 +184,14 @@ rdpage_dealloc(struct rec_data_page *rd_page)
 	return;
 }
 
+long __sg___mman_alias_page_exist(spdid_t s_spd, vaddr_t s_addr, 
+				  u32_t d_spd_flags, vaddr_t d_addr) 
+{
+	return __mman_alias_page(s_spd, s_addr, d_spd_flags, d_addr);
+}
+
+
+
 // arg is the src_spd
 int __sg_mman_release_page(spdid_t spd, vaddr_t addr, int arg)
 {
@@ -224,30 +232,33 @@ vaddr_t __sg_mman_get_page(spdid_t spdid, vaddr_t addr, int flags)
 
 	struct rec_data_spd *rd = NULL;
 
-	/* printc("mem_normal: ser side get_page\n"); */
+/* #ifdef REFLECTION */
+/* 	ret = mman_get_page(spdid, addr, flags); */
+/* 	assert(ret > 0); */
 
-#ifdef REFLECTION
+/* 	cos_sched_lock_take(); */
+
+/* 	// track the allocated page */
+/* 	rd = rdspd_lookup(spdid); */
+/* 	if (unlikely(!rd)) { */
+/* 		rd = rdspd_alloc(spdid); */
+/* 		assert(rd); */
+/* 		INIT_LIST(&rd->pages, next, prev); */
+/* 		/\* INIT_LIST(&rd->pages2, next, prev); *\/ */
+/* 		rd->spdid = spdid; */
+/* 	}  */
+/* 	assert(rd && rd->spdid == spdid); */
+/* 	assert(rdpage_alloc(rd, addr)); */
+/* 	cos_sched_lock_release(); */
+/* #else */
 	ret = mman_get_page(spdid, addr, flags);
 	assert(ret > 0);
+/* #endif */
 
-	cos_sched_lock_take();
-
-	// track the allocated page
-	rd = rdspd_lookup(spdid);
-	if (unlikely(!rd)) {
-		rd = rdspd_alloc(spdid);
-		assert(rd);
-		INIT_LIST(&rd->pages, next, prev);
-		/* INIT_LIST(&rd->pages2, next, prev); */
-		rd->spdid = spdid;
-	} 
-	assert(rd && rd->spdid == spdid);
-	assert(rdpage_alloc(rd, addr));
-	cos_sched_lock_release();
-#else
-	ret = mman_get_page(spdid, addr, flags);
-	assert(ret > 0);
-#endif
+	/* if (spdid != 8) { */
+	/* 	printc("ser: mman_get_page (from spd %d) addr %p ret %p\n", */
+	/* 	       spdid, addr, ret); */
+	/* } */
 
 	return ret;
 }

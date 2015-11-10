@@ -6,8 +6,13 @@
 void *valloc_alloc(spdid_t spdid, spdid_t dest, unsigned long npages);
 int valloc_free(spdid_t spdid, spdid_t dest, void *addr, unsigned long npages);
 
-int valloc_reset_hp(spdid_t spdid, spdid_t dest);  //Jiguo: restore heap pointer
+//Jiguo: restore heap pointer
+int valloc_reset_hp(spdid_t spdid, spdid_t dest);  
+ // Jiguo: upcall to rebuild alias
+int valloc_upcall(spdid_t spdid, vaddr_t addr, int upcall_type);  
 
-int valloc_upcall(spdid_t spdid, vaddr_t addr);   // Jiguo: upcall to rebuild alias
+// upcall type for recovery 
+#define REC_PARENT   0
+#define REC_SUBTREE  1
 
 #endif 	    /* !VALLOC_H */

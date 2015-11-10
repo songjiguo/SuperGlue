@@ -16,4 +16,5 @@ cos_asm_server_stub(mman_revoke_page)
 cos_asm_server_stub(mman_print_stats)
 
 cos_asm_server_stub(__mman_alias_page)
-cos_asm_server_stub_spdid(__mman_alias_page_exist)
+cos_asm_server_stub(__mman_alias_page_exist)
+cos_asm_server_stub_spdid(mman_get_page_exist)

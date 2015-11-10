@@ -46,15 +46,16 @@ valloc_free(spdid_t spdid, spdid_t dest, void *addr, unsigned long npages)
 	return 0;
 }
 
-#else
-extern void *valloc_alloc(spdid_t spdid, spdid_t dest, unsigned long npages);
-extern int valloc_free(spdid_t spdid, spdid_t dest, void *addr, unsigned long npages);
-#endif
-
-
 /* Jiguo: for recovering alias */ 
 int
 valloc_upcall(spdid_t spdid, vaddr_t addr)
 {
+	printc("cos_valloc: valloc_upcall called from spd %d\n", spdid);
 	return 0;
 }
+
+#else
+extern void *valloc_alloc(spdid_t spdid, spdid_t dest, unsigned long npages);
+extern int valloc_free(spdid_t spdid, spdid_t dest, void *addr, unsigned long npages);
+extern int valloc_upcall(spdid_t spdid, vaddr_t addr);
+#endif
