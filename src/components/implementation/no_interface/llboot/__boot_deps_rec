@@ -251,13 +251,13 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	unsigned long r_ip; 	/* the ip to return to */
 	int tid = cos_get_thd_id();
 	struct llbooter_per_core *llboot = PERCPU_GET(llbooter);
-	int reboot = (spdid == LLBOOT_SCHED) ? 1:0;
+	int reboot_sched = (spdid == LLBOOT_SCHED) ? 1:0;
 
 	printc("\nLL: rec_thd %d, alpha %d, init_thd %d\n", 
 	       llboot->recovery_thd, llboot->alpha, llboot->init_thd);
 	printc("LL: <<0>> thd %d : failed spd %d (this spd %ld)\n", cos_get_thd_id(), spdid, cos_spd_id());
 
-	if (spdid == 2) sched_exit();  // test only
+	/* if (spdid == 2) sched_exit();  // test only -- remove this when test scheduler */
 	
 	/* if (reboot) sched_exit(); /\* just a quick way to measure ubenchmark , for MM only. Need fix later *\/ */
 
@@ -298,21 +298,24 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 		assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));
 		assert(!cos_thd_cntl(COS_THD_INVFRM_SET_IP, tid, 1, r_ip-8));
 		assert(!cos_fault_cntl(COS_SPD_FAULT_TRIGGER, spdid, 0));
-
-		recovery_upcall(cos_spd_id(), COS_UPCALL_REBOOT, spdid, reboot);
+		
+		/* use the recovery thread to do the reflection in the
+		 * faulty component */
+		recovery_upcall(cos_spd_id(), COS_UPCALL_REBOOT, spdid, 0);
 
 		return 0;
 	}
 	
 	/* for scheduler...*/
 	printc("LL: <<2>>\n");
-	printc("reboot %d thd %d spd %d\n", reboot, cos_get_thd_id(), spdid);
+	printc("reboot %d thd %d spd %d\n", reboot_sched, cos_get_thd_id(), spdid);
 	/* 
 	 * The thread was created in the failed component...just use
 	 * it to restart the component!  This might even be the
-	 * initial thread.
+	 * initial thread (e.g., sched_create_default_thread)
 	 */
-	if (reboot && cos_get_thd_id() == 4) cos_upcall_args(COS_UPCALL_REBOOT, spdid, 0);
+	/* if (reboot && cos_get_thd_id() == 4) cos_upcall_args(COS_UPCALL_REBOOT, spdid, 0); */
+	if (reboot_sched) cos_upcall_args(COS_UPCALL_REBOOT, spdid, 0);
 	else cos_upcall(spdid, 0); 	/* FIXME: give back stack... */
 	printc("should not be here\n");
 	BUG();
@@ -340,7 +343,8 @@ static int thrid = 0;
 int
 fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 {
-	printc("parameters: spdid %d fault_addr %p flags %d ip %p\n", spdid, fault_addr, flags, ip);
+	printc("parameters: spdid %d fault_addr %p flags %d ip %p (thd %d)\n", 
+	       spdid, fault_addr, flags, ip, cos_get_thd_id());
 	unsigned long r_ip;
 	struct llbooter_per_core *llboot = PERCPU_GET(llbooter);
 	
@@ -357,7 +361,9 @@ fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	 * fails and when the system exist, scheduler will call
 	 * parent_sched_exit and see the fault. But we do not need to
 	 * recover anyway. So exit -- Jiguo */
+#ifdef MM_C3
 	if (!fault_addr) sched_exit();
+#endif
 
 	if(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0)) {
 		printc("llbooter: remove the invfrm_ip\n");
@@ -372,7 +378,11 @@ fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	 * do not want to recover any state. Just kill the system. */
 	if (cos_get_thd_id() == llboot->init_thd) cos_switch_thread(llboot->alpha, 0);
 
-	/* cos_upcall(flags, 0);	/\* upcall to ths dest spd (home spd), for other threads *\/ */
+	/* otherwise, upcall to ths dest spd. For example, in the home
+	 * component just after being created, and then switch to
+	 * execute. A fault can be detected at that time (the
+	 * invocation frame has not been set up) */
+	cos_upcall(flags, 0);
 
 	assert(0);
 	return 0;

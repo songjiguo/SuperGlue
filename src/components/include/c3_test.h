@@ -104,7 +104,10 @@
 |___/\___|_| |_|\___|\__,_|
                            
 ****************************/
-/* #define EXAMINE_SCHED */
+#define EXAMINE_SCHED
+
+#ifdef EXAMINE_SCHED
+#define SCHED_C3
 
 /* #define TEST_SCHED_CREATE_THD */
 /* #define TEST_SCHED_CREATE_THD_DEFAULT */
@@ -122,19 +125,21 @@
 //#define MEASU_SCHED_INTERFACE_COM_TAKE
 //#define MEASU_SCHED_INTERFACE_COM_RELEASE
 
+#endif
+
 /****************************
  _ __ ___  _ __ ___  
 | '_ ` _ \| '_ ` _ \ 
 | | | | | | | | | | |
 |_| |_| |_|_| |_| |_|
 ****************************/
-#define EXAMINE_MM
+/* #define EXAMINE_MM */
 
 #ifdef EXAMINE_MM
 #define MM_C3            // enable upcall to each client to recover the pages
 
 /* #define TEST_MM_GET_PAGE */
-#define TEST_MM_ALIAS_PAGE
+/* #define TEST_MM_ALIAS_PAGE */
 /* #define TEST_MM_REVOKE_PAGE */
 
 /* #define BENCHMARK_MEAS_INV_OVERHEAD_MM */

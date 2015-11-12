@@ -21,8 +21,6 @@
 
 #include "../../implementation/sched/cos_sched_sync.h"
 
-#include <objtype.h>
-
 volatile unsigned long long overhead_start, overhead_end;
 
 extern void *alloc_page(void);
@@ -35,6 +33,8 @@ extern void free_page(void *ptr);
 #define CVECT_ALLOC() alloc_page()
 #define CVECT_FREE(x) free_page(x)
 #include <cvect.h>
+
+#include <cos_list.h>
 
 struct blocked_thd {
 	int id;

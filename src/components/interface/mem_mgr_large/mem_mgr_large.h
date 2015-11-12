@@ -66,7 +66,7 @@ vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
 /* change the type to long, so we can return the error code*/
 vaddr_t mman_get_page_exist(spdid_t spd, vaddr_t addr, int flags);
 
-#ifdef EVT_C3
+#ifdef MM_C3
 extern void mm_cli_if_recover_upcall_entry(vaddr_t addr);
 extern void mm_cli_if_recover_subtree_upcall_entry(vaddr_t addr);
 extern void mm_cli_if_recover_all_alias_upcall_entry(vaddr_t addr);

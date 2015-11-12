@@ -354,6 +354,9 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 
 #ifdef EXAMINE_SCHED
 
+/* void *alloc_page(void){}; */
+/* void free_page(void *ptr){}; */
+
 #define LOCK()   if (sched_component_take(cos_spd_id())) assert(0);
 #define UNLOCK() if (sched_component_release(cos_spd_id())) assert(0);
 
@@ -361,22 +364,60 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 
 vaddr_t ec3_ser1_test(int low, int mid, int hig)
 {
+	int i = 0, j = 0;		
+	int test_sched_lock = 0;
+	
 	if (cos_get_thd_id() == hig) {
-		int test_sched_lock = 0;
-		while(test_sched_lock++ < 10) {
+		printc("\n\n<< thd %d is in SCHED testing... >>>\n\n",
+		       cos_get_thd_id());
+		
+#ifdef TEST_SCHED_COMPONENT_TAKE
+		while(test_sched_lock++ < 20) {
 			LOCK();
 			UNLOCK();
 		}
+		test_sched_lock = 0;
+#endif
+#ifdef TEST_SCHED_COMPONENT_RELEASE
+		while(test_sched_lock++ < 20) {
+			LOCK();
+			UNLOCK();
+		}
+		test_sched_lock = 0;
+#endif
 
-		int i = 0;
 		while(i++ < ITER_SCHED) {
 			printc("\n<< high thd %d is blocking on mid thd %d in spd %d (iter %d) >>>\n", cos_get_thd_id(), mid, cos_spd_id(), i);
 			sched_block(cos_spd_id(), mid);
+
+#ifdef TEST_SCHED_COMPONENT_TAKE
+			while(i == 4 && test_sched_lock++ < 30) {
+				LOCK();
+				UNLOCK();
+			}
+#endif
+#ifdef TEST_SCHED_COMPONENT_RELEASE
+			while(i == 4 && test_sched_lock++ < 30) {
+				LOCK();
+				UNLOCK();
+			}
+#endif
 		}
+		
+		if (periodic_wake_create(cos_spd_id(), 50) < 0) BUG();
+		i = 0;
+		while (i++ < ITER_SCHED) {
+			periodic_wake_wait(cos_spd_id());
+			printc("thd periodic wakeup %d (for sched_timeout testing..)\n", 
+			       cos_get_thd_id());
+		}
+		periodic_wake_remove(cos_spd_id(), cos_get_thd_id());
+
+		printc("\n\n<< thd %d SCHED testing done... >>>\n\n",
+		       cos_get_thd_id());
 	}
 	
 	if (cos_get_thd_id() == mid) {
-		int j = 0;
 		while(j++ < ITER_SCHED) {
 			printc("\n<< mid thd %d is waking up high thd %d in spd %d (iter %d) >>>\n", cos_get_thd_id(), hig, cos_spd_id(), j);
 			sched_wakeup(cos_spd_id(), hig);
@@ -384,7 +425,6 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 	}
 
 	if (cos_get_thd_id() == low) {
-		int j = 0;
 		if (periodic_wake_create(cos_spd_id(), 100) < 0) BUG();
 		while (1) {
 			periodic_wake_wait(cos_spd_id());

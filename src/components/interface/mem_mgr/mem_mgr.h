@@ -37,7 +37,7 @@ vaddr_t mman_get_page_exist(spdid_t spd, vaddr_t addr, int flags);
 vaddr_t __mman_alias_page_exist(spdid_t s_spd, vaddr_t s_addr, 
 				u32_t d_spd_flags, vaddr_t d_addr);
 
-#ifdef EVT_C3
+#ifdef MM_C3
 extern void mm_cli_if_recover_upcall_entry(vaddr_t addr);
 extern void mm_cli_if_recover_subtree_upcall_entry(vaddr_t addr);
 extern void mm_cli_if_recover_all_aias_upcall_entry(vaddr_t addr);

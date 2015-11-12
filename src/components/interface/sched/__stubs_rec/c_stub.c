@@ -139,42 +139,42 @@ rd_update(int thd, int target_thd, int state)
 	
 	if (cos_get_thd_id() == timer_thread) sched_timeout_thd(cos_spd_id());
 
-	printc("State Machine thd %d in spd %ld -- ", cos_get_thd_id(), cos_spd_id());
-	/* STATE MACHINE */
-	switch (state) {
-	case THD_STATE_CREATE:
-		/* The re-creation of these threads should be taken
-		 * cared by the scheduler sched_reboot + kernel
-		 * reflection already. See scheduler recovery code */
-		printc("rd_update: THD_STATE_CREATE\n");
-		break;
-	case THD_STATE_CREATE_DEFAULT:
-		printc("rd_update: THD_STATE_CREATE_DEFAULT\n");
-		if (rd->lock_state) sched_component_take(cos_spd_id());
-		break;
-	case THD_STATE_WAKEUP:
-		printc("rd_update: THD_STATE_WAKEUP (thd %d)\n", rd->dep_thd);
-		/* cos_sched_cntl(COS_SCHED_BREAK_PREEMPTION_CHAIN, 0, 0); */
-		break;
-	case THD_STATE_BLOCK:
-		printc("rd_update: THD_STATE_BLOCK\n");
-		rd->dep_thd = target_thd;
-		break;
-	case THD_STATE_LOCK_TAKE:
-		printc("rd_update: THD_STATE_LOCK_TAKE\n");
-		break;
-	case THD_STATE_LOCK_RELEASE:
-		printc("rd_update: THD_STATE_LOCK_RELEASE\n");
-		if (rd->lock_state) sched_component_take(cos_spd_id());
-		break;
-	case THD_STATE_RUNNING:
-		printc("rd_update: THD_STATE_LOCK_RUNNING\n");
-		assert(0);
-		break;
-	default:
-		assert(0);
-	}
-	printc("thd %d restore scheduler done!!!\n", cos_get_thd_id());
+	/* printc("State Machine thd %d in spd %ld -- ", cos_get_thd_id(), cos_spd_id()); */
+	/* /\* STATE MACHINE *\/ */
+	/* switch (state) { */
+	/* case THD_STATE_CREATE: */
+	/* 	/\* The re-creation of these threads should be taken */
+	/* 	 * cared by the scheduler sched_reboot + kernel */
+	/* 	 * reflection already. See scheduler recovery code *\/ */
+	/* 	printc("rd_update: THD_STATE_CREATE\n"); */
+	/* 	break; */
+	/* case THD_STATE_CREATE_DEFAULT: */
+	/* 	printc("rd_update: THD_STATE_CREATE_DEFAULT\n"); */
+	/* 	/\* if (rd->lock_state) sched_component_take(cos_spd_id()); *\/ */
+	/* 	break; */
+	/* case THD_STATE_WAKEUP: */
+	/* 	printc("rd_update: THD_STATE_WAKEUP (thd %d)\n", rd->dep_thd); */
+	/* 	/\* cos_sched_cntl(COS_SCHED_BREAK_PREEMPTION_CHAIN, 0, 0); *\/ */
+	/* 	break; */
+	/* case THD_STATE_BLOCK: */
+	/* 	printc("rd_update: THD_STATE_BLOCK\n"); */
+	/* 	/\* rd->dep_thd = target_thd; *\/ */
+	/* 	break; */
+	/* case THD_STATE_LOCK_TAKE: */
+	/* 	printc("rd_update: THD_STATE_LOCK_TAKE\n"); */
+	/* 	break; */
+	/* case THD_STATE_LOCK_RELEASE: */
+	/* 	printc("rd_update: THD_STATE_LOCK_RELEASE\n"); */
+	/* 	/\* if (rd->lock_state) sched_component_take(cos_spd_id()); *\/ */
+	/* 	break; */
+	/* case THD_STATE_RUNNING: */
+	/* 	printc("rd_update: THD_STATE_LOCK_RUNNING\n"); */
+	/* 	assert(0); */
+	/* 	break; */
+	/* default: */
+	/* 	assert(0); */
+	/* } */
+	/* printc("thd %d restore scheduler done!!!\n", cos_get_thd_id()); */
 done:
 	return rd;
 }
@@ -265,7 +265,9 @@ redo:
 	rd = rd_update(cos_get_thd_id(), dep_thd, THD_STATE_WAKEUP);
 	assert(rd);
 	
-	/* printc("thread %d calls << sched_wakeup thd %d>>\n",cos_get_thd_id(),dep_thd); */
+	printc("cli:thread %d calls << sched_wakeup thd %d>>\n",
+	       cos_get_thd_id(), dep_thd);
+
 #ifdef MEASU_SCHED_INTERFACE_WAKEUP
 	rdtscll(start);
 #endif
@@ -302,8 +304,8 @@ redo:
         rd = rd_update(cos_get_thd_id(), thd_id, THD_STATE_BLOCK);
 	assert(rd);
 
-	/* printc("thread %d calls from spd %d << sched_block thd %d>>\n", */
-	/*        cos_get_thd_id(), spdid, thd_id); */
+	printc("cli: thread %d calls from spd %d << sched_block thd %d>>\n",
+	       cos_get_thd_id(), spdid, thd_id);
 	
 #ifdef MEASU_SCHED_INTERFACE_BLOCK
 	rdtscll(start);
@@ -390,7 +392,7 @@ redo:
 		printc("see a fault during sched_component_release (thd %d in spd %ld)\n",
 		       cos_get_thd_id(), cos_spd_id());
 		CSTUB_FAULT_UPDATE();
-		goto redo;
+		/* goto redo; */
 	}
 	
 #ifdef MEASU_SCHED_INTERFACE_COM_RELEASE

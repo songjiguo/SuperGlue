@@ -750,6 +750,22 @@ void sched_timeout(spdid_t spdid, unsigned long amnt)
 		PERCPU_GET(sched_base_state)->wakeup_time = abs_timeout;
 	}
 
+#if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_TIMEOUT)
+	printc("trigger fault in sched_timeout: thd %d spd %ld passed spd %d (num %d)\n",
+	       cos_get_thd_id(), cos_spd_id(), spdid, test_control++);
+	/* if (spdid == 11 && cos_get_thd_id() == 13 && test_control++ == 1) { */
+	/* 	printc("trigger fault in sched_timeout: thd %d spd %ld passed spd %d\n", */
+	/* 	       cos_get_thd_id(), cos_spd_id(), spdid); */
+	/* 	assert(0); */
+	/* } */
+
+	if (spdid == 11 && cos_get_thd_id() == 10 && test_control++ == 19) {
+		printc("trigger fault in sched_timeout: thd %d spd %ld passed spd %d\n",
+		       cos_get_thd_id(), cos_spd_id(), spdid);
+		assert(0);
+	}
+#endif
+
 	/* If we're the timer thread, lets block, otherwise return */
 	if (thd != PERCPU_GET(sched_base_state)->wakeup_thd) {
 		/* printc("curre thd %d PERCPU_GET(sched_base_state)->wakeup_thd %d\n", */
@@ -834,7 +850,7 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	int ret;
 	struct sched_thd *thd;
 
-	/* printc("thread %d waking up thread %d.\n", cos_get_thd_id(), thd_id); */
+	printc("thread %d waking up thread %d.\n", cos_get_thd_id(), thd_id);
 	
 	if (!sched_thd_on_current_core(thd_id)) {
 		/* Cross-core wakeup */
@@ -857,8 +873,7 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_WAKEUP)
 	/* printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", */
 	/*        cos_get_thd_id(), cos_spd_id(), spdid); */
-	test_control++;
-	if (spdid == 17 && cos_get_thd_id() == 14 && test_control == 4) {
+	if (spdid == 17 && cos_get_thd_id() == 14 && test_control++ == 4) {
 		printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -1209,7 +1224,7 @@ int sched_component_release(spdid_t spdid)
 {
 	struct sched_thd *curr;
 
-	/* printc("sched component release %d\n", spdid); */
+	printc("sched component release %d by thd %d\n", spdid, cos_get_thd_id());
 
 	WAIT_FAULT();
 
@@ -1219,9 +1234,8 @@ int sched_component_release(spdid_t spdid)
 	assert(curr);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_COMPONENT_RELEASE)
-	test_control++;
-	if (spdid == 15 && cos_get_thd_id() == 11 && test_control  == 400) {
-		printc("trigger fault in sched_component_take: thd %d spd %ld passed spd %d\n",
+	if (spdid == 17 && cos_get_thd_id() == 13 && test_control++  == 5) {
+		printc("trigger fault in sched_component_release: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -1482,8 +1496,7 @@ static inline int sched_create_thd_current_core(spdid_t spdid, u32_t sched_param
 	cos_sched_lock_take();
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_CREATE_THD)
-	test_control++;
-	if (spdid == 9 && cos_get_thd_id() == 8 && test_control == 3) {
+	if (spdid == 16 && cos_get_thd_id() == 11 && test_control++ == 2) {
 		printc("trigger fault in sched_create_thd: thd %d spd %ld passed spd %d\n", 
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -2270,7 +2283,8 @@ sched_reboot(int arg)
 		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
 		/* printc("evt mman_release: %p addr\n", (void *)addr); */
 		assert(addr);
-		memset(addr, 0, PAGE_SIZE);  // zero out anything on this page before release
+		// zero out anything on this page before release
+		memset((void *)addr, 0, PAGE_SIZE); 
 		mman_release_page(cos_spd_id(), addr, dest_spd);
 	}
 
@@ -2396,9 +2410,9 @@ sched_reboot(int arg)
 		}
 	}
 	
-	printc("<<<Core %ld, recovery thread %d returns...>>>\n", 
-	       cos_cpuid(), cos_get_thd_id());
-
+	printc("<<<Core %ld, recovery thread %d reflection in spd %ld done..>>>\n\n\n", 
+	       cos_cpuid(), cos_get_thd_id(), cos_spd_id());
+	
 	return 0;
 }
 
@@ -2421,7 +2435,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		}
 		break;
 	case COS_UPCALL_REBOOT:
-		printc("sched: cos_upcall here to reboot 2 (passed arg1 %d)\n", (int)arg1);
+		/* printc("sched: cos_upcall here to reboot 2 (passed arg1 %d)\n", (int)arg1); */
 		sched_reboot((int)arg1);
 		break;
 	case COS_UPCALL_DESTROY:
@@ -2460,4 +2474,4 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 
 // this is dummy function for export purpose
 // the reflection occurs over the server interface
-int sched_reflect(spdid_t spdid, int thdid, int cnt) { return 0; }
+int sched_reflect(spdid_t spdid) { return 0; }
