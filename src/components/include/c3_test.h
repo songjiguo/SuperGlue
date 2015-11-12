@@ -134,8 +134,8 @@
 #define MM_C3            // enable upcall to each client to recover the pages
 
 /* #define TEST_MM_GET_PAGE */
-/* #define TEST_MM_ALIAS_PAGE */
-#define TEST_MM_REVOKE_PAGE
+#define TEST_MM_ALIAS_PAGE
+/* #define TEST_MM_REVOKE_PAGE */
 
 /* #define BENCHMARK_MEAS_INV_OVERHEAD_MM */
 

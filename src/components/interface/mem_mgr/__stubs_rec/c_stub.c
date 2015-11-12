@@ -49,12 +49,14 @@ struct rec_data_mm {
 	struct rec_data_mm *next, *prev;
 };
 
-/* recovery data structure for subtree tracking of a parent (root id) */
+/* recovery data structure for subtree tracking */
 struct parent_rec_data_mm {
 	spdid_t spdid;
 	vaddr_t addr;
 	int	flags;
 	struct rec_data_mm *head;
+
+	struct parent_rec_data_mm *next, *prev;
 };
 
 /* the state of a page object */
@@ -68,7 +70,6 @@ enum {
 /* slab allocator and cvect for tracking pages */
 /**********************************************/
 CVECT_CREATE_STATIC(parent_rec_mm_vect);
-/* cvect_t *parent_rec_mm_vect; */
 CSLAB_CREATE(parent_rdmm, sizeof(struct parent_rec_data_mm));
 
 static struct parent_rec_data_mm *
@@ -105,7 +106,6 @@ parent_rdmm_dealloc(struct parent_rec_data_mm *rd)
 	return;
 }
 
-/* cvect_t *rec_mm_vect; */
 CVECT_CREATE_STATIC(rec_mm_vect);
 CSLAB_CREATE(rdmm, sizeof(struct rec_data_mm));
 
@@ -184,14 +184,17 @@ parent_rd_cons(struct rec_data_mm *rd, vaddr_t s_addr)
 	assert(rd && s_addr);
 
 	struct parent_rec_data_mm *parent_rd = NULL;
+
 	parent_rd  = parent_rdmm_lookup(s_addr);
 	if (!parent_rd) {
 		parent_rd = parent_rdmm_alloc(s_addr);
 		assert(parent_rd);
+		INIT_LIST(parent_rd, next, prev);
 		printc("in spd %ld a rd is added as the head of (s_addr %p)\n", 
 		       cos_spd_id(), s_addr);
 		print_rd_info(rd);
 		parent_rd->head = rd;
+		parent_rd->spdid = cos_spd_id();
 	} else {
 		assert(parent_rd && parent_rd->head);
 		printc("in spd %ld a rd is added to the list of (s_addr %p)\n", 
@@ -237,7 +240,6 @@ done:
 static int
 rd_recover_child(struct rec_data_mm *rd)
 {
-	spdid_t d_spd;
 	int flags;
 	long ret;
 
@@ -249,13 +251,32 @@ rd_recover_child(struct rec_data_mm *rd)
 	ret = __mman_alias_page_exist(rd->s_spd, rd->s_addr, rd->d_spd_flags, rd->d_addr);
 	if (ret > 0 && ret != (long)rd->d_addr) assert(0);
 	
-	d_spd = rd->d_spd_flags >> 16;
-	if (d_spd != cos_spd_id()) {
-		valloc_upcall(d_spd, rd->d_addr, REC_SUBTREE);
-	}
-	
 	return 0;
 }
+
+/* This is a ok solution for now. Here is the reason -- a page can be
+ * aliased arbitrary depth, and to arbitrary components. When revoke
+ * all aliased pages might be re-aliased again, if they have not been
+ * done so. However, the recovery thread can upcall but not return to
+ * where it comes from. After recovers one child with the depth
+ * greater then 1, it is difficult for the upcall thread to go back
+ * and continue recovering the rest siblings (and their children,
+ * DFS/BFS). When the depth is 1 (e.g., alias one), this is fine since
+ * the upcall recovery thread always falls back to the component that
+ * the root page lives in.  Therefore, there is a trade-off here --
+ * when the aliasing depth is less or equal to 1, we do what it does
+ * in this function. However, when the depth is greater than 1 and the
+ * upcall recovery thread makes another upcall, we simply recover all
+ * aliasing pages in that component (even for the non-children pages
+ * ). See boot_deps.h how upcall to a component and do all alias. 
+ * 
+ * The fundamental reason is that when the depth is greater than 1 and
+ * the recovery replies on the upcall thread, we loose the tracking of
+ * sibling pages and theirs aliases. This is ok solution since in most
+ * cases, we do not alias too many levels. -- a trade-off 
+
+ *  -- Jiguo
+*/
 
 static void
 rd_update_subtree(vaddr_t addr, int state)
@@ -263,26 +284,52 @@ rd_update_subtree(vaddr_t addr, int state)
 	struct rec_data_mm *head, *alias_rd;
 	struct parent_rec_data_mm *parent_rd;
 	vaddr_t s_addr;
-	
-	printc("thd %d: ready to replay subtree root......in spd %ld (addr %p)\n", 
-	       cos_get_thd_id(), cos_spd_id(), addr);
-	
-	/* no need, since child could recover the parent already */
-	rd_update(addr, state);
-	
-	/* There is no need to remove the entries from the list here,
-	 * since the revoke function on the normal path will remove
-	 * them anyway */
+	spdid_t d_spd;
+	long ret;
+
+	assert(addr);
 	parent_rd = parent_rdmm_lookup(addr);
-	if (parent_rd && (head = parent_rd->head)) {  // there is alias from this addr
-		rd_recover_child(head);
-		for (alias_rd = FIRST_LIST(head, next, prev) ; 
-		     alias_rd != head ; 
-		     alias_rd = FIRST_LIST(alias_rd, next, prev)) {
-			printc("interface recovery: replay alias alias_rd->d_addr %p\n",
-			       (void *)alias_rd->d_addr);
-			rd_recover_child(alias_rd);
+	if (!parent_rd) return;
+
+	/* replay */
+	printc("thd %d in spd %ld found parent addr %p\n", 
+	       cos_get_thd_id(), cos_spd_id(), addr);
+		
+	head = parent_rd->head;
+	assert(head);
+	for (alias_rd = FIRST_LIST(head, next, prev) ;
+	     alias_rd != head;
+	     alias_rd = FIRST_LIST(alias_rd, next, prev)) {
+		ret = __mman_alias_page_exist(alias_rd->s_spd, alias_rd->s_addr, 
+					      alias_rd->d_spd_flags, alias_rd->d_addr);
+		if (ret > 0 && ret != (long)alias_rd->d_addr) assert(0);
+	}
+	ret = __mman_alias_page_exist(head->s_spd, head->s_addr, 
+				      head->d_spd_flags, head->d_addr);
+	if (ret > 0 && ret != (long)head->d_addr) assert(0);
+
+	/* replay with upcall, if necessary */
+	while (!EMPTY_LIST(head, next, prev)) {
+		alias_rd = FIRST_LIST(head, next, prev);
+		assert(alias_rd);
+		REM_LIST(alias_rd, next, prev);
+		d_spd = alias_rd->d_spd_flags >> 16;
+		if (d_spd != cos_spd_id()) {
+			printc("thd %d in spd %ld valloc_upcall for addr %p\n", 
+			       cos_get_thd_id(), cos_spd_id(), alias_rd->d_addr);
+			valloc_upcall(d_spd, alias_rd->d_addr, REC_SUBTREE);
+		} else {
+			rd_update_subtree(alias_rd->d_addr, PAGE_STATE_ALIAS);
 		}
+	}
+	REM_LIST(head, next, prev);
+	d_spd = head->d_spd_flags >> 16;
+	if (d_spd != cos_spd_id()) {
+		printc("thd %d in spd %ld valloc_upcall for addr %p\n", 
+		       cos_get_thd_id(), cos_spd_id(), head->d_addr);
+		valloc_upcall(d_spd, head->d_addr, REC_SUBTREE);
+	} else {
+		rd_update_subtree(head->d_addr, PAGE_STATE_ALIAS);
 	}
 
 	printc("thd %d: replay subtree done......in spd spd %ld\n", 
@@ -307,6 +354,7 @@ rd_remove(vaddr_t addr)
 			/* printc("cli: remove alias %p\n", alias_rd->d_addr); */
 			REM_LIST(alias_rd, next, prev);
 		}
+		REM_LIST(parent_rd, next, prev);
 	}
 	return;
 }
@@ -320,11 +368,6 @@ mm_cli_if_recover_upcall_entry(vaddr_t addr)
 	printc("now we are going to recover addr %p (parent type)\n", addr);
 	assert(addr);
 	if (!(rdmm = rdmm_lookup(addr))) {
-		/* prdmm = parent_rdmm_lookup(addr); */
-                /* /\* a root page that is never aliased *\/ */
-		/* if (!prdmm) valloc_upcall(cos_spd_id(), addr); */
-		/* /\* if (!prdmm) goto done; *\/ */
-
 		/* This function is going to recreate the mapping for
 		 * the root page. Note that the root page must be in
 		 * the page table already (spdid, flags etc can be
@@ -348,6 +391,17 @@ mm_cli_if_recover_subtree_upcall_entry(vaddr_t addr)
 {
 	printc("now we are going to recover addr %p (subtree type)\n", addr);
 	return rd_update_subtree(addr, PAGE_STATE_ALIAS);
+}
+
+/* this is expensive and see the comment for trade-off */
+void 
+mm_cli_if_recover_all_alias_upcall_entry(vaddr_t addr)
+{
+	struct parent_rec_data_mm *parent_rd = NULL;
+
+	printc("now we are going to recover addr %p (all alias type, in spd %ld)\n", 
+	       addr, cos_spd_id());
+	rd_update_subtree(addr, PAGE_STATE_ALIAS);
 }
 /************************************/
 /******  client stub functions ******/
@@ -425,14 +479,12 @@ con:
 
 	
 	/* printc("cli: mman_alias_page 2 (in spd %ld, ret %p)\n", cos_spd_id(), ret); */
-	if (likely(!rdmm_lookup(d_addr))) {
-		rd = rdmm_alloc(d_addr);
-		assert(rd);
-		rd_cons(rd, s_spd, s_addr, d_spd_flags, d_addr, PAGE_STATE_ALIAS);
-
-		/* track sub tree here */
-		parent_rd_cons(rd, s_addr);
-	}
+	rd = rdmm_lookup(d_addr);
+	if (likely(!rd)) rd = rdmm_alloc(d_addr);
+	assert(rd);
+	rd_cons(rd, s_spd, s_addr, d_spd_flags, d_addr, PAGE_STATE_ALIAS);
+	/* track sub tree here */
+	parent_rd_cons(rd, s_addr);
 
 done:	
 	return ret;
@@ -484,7 +536,7 @@ con:
 	 * another component might not be removed explicitly through
 	 * the revoke functoin. So we do non remove the descriptors*/
 	
-	/* rd_remove(addr);*/
+	rd_remove(addr);
 
 	/* revoke does not reomve itself, only subtree. So the created
 	 * rd is not reomved here. release_page does.*/

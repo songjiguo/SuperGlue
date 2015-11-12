@@ -641,7 +641,7 @@ ___mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_a
 	/* 	       cos_get_thd_id(), cos_spd_id(), s_spd, d_spd, test_control++); */
 	/* } */
 
-	if (s_spd == 18 && cos_get_thd_id() == 13 && test_control++ == 1) {
+	if (s_spd == 18 && cos_get_thd_id() == 13 && test_control++ == 2) {
 		printc("trigger fault in mman_alias_page: thd %d spd %ld passed s_spd %d dest_spd %d\n", cos_get_thd_id(), cos_spd_id(), s_spd, d_spd);
 		assert(0);
 	}

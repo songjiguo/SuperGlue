@@ -435,14 +435,6 @@ test_mmpage()
 	/* 	       tmp_ret, cos_spd_id()); */
 	/* } */
 
-        /* warm up. Here is an issue -- we do not track booter since
-	 * there are too many. But valloc will call booter (cinfo) to
-	 * alias, if __valloc_init is never called before. So here we
-	 * pre warm up the valloc for ser3 (spd 19) */
-	valloc_alloc(cos_spd_id(), cos_spd_id(), 1); 
-	valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1); 
-	valloc_alloc(cos_spd_id(), cos_spd_id()+2, 1); 
-
 	printc("\n[[1]]\n");
 	/* s_addr[0] = (vaddr_t)cos_get_vas_page(); */
 	s_addr[0] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
@@ -484,9 +476,11 @@ meas:
 
 	ec3_ser2_test(d_addr[0]);  // 1 local alias in next component
 
-	printc("\n[[3]]\n");
 
-	ec3_ser2_test(d_addr[1]);  // 1 remote alias in next component
+	// assume we do not allow this for now
+	/* printc("\n[[3]]\n"); */
+	/* ec3_ser2_test(d_addr[1]);  // 1 remote alias in next component */
+
 
 	/* we allow mman_alias_page to do this for another component,
 	 * if change the s_stub.S */
@@ -499,7 +493,7 @@ meas:
 	/* while(1); */
 
 
-	printc("\n[[4]]\n");
+	printc("\n[[3]]\n");
 	/* d_addr[2] = ec3_ser2_test(0); */
 	d_addr[2] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+2, 1);
 	printc("ser1: 3rd returned addr %p\n", d_addr[2]);
@@ -507,7 +501,7 @@ meas:
 					 cos_spd_id()+2, d_addr[2], MAPPING_RW))
 		assert(0);
 
-	printc("\n[[4.5 get a page to revoke for testing ]]\n");
+	printc("\n[[4]] get a page to revoke for testing ]]\n");
 	s_addr[1] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
 	ret = mman_get_page(cos_spd_id(), s_addr[1], MAPPING_RW);
 	if (ret != s_addr[1]) assert(0);
@@ -523,16 +517,22 @@ meas:
 vaddr_t ec3_ser1_test(int low, int mid, int hig)
 {
 	if (cos_get_thd_id() == hig) {
+		/* warm up. Here is an issue -- we do not track booter since
+		 * there are too many. But valloc will call booter (cinfo) to
+		 * alias, if __valloc_init is never called before. So here we
+		 * pre warm up the valloc for ser3 (spd 19) */
+		valloc_alloc(cos_spd_id(), cos_spd_id(), 1); 
+		valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1); 
+		valloc_alloc(cos_spd_id(), cos_spd_id()+2, 1); 
+
 		printc("\n<< high thd %d is in MM testing... >>>\n",
 		       cos_get_thd_id());
 		
-		test_mmpage();
+		int i = 0;
+		while(i++ < 20) {
+			test_mmpage();
+		}
 
-		/* int i = 0; */
-		/* /\* while(i++ < 1000) { /\\* 80 x 10 x 4k  < 4M *\\/ *\/ */
-		/* while(i++ < 80) { /\* 80 x 10 x 4k  < 4M *\/ */
-		/* 	test_mmpage(); */
-		/* } */
 		printc("\n<< thd %d  MM testing done!... >>>\n\n",
 		       cos_get_thd_id());
 	}
@@ -568,7 +568,17 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n", 
 		       cos_get_thd_id(), arg1, t, cos_spd_id());
 #ifdef MM_C3
-		mm_cli_if_recover_subtree_upcall_entry((vaddr_t)arg1);
+		/* mm_cli_if_recover_subtree_upcall_entry((vaddr_t)arg1); */
+		mm_cli_if_recover_all_alias_upcall_entry((vaddr_t)arg1);
+#endif
+		break;
+	}
+	case COS_UPCALL_RECOVERY_ALL_ALIAS:
+	{
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover all alias\n", 
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+#ifdef MM_C3
+		mm_cli_if_recover_all_alias_upcall_entry((vaddr_t)arg1);
 #endif
 		break;
 	}

@@ -343,6 +343,7 @@ typedef enum {
 	COS_UPCALL_DESTROY,
 	COS_UPCALL_RECOVERY,	     /* for mm recovery */
 	COS_UPCALL_RECOVERY_SUBTREE, /* for mm recovery subtree */
+	COS_UPCALL_RECOVERY_ALL_ALIAS, /* for mm recovery subtree if depth > 1 */
 	COS_UPCALL_REBOOT,	     /* for sched recovery */
 	COS_UPCALL_RECEVT,	     /* for event recovery */
 	COS_UPCALL_HOMEAGAIN,	     /* for home component crashes */
