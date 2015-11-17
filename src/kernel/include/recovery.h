@@ -56,6 +56,8 @@ sched_thread_lookup(struct spd *spd, int thd_id, int operation, int hrt)
 			return thd->sched_info[cur_spd->sched_depth].thread_fn;
 		case COS_SCHED_INTRO_THD_D:
 			return thd->sched_info[cur_spd->sched_depth].thread_d;
+		case COS_SCHED_INTRO_TIMEOUT_THD:
+			return thd->sched_info[cur_spd->sched_depth].thread_timeout;
 		case COS_SCHED_INTRO_THD_PARAM:
 			return thd->sched_info[cur_spd->sched_depth].thread_param;
 			break;
@@ -131,6 +133,9 @@ sched_thread_add(struct spd *spd, int thd_id, int option, int operation, int hrt
 		case COS_SCHED_THD_PARAM:
 			thd->sched_info[spd->sched_depth].thread_param = option;
 			break;
+		case COS_SCHED_TIMEOUT_THD:
+			thd->sched_info[spd->sched_depth].thread_timeout = option;
+			break;
 		default:
 			assert(0);
 		}
@@ -167,6 +172,7 @@ sched_thread_remove(struct spd *spd, int thd_id)
 		thd->sched_info[spd->sched_depth].thread_d	= 0;
 		thd->sched_info[spd->sched_depth].thread_param	= 0;
 		thd->sched_info[spd->sched_depth].thread_hrt	= 0;
+		thd->sched_info[spd->sched_depth].thread_timeout= 0;
 	}
 	
 	return 0;

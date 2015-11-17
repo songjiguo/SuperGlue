@@ -40,6 +40,7 @@ vaddr_t __mman_alias_page_exist(spdid_t s_spd, vaddr_t s_addr,
 #ifdef MM_C3
 extern void mm_cli_if_recover_upcall_entry(vaddr_t addr);
 extern void mm_cli_if_recover_subtree_upcall_entry(vaddr_t addr);
+extern void mm_cli_if_remove_subtree_upcall_entry(vaddr_t addr);
 extern void mm_cli_if_recover_all_aias_upcall_entry(vaddr_t addr);
 #endif
 

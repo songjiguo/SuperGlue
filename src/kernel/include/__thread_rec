@@ -60,6 +60,7 @@ struct thd_sched_info {
 	int thread_d;
 	int thread_param;
 	int thread_hrt;
+	int thread_timeout;
 };
 
 #define THD_STATE_PREEMPTED     0x1   /* Complete register info is saved in regs */

@@ -15,4 +15,7 @@ int valloc_upcall(spdid_t spdid, vaddr_t addr, int upcall_type);
 #define REC_PARENT   0
 #define REC_SUBTREE  1
 
+// upcall type for remove
+#define REC_REMOVE 0
+
 #endif 	    /* !VALLOC_H */

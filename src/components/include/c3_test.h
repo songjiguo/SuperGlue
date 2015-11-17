@@ -104,14 +104,14 @@
 |___/\___|_| |_|\___|\__,_|
                            
 ****************************/
-#define EXAMINE_SCHED
+/* #define EXAMINE_SCHED */
 
 #ifdef EXAMINE_SCHED
 #define SCHED_C3
 
 /* #define TEST_SCHED_CREATE_THD */
 /* #define TEST_SCHED_CREATE_THD_DEFAULT */
-/* #define TEST_SCHED_WAKEUP */
+#define TEST_SCHED_WAKEUP
 /* #define TEST_SCHED_BLOCK */
 /* #define TEST_SCHED_COMPONENT_TAKE */
 /* #define TEST_SCHED_COMPONENT_RELEASE */
@@ -133,7 +133,7 @@
 | | | | | | | | | | |
 |_| |_| |_|_| |_| |_|
 ****************************/
-/* #define EXAMINE_MM */
+#define EXAMINE_MM
 
 #ifdef EXAMINE_MM
 #define MM_C3            // enable upcall to each client to recover the pages

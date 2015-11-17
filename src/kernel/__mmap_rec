@@ -89,7 +89,7 @@ int
 cos_add_root_info(int spdid, vaddr_t vaddr, unsigned long frame_id, short int flags)
 {	
 	/* if (spdid != 5) { */
-	/* 	printk("cos: root info added spd %d addr %p at frame %lu flags %d\n",  */
+	/* 	printk("cos: root info added spd %d addr %p at frame %lu flags %d\n", */
 	/* 	       spdid, vaddr, frame_id, flags); */
 	/* } */
 	cos_pages[frame_id].rt_spdid = spdid;

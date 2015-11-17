@@ -170,18 +170,23 @@ static int first = 1;
 vaddr_t ec3_ser2_test(vaddr_t addr)
 {
 	
-	vaddr_t local_addr1 = 0, local_addr2 = 0;
-	vaddr_t remote_addr1 = 0, remote_addr2 = 0;
+	vaddr_t local_addr = 0;
 
-	printc("\n\nspd %ld local aliasing (addr %p)\n\n", cos_spd_id(), addr);
+	/* printc("\n\nspd %ld local aliasing (addr %p)\n\n", cos_spd_id(), addr); */
 
-	local_addr1 = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
-	if (local_addr1 != mman_alias_page(cos_spd_id(), addr,
-					   cos_spd_id(), local_addr1, MAPPING_RW))
+	local_addr = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
+	if (local_addr != mman_alias_page(cos_spd_id(), addr,
+					  cos_spd_id(), local_addr, MAPPING_RW))
 		assert(0);
-	local_addr2 = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
-	if (local_addr2 != mman_alias_page(cos_spd_id(), addr,
-					   cos_spd_id(), local_addr2, MAPPING_RW))
+
+	local_addr = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
+	if (local_addr != mman_alias_page(cos_spd_id(), addr,
+					  cos_spd_id(), local_addr, MAPPING_RW))
+		assert(0);
+
+	local_addr = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
+	if (local_addr != mman_alias_page(cos_spd_id(), addr,
+					  cos_spd_id(), local_addr, MAPPING_RW))
 		assert(0);
 
 	/* if (first) { */
@@ -209,7 +214,7 @@ vaddr_t ec3_ser2_test(vaddr_t addr)
 	/* 		assert(0); */
 	/* } */
 	
-	return local_addr1;
+	return local_addr;
 
 /* } */
 /* 	printc("5\n"); */
@@ -252,8 +257,8 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	}
 	case COS_UPCALL_RECOVERY:
 	{
-		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n", 
-		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",  */
+		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
 #ifdef MM_C3
 		mm_cli_if_recover_upcall_entry((vaddr_t)arg1);
 #endif
@@ -261,11 +266,19 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	}
 	case COS_UPCALL_RECOVERY_SUBTREE:
 	{
-		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n", 
-		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n",  */
+		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
 #ifdef MM_C3
-		/* mm_cli_if_recover_subtree_upcall_entry((vaddr_t)arg1); */
-		mm_cli_if_recover_all_alias_upcall_entry((vaddr_t)arg1);
+		mm_cli_if_recover_subtree_upcall_entry((vaddr_t)arg1);
+#endif
+		break;
+	}
+	case COS_UPCALL_REMOVE_SUBTREE:
+	{
+		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to remove subtree\n",  */
+		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
+#ifdef MM_C3
+		mm_cli_if_remove_subtree_upcall_entry((vaddr_t)arg1);
 #endif
 		break;
 	}

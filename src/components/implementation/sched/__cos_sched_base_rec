@@ -751,7 +751,7 @@ void sched_timeout(spdid_t spdid, unsigned long amnt)
 	}
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_TIMEOUT)
-	printc("trigger fault in sched_timeout: thd %d spd %ld passed spd %d (num %d)\n",
+	printc("sched_timeout: thd %d spd %ld passed spd %d (num %d)\n",
 	       cos_get_thd_id(), cos_spd_id(), spdid, test_control++);
 	/* if (spdid == 11 && cos_get_thd_id() == 13 && test_control++ == 1) { */
 	/* 	printc("trigger fault in sched_timeout: thd %d spd %ld passed spd %d\n", */
@@ -802,6 +802,8 @@ int sched_timeout_thd(spdid_t spdid)
 		return -1;
 	}
 	PERCPU_GET(sched_base_state)->wakeup_thd = thd;
+
+	cos_sched_cntl(COS_SCHED_TIMEOUT_THD, cos_get_thd_id(), 1); // set to timeout
 
 	cos_sched_lock_release();
 	return 0;
@@ -865,7 +867,10 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	
 	WAIT_FAULT();
 
+
+        /* lock take start */
 	cos_sched_lock_take();
+        /* lock take end */
 
 	thd = sched_get_mapping(thd_id);
 	if (!thd) goto error;
@@ -927,7 +932,9 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 done:
 	return 0;
 cleanup:
+        /* lock release start */
 	cos_sched_lock_release();
+        /* lock release end */
 	goto done;
 error:
 	cos_sched_lock_release();
@@ -1378,6 +1385,8 @@ static struct sched_thd *__sched_setup_thread_arg(int dest_spd_id, void *metric_
 		cos_sched_cntl(COS_SCHED_THD_FN, new->id, (int)fn);
 		cos_sched_cntl(COS_SCHED_THD_D, new->id, (int)d);
 		cos_sched_cntl(COS_SCHED_THD_PARAM, new->id, param);	
+		cos_sched_cntl(COS_SCHED_THD_PARAM, new->id, param);
+		cos_sched_cntl(COS_SCHED_TIMEOUT_THD, new->id, 0); // default - not timeout
 	}
 #endif
 	
@@ -2320,7 +2329,7 @@ sched_reboot(int arg)
 		assert(0);
 	}
 	
-	int thd_id, thd_nums, type, dest, metric, fn, d, param;
+	int thd_id, thd_nums, type, dest, metric, fn, d, param, timeout;
 	thd_id = cos_sched_introspect(COS_SCHED_INTRO_THD_FIRST, 0, 0);
 	while(thd_id) {
 		printc("found a thread... %d recorded\n", thd_id);
@@ -2331,6 +2340,7 @@ sched_reboot(int arg)
 		fn     = cos_sched_introspect(COS_SCHED_INTRO_THD_FN, 0, thd_id);
 		d      = cos_sched_introspect(COS_SCHED_INTRO_THD_D, 0, thd_id);
 		param  = cos_sched_introspect(COS_SCHED_INTRO_THD_PARAM, 0, thd_id);
+		timeout= cos_sched_introspect(COS_SCHED_INTRO_TIMEOUT_THD, 0, thd_id);
 		printc("recovery sched: found dest %d fn %d d %d param %d metric %p\n", 
 		       dest, fn, d, param, metric);
 		
@@ -2348,6 +2358,10 @@ sched_reboot(int arg)
 		rec_thd->cpuid = cos_cpuid();
 		sched_set_thd_core(rec_thd->id, cos_cpuid());
 		if (param) thread_param_set(rec_thd,  &tmp);
+		if (timeout) {
+			printc("found a timeout thread %d and set it\n", rec_thd->id);
+			PERCPU_GET(sched_base_state)->wakeup_thd = rec_thd;
+		}
 
 		switch (tmp.type) {
 		case SCHEDP_IDLE:

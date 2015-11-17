@@ -137,7 +137,7 @@ rd_update(int thd, int target_thd, int state)
 	if (likely(rd->fcnt == global_fault_cnt)) goto done;
 	rd->fcnt = global_fault_cnt;
 	
-	if (cos_get_thd_id() == timer_thread) sched_timeout_thd(cos_spd_id());
+	/* if (cos_get_thd_id() == timer_thread) sched_timeout_thd(cos_spd_id()); */
 
 	/* printc("State Machine thd %d in spd %ld -- ", cos_get_thd_id(), cos_spd_id()); */
 	/* /\* STATE MACHINE *\/ */
@@ -425,7 +425,7 @@ redo:
 		goto redo;
 	}
 
-	timer_thread = cos_get_thd_id();
+	/* timer_thread = cos_get_thd_id(); */
 
 	return ret;
 }

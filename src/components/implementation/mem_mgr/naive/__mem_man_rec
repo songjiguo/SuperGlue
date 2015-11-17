@@ -147,7 +147,7 @@ extern struct cos_component_information cos_comp_info;
 static inline void
 mm_init(void)
 {
-	printc("core %ld: mm init as thread %d\n", cos_cpuid(), cos_get_thd_id());
+	/* printc("core %ld: mm init as thread %d\n", cos_cpuid(), cos_get_thd_id()); */
 
 	/* /\* Expanding VAS. *\/ */
 	/* printc("mm expanding %lu MBs @ %p\n", (NREGIONS-1) * round_up_to_pgd_page(1) / 1024 / 1024,  */
@@ -392,7 +392,7 @@ mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, vaddr_t to, int fl
 
 	/* no vas structure for this spd yet... */
 	if (!cv) {
-		printc("mapping_crt: cvas_alloc for spd %d\n", dest);
+		/* printc("mapping_crt: cvas_alloc for spd %d\n", dest); */
 		cv = cvas_alloc(dest);
 		if (!cv) goto done;
 		assert(cv == cvas_lookup(dest));
@@ -419,7 +419,7 @@ mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, vaddr_t to, int fl
 	/* only add to the page table if not exist */
 	if (!exist) {
 		int tmp = cos_mmap_cntl(COS_MMAP_GRANT, flags, dest, to, frame_index(f));
-		if (tmp && tmp != -1) {
+		if (tmp && tmp != -1) {  // -1 means the entry is already in the table
 			printc("mem_man: could not grant at %x:%p (ret %d)\n", dest, to, tmp);
 			goto no_mapping;
 		}
@@ -486,11 +486,9 @@ done:
 	/* if (m->spdid == 17 || m->spdid == 18 || m->spdid == 19) { */
 	/* 	printc("mapping_destroy -- "); */
 	/* 	print_mapping(m); */
-	/* 	printc("idx %d frame_index(m->f) %d\n",  */
+	/* 	printc("idx %d frame_index(m->f) %d\n", */
 	/* 	       idx, frame_index(m->f)); */
 	/* } */
-
-
 	assert(idx == frame_index(m->f));
 	frame_deref(m->f);
 	cslab_free_mapping(m);
@@ -547,13 +545,20 @@ __mman_get_page(spdid_t spd, vaddr_t addr, int flags, int exist)
 
 	if (unlikely(exist)) {
 		int fidx = cos_mmap_introspect(COS_MMAP_INTROSPECT_FRAME, 0, spd, addr, 0);
-		printc("MMAP_INTROSPECT_FRAME ret %d\n",fidx);
+		/* printc("MMAP_INTROSPECT_FRAME ret %d\n",fidx); */
 		f = frame_alloc_index(fidx);
 		if (!f) goto done; 	/* -ENOMEM */
-		printc("frame_allo_index ret %d\n", frame_index(f));
+		/* printc("frame_allo_index ret %d\n", frame_index(f)); */
 		assert(frame_nrefs(f) == 0);
 		m = mapping_crt(NULL, f, spd, addr, flags, exist);
 	} else {
+		/* if (cos_mmap_introspect(COS_MMAP_INTROSPECT_ROOTPAGE,  */
+		/* 			flags, spd, addr, 0)){ */
+		/* 	printc("!!!! this is a root page already in the pgtbl\n"); */
+		/* 	ret = -ECHILD;   // error and addr is in the pgtbl already */
+		/* 	goto done; */
+		/* } */
+
 		f = frame_alloc();
 		if (!f) goto done; 	/* -ENOMEM */
 		assert(frame_nrefs(f) == 0);
@@ -562,7 +567,7 @@ __mman_get_page(spdid_t spd, vaddr_t addr, int flags, int exist)
 	
 	
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MM_GET_PAGE)
-	if (spd == 17 && cos_get_thd_id() == 13 && test_control++ >= 3) {
+	if (spd == 17 && cos_get_thd_id() == 13 && test_control++ >= 4) {
 		printc("trigger fault in mman_get_page: thd %d from spd %d addr %p\n",
 		       cos_get_thd_id(), spd, addr);
 		assert(0);
@@ -619,18 +624,26 @@ ___mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_a
 /* 	if (cos_get_thd_id() == 13) return ret; */
 /* #endif */
 
-	if (s_spd != 5) {
-		printc("__mman_alias_page: s_spd %d s_addr %p d_spd %d d_addr %p\n",
-		       s_spd, s_addr, d_spd, d_addr);
-	}
+	/* if (s_spd != 5) { */
+	/* 	printc("__mman_alias_page: s_spd %d s_addr %p d_spd %d d_addr %p\n", */
+	/* 	       s_spd, s_addr, d_spd, d_addr); */
+	/* } */
 		
 	LOCK();
 
 	m = mapping_lookup(s_spd, s_addr);
 	if (unlikely(!m)) {
-		printc("__mman_alias_page: can not find mapping for s_spd %d s_addr %p\n",
-		       s_spd, s_addr);
-		ret = -EINVAL;
+		/* printc("__mman_alias_page: can not find mapping for s_spd %d s_addr %p\n", */
+		/*        s_spd, s_addr); */
+		/* printc("__mman_alias_page: now introspect root page (flags %d)\n", */
+		/*        flags); */
+		if (cos_mmap_introspect(COS_MMAP_INTROSPECT_ROOTPAGE, 
+					flags, s_spd, s_addr, 0)){
+			/* printc("!!!! this is a root page\n"); */
+			ret = -ECHILD;   // error and s_addr is the root page
+		} else {
+			ret = -EINVAL;
+		}
 		goto done;
 	}
 	assert(m && m->f);
@@ -654,6 +667,14 @@ ___mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_a
 	assert(n->spdid == d_spd);
 	assert(n->p     == m);
 	ret = d_addr;
+
+	/* if (n->spdid == 17 || n->spdid == 18 || n->spdid == 19) { */
+	/* 	printc("mapping_aias -- m"); */
+	/* 	print_mapping(m); */
+	/* 	printc("frame_index(m->f) %d\n", frame_index(m->f)); */
+	/* 	printc("frame_index(n->f) %d\n", frame_index(n->f)); */
+	/* } */
+
 done:
 	UNLOCK();
 	/* printc("in alias function.....return %p\n", ret); */
@@ -918,7 +939,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		*PERCPU_GET(initialized_core) = 1;
 		break;
 	case COS_UPCALL_REBOOT:
-		printc("mm: cos_upcall here to reboot 2 (passed arg1 %d)\n", (int)arg1);
+		/* printc("mm: cos_upcall here to reboot 2 (passed arg1 %d)\n", (int)arg1); */
 		mm_init();
 		
 		/* Jiguo: here is the situation 1) we need reserve

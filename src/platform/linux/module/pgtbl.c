@@ -63,7 +63,7 @@ chal_pgtbl_add(paddr_t pgtbl, vaddr_t vaddr, paddr_t paddr, int flags)
 
 	if (flags == MAPPING_RW) kflags |= _PAGE_RW;
 	if (!pte) printk("entry is not even there\n");
-	if (pte_val(*pte) & _PAGE_PRESENT) printk("entry already exist\n");
+	/* if (pte_val(*pte) & _PAGE_PRESENT) printk("entry already exist\n"); */
 	if (!pte || pte_val(*pte) & _PAGE_PRESENT) return -1;
 	pte->pte_low = ((unsigned long)paddr) | kflags;
 

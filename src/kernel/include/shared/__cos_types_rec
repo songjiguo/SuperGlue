@@ -343,6 +343,7 @@ typedef enum {
 	COS_UPCALL_DESTROY,
 	COS_UPCALL_RECOVERY,	     /* for mm recovery */
 	COS_UPCALL_RECOVERY_SUBTREE, /* for mm recovery subtree */
+	COS_UPCALL_REMOVE_SUBTREE,   /* for mm remove subtree */
 	COS_UPCALL_RECOVERY_ALL_ALIAS, /* for mm recovery subtree if depth > 1 */
 	COS_UPCALL_REBOOT,	     /* for sched recovery */
 	COS_UPCALL_RECEVT,	     /* for event recovery */
@@ -471,6 +472,7 @@ enum {
 	COS_SCHED_THD_REMOVE,   // clear all tracking info for a thread
 	COS_SCHED_THD_RESET_UPCALL,  // reset IPI handler or timer upcall state
 	COS_SCHED_THD_RESET_FAULTCNT,  // reset thread's fault cnt
+	COS_SCHED_TIMEOUT_THD,   // record any thread that registers itself as the timeout
 	COS_SCHED_BES_THD        
 };
 
@@ -485,6 +487,7 @@ enum {
 	COS_SCHED_INTRO_THD_FN,
 	COS_SCHED_INTRO_THD_D,
 	COS_SCHED_INTRO_THD_PARAM,
+	COS_SCHED_INTRO_TIMEOUT_THD,
 	/* for best effort threads */
 	COS_SCHED_BES_THD_EXIST,
 	COS_SCHED_BES_THD_GET,
@@ -627,6 +630,7 @@ enum {
 	COS_MMAP_INTROSPECT_ADDR,
 	COS_MMAP_INTROSPECT_SPD,
 	COS_MMAP_INTROSPECT_FLAGS,
+	COS_MMAP_INTROSPECT_ROOTPAGE,
 	COS_MMAP_RESET_MM_FRAME,       // Jiguo: free the allocated frame for mm itself
 	COS_MMAP_INTROSPECT_FRAME
 };

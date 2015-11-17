@@ -475,15 +475,15 @@ test_mmpage()
 	/* 	       tmp_ret, cos_spd_id()); */
 	/* } */
 
-	printc("\n[[1]]\n");
+	/* printc("\n[[1]]\n"); */
 	/* s_addr[0] = (vaddr_t)cos_get_vas_page(); */
 	s_addr[0] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
 	vaddr_t ret = mman_get_page(cos_spd_id(), s_addr[0], MAPPING_RW);
 	if (ret != s_addr[0]) assert(0);
-	printc("\n[[[ser1: root returned addr %p]]]\n\n", s_addr[0]);
+	/* printc("\n[[[ser1: root returned addr %p]]]\n\n", s_addr[0]); */
 	
 	d_addr[0] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1);
-	printc("ser1: 1st returned addr %p\n", d_addr[0]);
+	/* printc("ser1: 1st returned addr %p\n", d_addr[0]); */
 	
 #ifdef BENCHMARK_MEAS_INV_OVERHEAD_MM
 	unsigned long long infra_overhead_start;
@@ -506,15 +506,15 @@ meas:
 #endif
 
 	d_addr[1] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1);
-	printc("ser1: 2nd returned addr %p\n", d_addr[1]);
+	/* printc("ser1: 2nd returned addr %p\n", d_addr[1]); */
 	if (d_addr[1] != mman_alias_page(cos_spd_id(), s_addr[0], 
 					 cos_spd_id()+1, d_addr[1], MAPPING_RW))
 		assert(0);
 
 
-	printc("\n[[2]]\n");
+	/* printc("\n[[2]]\n"); */
 
-	ec3_ser2_test(d_addr[0]);  // 1 local alias in next component
+	ec3_ser2_test(d_addr[0]);  // local alias in next component
 
 
 	// assume we do not allow this for now
@@ -533,23 +533,23 @@ meas:
 	/* while(1); */
 
 
-	printc("\n[[3]]\n");
+	/* printc("\n[[3]]\n"); */
 	/* d_addr[2] = ec3_ser2_test(0); */
 	d_addr[2] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+2, 1);
-	printc("ser1: 3rd returned addr %p\n", d_addr[2]);
+	/* printc("ser1: 3rd returned addr %p\n", d_addr[2]); */
 	if (d_addr[2] != mman_alias_page(cos_spd_id(), s_addr[0], 
 					 cos_spd_id()+2, d_addr[2], MAPPING_RW))
 		assert(0);
 
-	printc("\n[[4]] get a page to revoke for testing ]]\n");
+	/* printc("\n[[4]] get a page to revoke for testing ]]\n"); */
 	s_addr[1] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
 	ret = mman_get_page(cos_spd_id(), s_addr[1], MAPPING_RW);
 	if (ret != s_addr[1]) assert(0);
-	if (mman_revoke_page(cos_spd_id(), s_addr[1], 0)) assert(0);
+	mman_revoke_page(cos_spd_id(), s_addr[1], MAPPING_RW);
 
-	printc("\n[[5]]\n");
-	printc("ser1: revoking page %p\n", s_addr[0]);
-	if (mman_revoke_page(cos_spd_id(), s_addr[0], 0)) assert(0);
+	/* printc("\n[[5]]\n"); */
+	/* printc("ser1: revoking page %p\n", s_addr[0]); */
+	if (mman_revoke_page(cos_spd_id(), s_addr[0], MAPPING_RW)) assert(0);
 
 	return;
 }
@@ -596,8 +596,8 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	}
 	case COS_UPCALL_RECOVERY:
 	{
-		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n", 
-		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",  */
+		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
 #ifdef MM_C3
 		mm_cli_if_recover_upcall_entry((vaddr_t)arg1);
 #endif
@@ -605,18 +605,26 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	}
 	case COS_UPCALL_RECOVERY_SUBTREE:
 	{
-		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n", 
-		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n",  */
+		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
 #ifdef MM_C3
-		/* mm_cli_if_recover_subtree_upcall_entry((vaddr_t)arg1); */
-		mm_cli_if_recover_all_alias_upcall_entry((vaddr_t)arg1);
+		mm_cli_if_recover_subtree_upcall_entry((vaddr_t)arg1);
+#endif
+		break;
+	}
+	case COS_UPCALL_REMOVE_SUBTREE:
+	{
+		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to remove subtree\n",  */
+		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
+#ifdef MM_C3
+		mm_cli_if_remove_subtree_upcall_entry((vaddr_t)arg1);
 #endif
 		break;
 	}
 	case COS_UPCALL_RECOVERY_ALL_ALIAS:
 	{
-		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover all alias\n", 
-		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover all alias\n",  */
+		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
 #ifdef MM_C3
 		mm_cli_if_recover_all_alias_upcall_entry((vaddr_t)arg1);
 #endif
