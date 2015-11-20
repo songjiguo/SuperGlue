@@ -238,7 +238,7 @@ static inline void* REGPARM(1) __small_malloc(size_t _size) {
 	__alloc_t *ptr, *next;
 	size_t size=_size;
 	size_t idx;
-
+	
 	idx=get_index(size);
 	do {
 		ptr=__small_mem[idx];

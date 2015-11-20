@@ -137,12 +137,12 @@ rd_update(unsigned int id, int state)
 		assert(0);  
 		break;
 	case PTE_WAIT:
-		/* printc("in rd_update (state %d) needs recreate pte thread by thd %d\n",  */
-		/*        state, cos_get_thd_id()); */
-		/* printc("rd->period %d rd->creation_ticks %d\n",  */
-		/*        rd->period, rd->creation_ticks); */
+		printc("in rd_update (state %d) needs recreate pte thread by thd %d\n",
+		       state, cos_get_thd_id());
+		printc("rd->period %d rd->creation_ticks %d\n",
+		       rd->period, rd->creation_ticks);
 		assert(rd->state == PTE_CREATED);
-		c3_periodic_wake_create(cos_spd_id(), rd->period, rd->creation_ticks);
+		periodic_wake_create_exist(cos_spd_id(), rd->period);
 		break;
 	default:
 		// now only allow above two state
@@ -176,29 +176,29 @@ extern int sched_reflection_component_owner(spdid_t spdid);
 /*          API functions         */
 /**********************************/
 
-CSTUB_FN(int, c3_periodic_wake_create)(struct usr_inv_cap *uc,
-				       spdid_t spdid, unsigned int period, unsigned int ticks)
-{
-	int ret;
-	long fault = 0;
-redo:
-	/* printc("cli: __periodic_wake_create (thd %d ticks %d period %d) for recovery\n", */
-	/*        cos_get_thd_id(), ticks, period); */
+/* CSTUB_FN(int, c3_periodic_wake_create)(struct usr_inv_cap *uc, */
+/* 				       spdid_t spdid, unsigned int period, unsigned int ticks) */
+/* { */
+/* 	int ret; */
+/* 	long fault = 0; */
+/* redo: */
+/* 	printc("cli: __periodic_wake_create (thd %d ticks %d period %d) for recovery\n", */
+/* 	       cos_get_thd_id(), ticks, period); */
 	
-	CSTUB_INVOKE(ret, fault, uc, 3, spdid, period, ticks);
-	if (unlikely (fault)){
+/* 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, period, ticks); */
+/* 	if (unlikely (fault)){ */
 		
-		CSTUB_FAULT_UPDATE();
+/* 		CSTUB_FAULT_UPDATE(); */
 
-		assert(0);   // normally this should not expect another fault
-		goto redo;
-	}
+/* 		assert(0);   // normally this should not expect another fault */
+/* 		goto redo; */
+/* 	} */
 
-	assert(ret >= 0);
-	/* printc("cli: __periodic_wake_create -- in spd %ld period %d \n", cos_spd_id(), period); */
+/* 	assert(ret >= 0); */
+/* 	printc("cli: __periodic_wake_create -- in spd %ld period %d \n", cos_spd_id(), period); */
 	
-	return ret;
-}
+/* 	return ret; */
+/* } */
 
 CSTUB_FN(int, periodic_wake_create)(struct usr_inv_cap *uc,
 				    spdid_t spdid, unsigned int period)
@@ -245,7 +245,7 @@ redo:
 		goto redo;
 	}
 
-	assert(ret > 0);
+	/* assert(ret > 0); */
 	/* printc("cli: periodic_wake_create -- in spd %ld ticks %d period %d \n",  */
 	/*        cos_spd_id(), ret, period); */
 
@@ -271,7 +271,7 @@ CSTUB_FN(int, periodic_wake_wait)(struct usr_inv_cap *uc,
 	long fault = 0;
 	struct rec_data_pte *rd = NULL;
 redo:
-	/* printc("cli: periodic_wake_wait (thd %d)\n", cos_get_thd_id()); */
+	printc("cli: periodic_wake_wait (thd %d)\n", cos_get_thd_id());
         rd = rd_update(cos_get_thd_id(), PTE_WAIT);
 	assert(rd);
 
@@ -288,17 +288,17 @@ redo:
 	CSTUB_INVOKE(ret, fault, uc, 1, spdid);
 	if (unlikely (fault)){
 
-		/* printc("see a fault during periodic_wake_wait (thd %d in spd %ld)\n", */
-		/*        cos_get_thd_id(), cos_spd_id()); */
+		printc("see a fault during periodic_wake_wait (thd %d in spd %ld)\n",
+		       cos_get_thd_id(), cos_spd_id());
 
 #ifdef BENCHMARK_MEAS_WAIT
 		meas_flag = 1;
 		/* printc("start measuring.....(thd %d)\n", cos_get_thd_id()); */
 		rdtscll(meas_start);
 #endif		
-
+		
 		CSTUB_FAULT_UPDATE();
-
+		
 		/* int dest = cap_to_dest(uc->cap_no); */
 		/* int tmp_owner = sched_reflection_component_owner(dest); */
 		/* /\* printc("found a fault in periodic_wake_wait, owner is %d (curr %d)\n",  *\/ */

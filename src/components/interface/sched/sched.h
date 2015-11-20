@@ -29,7 +29,8 @@ int sched_component_release(spdid_t spdid);
 /* to reflect the owner of a critical section -- Jiguo */
 int sched_reflection_component_owner(spdid_t spdid);
 
-int sched_reflect(spdid_t spdid);
+int sched_reflection(spdid_t spdid);
+unsigned long sched_get_creation_timestamp(void);
 
 #include "cos_thd_creation.h"
 

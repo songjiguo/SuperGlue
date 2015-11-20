@@ -29,7 +29,7 @@ int evt_set_prio(spdid_t spdid, long extern_evt, int prio);
 unsigned long *evt_stats(spdid_t spdid, unsigned long *stats);
 int evt_stats_len(spdid_t spdid);
 
-int evt_reflect(spdid_t spdid);
+int evt_reflection(spdid_t spdid);
 int evt_upcall_creator(spdid_t spdid, int evtid);
 long evt_split_exist(spdid_t spdid, long parent_evt, int grp, int existing_id);
 

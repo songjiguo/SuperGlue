@@ -17,6 +17,9 @@
 #include <cos_vect.h>
 #include <cos_alloc.h>
 
+#include <mem_mgr_large.h>
+#include <valloc.h>
+
 #include <c3_test.h>
 
 #include <pgfault.h>
@@ -37,7 +40,9 @@ unsigned int swifi_ready = 0;  // explicitly initialize to 0
 #include <sys/param.h> 		/* MIN/MAX */
 #include <res_spec.h> /* For creating timer thread */
 /* Lets save some typing... */
-#define TAKE(spdid) 	if (sched_component_take(spdid)) return -1;
+#define TAKE(spdid)							\
+	if (sched_component_take(spdid)) return -1;			\
+
 #define RELEASE(spdid)	if (sched_component_release(spdid)) return -1;
 
 static int test_num = 0;
@@ -86,7 +91,9 @@ static struct thread_event *__te_get(unsigned short int tid, cos_vect_t *v)
 
 	te = cos_vect_lookup(v, tid);
 	if (NULL == te) {
+		/* printc("malloc 1\n"); */
 		te = malloc(sizeof(struct thread_event));
+		/* printc("malloc 2\n"); */
 		if (NULL == te) return NULL;
 		memset(te, 0, sizeof(struct thread_event));
 		te->thread_id = tid;
@@ -549,16 +556,16 @@ int periodic_wake_get_period(unsigned short int tid)
  * is created. C3 needs to remember when the pte thread is created and
  * synchronize the thread with the original period. Assume all pte
  * threads are created in the first 2^32-1 ticks  */
-static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned int c3_ticks)
+static int __periodic_wake_create(spdid_t spdinv, unsigned int period, int exist)
 {
-	/* printc("thd %d calling period_wake_create\n", cos_get_thd_id()); */
+	printc("thd %d calling period_wake_create\n", cos_get_thd_id());
 
 	struct thread_event *te;
 	unsigned short int tid = cos_get_thd_id();
 	spdid_t spdid = cos_spd_id();
 	event_time_t n, t;
 	long evt;
-	int ret = 0;
+	/* int ret = 0; */
 
 	if (period < 1) return -1;
 
@@ -572,7 +579,7 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 	assert(EMPTY_LIST(te, next, prev));
 	te->flags |= TE_PERIODIC;
 	te->period = period;
-
+	
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_CREATE_BEFORE)
 	/* printc("in periodic_wake_create: thd %d spd %d\n",  */
 	/*        cos_get_thd_id(), spdinv);		 */
@@ -590,20 +597,26 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 	assert(evt > 0);
 	te->evt = evt;
 	
+	unsigned long creation_ticks;
+	if (unlikely(exist)) {
+		creation_ticks  = sched_get_creation_timestamp();
+		printc("creation timestamp is %lu\n", creation_ticks);
+	}
+
 	ticks = sched_timestamp();
-	ret   = ticks;   // Jiguo: see above assumption. This is only tracked once
-	if (likely(!c3_ticks)) {
+
+	/* ret   = ticks;   // Jiguo: see above assumption. This is only tracked once */
+
+	if (likely(!exist)) {
 		te->event_expiration = n = ticks + period;
-		/* printc("normal event_expiration %d\n", te->event_expiration); */
 	} else {
-		/* printc("ticks info: c3_ticks %d, period %d ticks %d\n", c3_ticks, period, ticks); */
-		/* printc("(ticks - c3_ticks) mode period %d", (ticks - c3_ticks)%period); */
-		te->event_expiration = n = c3_ticks + period*((ticks - c3_ticks)/period + 1);
-		/* printc("rounded up event_expiration %d\n", te->event_expiration); */
+		te->event_expiration = n = creation_ticks + 
+			period*((ticks - creation_ticks)/period + 1);
 	}
 
 	assert(n > ticks);
-	/* printc("ticks %llu period %d\n", ticks, period); */
+	printc("ticks %llu period %d expire %llu\n", 
+	       ticks, period, te->event_expiration);
 
 	t = next_event_time();
 	assert(t > ticks);
@@ -625,8 +638,8 @@ static int __periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned 
 	}
 #endif
 	
-        /* return 0; */
-	return ret;   // Jiguo: return the creation ticks
+        return 0;
+	/* return ret;   // Jiguo: return the creation ticks */
 }
 
 int periodic_wake_create(spdid_t spdinv, unsigned int period)
@@ -634,9 +647,9 @@ int periodic_wake_create(spdid_t spdinv, unsigned int period)
 	return __periodic_wake_create(spdinv, period, 0);
 }
 
-int c3_periodic_wake_create(spdid_t spdinv, unsigned int period, unsigned int c3_ticks)
+int periodic_wake_create_exist(spdid_t spdinv, unsigned int period)
 {
-	return __periodic_wake_create(spdinv, period, c3_ticks);
+	return __periodic_wake_create(spdinv, period, 1);
 }
 
 int periodic_wake_remove(spdid_t spdinv, unsigned short int tid)
@@ -668,7 +681,7 @@ int periodic_wake_wait(spdid_t spdinv)
 	u16_t tid = cos_get_thd_id();
 	long long t;
 
-	/* printc("thd %d calling period_wake_wait\n", cos_get_thd_id()); */
+	printc("thd %d calling period_wake_wait\n", cos_get_thd_id());
 
 	WAIT_FAULT();
 
@@ -690,10 +703,8 @@ int periodic_wake_wait(spdid_t spdinv)
 	rdtscll(t);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_WAIT_BEFORE)
-	/* test_num++; */
-	/* printc("in periodic_wake_wait: thd %d spd %d, test_num %d\n", */
-	/*        cos_get_thd_id(), spdinv, test_num); */
-	if (test_num++ > 2) {
+	/* test_num++; */ 
+	if (spdinv == 17 && cos_get_thd_id() == 13 && test_num++ > 10) {
 		printc("trigger fault in periodic_wake_wait before: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
@@ -751,7 +762,7 @@ redo:
 	/* /\* printc("in periodic_wake_wait: thd %d spd %d, test_num %d\n", *\/ */
 	/* /\*        cos_get_thd_id(), spdinv, test_num); *\/ */
 	/* if (spdinv == 16 && cos_get_thd_id() == 13 && test_num >= 2) { */
-	if (test_num++ > 50) {
+	if (spdinv == 17 && cos_get_thd_id() == 13 && test_num++ > 10) {
 		printc("trigger fault in periodic_wake_wait after: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
@@ -796,9 +807,10 @@ static void start_timer_thread(int again)
 
 	/* Wait for events, then act on expired events.  Loop. */
 	while (1) {
-		/* printc("timed_evt: timer thread %d\n", cos_get_thd_id()); */
+		printc("timed_evt: timer thread %d (test_num %d)\n", 
+		       cos_get_thd_id(), test_num);
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_TIMER_THD_BEFORE)
-		if (test_num++ > 40) {
+		if (test_num++ > 10) {
 			printc("trigger fault in timer before: thd %d spd %d\n", 
 			       cos_get_thd_id(), spdid);
 			assert(0);
@@ -843,7 +855,7 @@ static void start_timer_thread(int again)
 			sched_timeout(spdid, wakeup);
 			
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_TIMER_THD_AFTER)
-			if (test_num++ > 40) {
+			if (test_num++ > 10) {
 				printc("trigger fault in timer after: thd %d spd %d\n", 
 				       cos_get_thd_id(), spdid);
 				assert(0);
@@ -862,27 +874,29 @@ rd_reflection()
 	int count_obj = 0; // reflected objects
 	int dest_spd = cos_spd_id();
 	
-	// remove the mapped page for mailbox spd
-	vaddr_t addr;
-	count_obj = mman_reflect(cos_spd_id(), dest_spd, 1);
-	/* printc("pte relfects on mmgr: %d objs (thd %d)\n", count_obj, cos_get_thd_id()); */
-	while (count_obj--) {
-		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
-		/* printc("evt mman_release: %p addr\n", (void *)addr); */
-		mman_release_page(cos_spd_id(), addr, dest_spd);
-	}
+	/* // remove the mapped page for mailbox spd */
+	/* vaddr_t addr; */
+	/* count_obj = mman_reflect(cos_spd_id(), dest_spd, 1); */
+	/* /\* printc("pte relfects on mmgr: %d objs (thd %d)\n", count_obj, cos_get_thd_id()); *\/ */
+	/* while (count_obj--) { */
+	/* 	addr = mman_reflect(cos_spd_id(), dest_spd, 0); */
+	/* 	/\* printc("evt mman_release: %p addr\n", (void *)addr); *\/ */
+	/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
+	/* } */
 
-	int wake_thd;
-	count_obj = sched_reflect(cos_spd_id(), dest_spd, 1);
-	/* printc("pte relfects on sched: %d objs\n", count_obj); */
-	while (count_obj--) {
-		wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0);
-		/* printc("thread %d wake_thd %d\n", cos_get_thd_id(), wake_thd); */
-		sched_wakeup(cos_spd_id(), wake_thd);
-	}
+	sched_reflection(cos_spd_id());
+	/* int wake_thd; */
+	/* count_obj = sched_reflect(cos_spd_id(), dest_spd, 1); */
+	/* /\* printc("pte relfects on sched: %d objs\n", count_obj); *\/ */
+	/* while (count_obj--) { */
+	/* 	wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0); */
+	/* 	/\* printc("thread %d wake_thd %d\n", cos_get_thd_id(), wake_thd); *\/ */
+	/* 	sched_wakeup(cos_spd_id(), wake_thd); */
+	/* } */
 	// to reflect all threads blocked from evt component, such as evt_wait
 	/* printc("pte reflects on evt_trigger_all (thd %d)\n\n", cos_get_thd_id()); */
-	evt_trigger_all(cos_spd_id());  // for now, only pte and mailbox use this
+	/* evt_trigger_all(cos_spd_id());  // for now, only pte and mailbox use this */
+	evt_reflection(cos_spd_id());
 		
 	/* printc("\nreflection done!!!\n\n"); */
 	return;
@@ -914,9 +928,9 @@ void cos_init()
 			printc("after timed_event component creates a new timer thread.\n");
 		}
 
-	} else {
-		printc("timed_event component received too many bootstrap threads.");
-	}
+	}/*  else { */
+	/* 	printc("timed_event component received too many bootstrap threads."); */
+	/* } */
 }
 
 #ifdef EVT_C3

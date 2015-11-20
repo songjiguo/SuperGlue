@@ -107,7 +107,9 @@ int __sg_evt_reflection(spdid_t spdid)
 	     evt_t != &evts_head[spdid];
 	     evt_t = FIRST_LIST(evt_t, next, prev)){
 		/* printc("found evt id %ld to trigger\n", evt_t->evtid); */
+		lock_release(&evt_lock);
 		evt_trigger(cos_spd_id(), evt_t->evtid);
+		lock_take(&evt_lock);
 	}
 	/* printc("trigger all events done (thd %d)\n\n", cos_get_thd_id()); */
 
@@ -117,13 +119,13 @@ done:
 }
 
 
-extern int ns_upcall(spdid_t spdid, int id);
+extern int ns_upcall(spdid_t spdid, int id, int type);
 
 int __sg_evt_upcall_creator(spdid_t spdid, int evtid)
 {
 	int ret = 0;
 	
-	ns_upcall(spdid, evtid);
+	ns_upcall(spdid, evtid, 0);
 	
 	return ret;
 }

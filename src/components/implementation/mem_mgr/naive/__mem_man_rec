@@ -386,7 +386,7 @@ mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, vaddr_t to, int fl
 	struct comp_vas *cv = cvas_lookup(dest);
 	struct mapping *m = NULL;
 	long idx = to >> PAGE_SHIFT;
-
+	
 	assert(!p || p->f == f);
 	assert(dest && to);
 
@@ -398,7 +398,10 @@ mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, vaddr_t to, int fl
 		assert(cv == cvas_lookup(dest));
 	}
 	assert(cv->pages);
-	if (cvect_lookup(cv->pages, idx)) goto collision;
+	if (cvect_lookup(cv->pages, idx)) {
+		printc("a test msg\n");
+		goto collision;
+	}
 
 	cvas_ref(cv);
 	m = cslab_alloc_mapping();
@@ -412,10 +415,6 @@ mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, vaddr_t to, int fl
 	/* memset(m, 0, sizeof(struct mapping)); */
 	cslab_mapping_reset(m);
 
-	/* if (dest == 17) { */
-	/* 	printc("frame index %d for addr %p\n",frame_index(f), to); */
-	/* } */
-	
 	/* only add to the page table if not exist */
 	if (!exist) {
 		int tmp = cos_mmap_cntl(COS_MMAP_GRANT, flags, dest, to, frame_index(f));
@@ -602,13 +601,13 @@ mman_get_page(spdid_t spd, vaddr_t addr, int flags)
 }
 
 vaddr_t 
-mman_get_page_exist(spdid_t spd, vaddr_t addr, int flags) 
+mman_get_page_exist(spdid_t spd, vaddr_t addr) 
 {
-	return __mman_get_page(spd, addr, flags, 1);
+	return __mman_get_page(spd, addr, 0, 1);
 }
 
-static vaddr_t 
-___mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_addr, int exist)
+vaddr_t 
+__mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_addr)
 {
 	struct mapping *m, *n;
 	vaddr_t ret = 0;
@@ -660,7 +659,7 @@ ___mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_a
 	}
 #endif
 
-	n = mapping_crt(m, m->f, d_spd, d_addr, flags, exist);
+	n = mapping_crt(m, m->f, d_spd, d_addr, flags, 0);
 	if (!n) goto done;
 
 	assert(n->addr  == d_addr);
@@ -681,17 +680,6 @@ done:
 	return ret;
 }
 
-vaddr_t 
-__mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_addr)
-{
-	return ___mman_alias_page(s_spd, s_addr, d_spd_flags, d_addr, 0);
-}
-
-vaddr_t 
-__mman_alias_page_exist(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_addr)
-{
-	return ___mman_alias_page(s_spd, s_addr, d_spd_flags, d_addr, 1);
-}
 
 /* /\* rebuild m's children before we delete all. First we */
 /*  * switch to the recovery thread. Then upcall into spd */

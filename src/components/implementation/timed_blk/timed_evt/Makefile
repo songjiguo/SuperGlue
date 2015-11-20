@@ -3,7 +3,7 @@ ASM_OBJS=
 COMPONENT=te.o
 INTERFACES=timed_blk periodic_wake
 #DEPENDENCIES=printc sched mem_mgr pgfault evt ll_log valloc_local
-DEPENDENCIES=printc sched mem_mgr pgfault evt ll_log valloc
+DEPENDENCIES=printc sched mem_mgr_large pgfault evt ll_log valloc
 IF_LIB=
 
 include ../../Makefile.subsubdir

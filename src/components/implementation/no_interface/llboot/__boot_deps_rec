@@ -264,8 +264,8 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	/* cos_brand_cntl(COS_BRAND_REMOVE_THD, 0, 0, 0); /\* remove the brand *\/ */
 	/* debug only: avoid endless faults and wait */
 	/* printc("fault_page_fault_handler has been called %d times\n", first); */
-	if(first++ > 100) {
-		printc("Kevin 100 times\n");
+	if(first++ > 10) {
+		printc("Kevin 10 times\n");
 		sched_exit();
 	}
 	/* printc("has failed %d times\n",first); */

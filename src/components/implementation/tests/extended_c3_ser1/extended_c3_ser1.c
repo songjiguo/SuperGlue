@@ -290,13 +290,16 @@ static void try_hp(void)
 {
 	periodic_wake_create(cos_spd_id(), 2);
 
-	while(1) {
+	int i = 0;
+	while(i++ < 20) {
 		/* printc("period blocked (50 ticks) thd %d\n", cos_get_thd_id()); */
 		/* rdtscll(overhead_start); */
+		printc("period thd ...... %d\n", cos_get_thd_id());
 		periodic_wake_wait(cos_spd_id());
 		/* rdtscll(overhead_end); */
 		/* printc("pte_h wake from wait overhead %llu\n", overhead_end - overhead_start); */
 	}
+	periodic_wake_remove(cos_spd_id(), cos_get_thd_id());
 
 	return;
 }
@@ -307,13 +310,16 @@ static void try_mp(void)
 
 	periodic_wake_create(cos_spd_id(), 3);
 
-	while(1) {
+	int i = 0;
+	while(i++ < 20) {
 		/* printc("period blocked (35 ticks) thd %d\n", cos_get_thd_id()); */
 		/* rdtscll(overhead_start); */
+		printc("period thd ...... %d\n", cos_get_thd_id());
 		periodic_wake_wait(cos_spd_id());
 		/* rdtscll(overhead_end); */
 		/* printc("pte_m wake from wait overhead %llu\n", overhead_end - overhead_start); */
 	}
+	periodic_wake_remove(cos_spd_id(), cos_get_thd_id());
 
 	return;
 }
@@ -325,19 +331,17 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 		try_hp();
 		printc("\n<< ... Test done in spd %d >>>\n\n", cos_get_thd_id());
 	}
-	
-	/* if (!low && !mid && !hig) { */
-	/* 	printc("[Other test thread %d ... ]\n", cos_get_thd_id()); */
-	/* 	periodic_wake_create(cos_spd_id(), 4); */
-	/* 	while(1) periodic_wake_wait(cos_spd_id()); */
-	/* } */
-	
-	/* For benchmark, we use only one thread, so comment this for that */
-	if (cos_get_thd_id() == mid) try_mp();
 
-	try_mp();   // for fault coverage test
+	if (cos_get_thd_id() == mid) {
+		try_mp();
+	}
+	
+	/* /\* For benchmark, we use only one thread, so comment this for that *\/ */
+	/* if (cos_get_thd_id() == mid) try_mp(); */
 
-	while(1);  // quick fix the thread termination issue ???
+	/* try_mp();   // for fault coverage test */
+
+	/* while(1);  // quick fix the thread termination issue ??? */
 	return 0;
 }
 
@@ -599,7 +603,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",  */
 		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
 #ifdef MM_C3
-		mm_cli_if_recover_upcall_entry((vaddr_t)arg1);
+		mem_mgr_cli_if_recover_upcall_entry((vaddr_t)arg1);
 #endif
 		break;
 	}
@@ -608,7 +612,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n",  */
 		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
 #ifdef MM_C3
-		mm_cli_if_recover_subtree_upcall_entry((vaddr_t)arg1);
+		mem_mgr_cli_if_recover_upcall_subtree_entry((vaddr_t)arg1);
 #endif
 		break;
 	}
@@ -617,19 +621,19 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to remove subtree\n",  */
 		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
 #ifdef MM_C3
-		mm_cli_if_remove_subtree_upcall_entry((vaddr_t)arg1);
+		mem_mgr_cli_if_remove_upcall_subtree_entry((vaddr_t)arg1);
 #endif
 		break;
 	}
-	case COS_UPCALL_RECOVERY_ALL_ALIAS:
-	{
-		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover all alias\n",  */
-		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
-#ifdef MM_C3
-		mm_cli_if_recover_all_alias_upcall_entry((vaddr_t)arg1);
-#endif
-		break;
-	}
+/* 	case COS_UPCALL_RECOVERY_ALL_ALIAS: */
+/* 	{ */
+/* 		/\* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover all alias\n",  *\/ */
+/* 		/\*        cos_get_thd_id(), arg1, t, cos_spd_id()); *\/ */
+/* #ifdef MM_C3 */
+/* 		mem_mgr_cli_if_recover_all_alias_upcall_entry((vaddr_t)arg1); */
+/* #endif */
+/* 		break; */
+/* 	} */
 	default:
 		return;
 	}

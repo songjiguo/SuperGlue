@@ -48,19 +48,20 @@
 | ||  __/
  \__\___|
 ****************************/
-/* #define EXAMINE_TE */
+#define EXAMINE_TE
 
+#ifdef EXAMINE_TE
 /* #define TEST_PTE_CREATE_BEFORE */
 /* #define TEST_PTE_CREATE_AFTER  */
 /* #define TEST_PTE_WAIT_BEFORE */
-/* #define TEST_PTE_WAIT_AFTER */
+#define TEST_PTE_WAIT_AFTER
 /* #define TEST_PTE_TIMER_THD_BEFORE */
 /* #define TEST_PTE_TIMER_THD_AFTER */
 
 /* #define BENCHMARK_MEAS_CREATE */
 /* #define BENCHMARK_MEAS_WAIT */
 /* #define BENCHMARK_MEAS_TIMER_THD */
-
+#endif
 
 /****************************
             _   
@@ -133,7 +134,7 @@
 | | | | | | | | | | |
 |_| |_| |_|_| |_| |_|
 ****************************/
-#define EXAMINE_MM
+/* #define EXAMINE_MM */
 
 #ifdef EXAMINE_MM
 #define MM_C3            // enable upcall to each client to recover the pages

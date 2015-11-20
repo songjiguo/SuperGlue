@@ -427,7 +427,7 @@ rd_reflection()
 	/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
 	/* } */
 
-	sched_reflect(cos_spd_id());
+	sched_reflection(cos_spd_id());
 
 	// to reflect all threads blocked from evt component, such as evt_wait
 	/* int wake_thd; */

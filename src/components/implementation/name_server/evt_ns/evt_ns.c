@@ -133,7 +133,7 @@ done:
 /* The function used to upcall to each client to rebuild each event
  * state. This is only the faulty path and no need to take the lock */
 int
-ns_upcall(spdid_t spdid, int id)
+ns_upcall(spdid_t spdid, int id, int type)
 {
 	int ret = 0;
 	struct evt_node *en = NULL;
