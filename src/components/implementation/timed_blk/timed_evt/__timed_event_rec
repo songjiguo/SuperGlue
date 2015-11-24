@@ -884,7 +884,7 @@ rd_reflection()
 	/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
 	/* } */
 
-	sched_reflection(cos_spd_id());
+	/* sched_reflection(cos_spd_id()); */
 	/* int wake_thd; */
 	/* count_obj = sched_reflect(cos_spd_id(), dest_spd, 1); */
 	/* /\* printc("pte relfects on sched: %d objs\n", count_obj); *\/ */
@@ -896,7 +896,11 @@ rd_reflection()
 	// to reflect all threads blocked from evt component, such as evt_wait
 	/* printc("pte reflects on evt_trigger_all (thd %d)\n\n", cos_get_thd_id()); */
 	/* evt_trigger_all(cos_spd_id());  // for now, only pte and mailbox use this */
-	evt_reflection(cos_spd_id());
+
+	sched_client_fault_notification(cos_spd_id());	
+	evt_client_fault_notification(cos_spd_id());
+
+	/* evt_reflection(cos_spd_id()); */
 		
 	/* printc("\nreflection done!!!\n\n"); */
 	return;

@@ -10,7 +10,7 @@ ready_hw:
 first: cp build
 
 cp:
-	rm *.o
+	-rm *.o
 	cp $(TRANS_DIR)/* $(TEST_DIR)
 
 clean:

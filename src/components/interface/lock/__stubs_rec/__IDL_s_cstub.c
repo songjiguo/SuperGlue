@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Thu Oct 29 18:17:32 2015 */
+/* IDL generated code ver 0.1 ---  Mon Nov 23 20:12:23 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -9,12 +9,8 @@
 #include <cstub.h>
 #include <lock.h>
 
-#if (RECOVERY_ENABLE == 1)
-#include <c3_test.h>
-#endif
-
 struct track_block {
-	int lock_id;
+	ul_t lock_id;
 	struct track_block *next, *prev;
 };
 struct track_block tracking_block_list[MAX_NUM_SPDS];
@@ -24,11 +20,6 @@ static inline int block_ser_if_block_track_lock_component_take(spdid_t spdid,
 							       u32_t thd_id)
 {
 	int ret = 0;
-
-#ifdef BENCHMARK_MEAS_INV_OVERHEAD_NO_SERVER_TRACK_LOCK
-	ret = lock_component_take(spdid, lock_id, thd_id);
-	return ret;
-#else
 	struct track_block tb;	// track on stack
 
 	do {
@@ -63,7 +54,6 @@ static inline int block_ser_if_block_track_lock_component_take(spdid_t spdid,
 	} while (0);
 
 	return ret;
-#endif
 }
 
 int __ser_lock_component_take(spdid_t spdid, ul_t lock_id, u32_t thd_id)

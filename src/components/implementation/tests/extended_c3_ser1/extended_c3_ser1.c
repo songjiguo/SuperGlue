@@ -27,15 +27,26 @@ volatile unsigned long long overhead_start, overhead_end;
 
 #ifdef EXAMINE_LOCK
 #include <cos_synchronization.h>
+
+static int first = 0;
+
 cos_lock_t t_lock;
-#define LOCK1_TAKE()    lock_take(&t_lock)
-#define LOCK1_RELEASE() lock_release(&t_lock)
-#define LOCK1_INIT()    lock_static_init(&t_lock);
+#define LOCK1_TAKE()       do { if (lock_take(&t_lock))    BUG(); } while(0);
+#define LOCK1_RELEASE()    do { if (lock_release(&t_lock)) BUG(); } while(0);
+#define LOCK1_INIT()       lock_static_init(&t_lock);
+
+/* #define LOCK1_TAKE()    lock_take(&t_lock) */
+/* #define LOCK1_RELEASE() lock_release(&t_lock) */
+/* #define LOCK1_INIT()    lock_static_init(&t_lock); */
 
 cos_lock_t t_lock2;
-#define LOCK2_TAKE()    lock_take(&t_lock2)
-#define LOCK2_RELEASE() lock_release(&t_lock2)
-#define LOCK2_INIT()    lock_static_init(&t_lock2);
+#define LOCK2_TAKE()       do { if (lock_take(&t_lock2))    BUG(); } while(0);
+#define LOCK2_RELEASE()    do { if (lock_release(&t_lock2)) BUG(); } while(0);
+#define LOCK2_INIT()       lock_static_init(&t_lock2);
+
+/* #define LOCK2_TAKE()    lock_take(&t_lock2) */
+/* #define LOCK2_RELEASE() lock_release(&t_lock2) */
+/* #define LOCK2_INIT()    lock_static_init(&t_lock2); */
 
 volatile int spin = 1;
 
@@ -45,27 +56,31 @@ static void try_hp(void)
 {
 	int i = 0;
 	unsigned long long j = 0;
-	while(1) {
-	/* while(j++ < 5) { */
+	printc("\n\n[[ lock test start..... ]]\n\n");
+	/* while(1) { */
+	while(j++ < 30) {
 		/* printc("thread h : %d is doing something\n", cos_get_thd_id()); */
 		/* printc("thread h : %d is trying to take another lock...\n", cos_get_thd_id()); */
 		/* ec3_ser2_test(); */
 		
 		spin = 0;
-		/* printc("thread h : %d try to take lock\n", cos_get_thd_id()); */
+		printc("thread h : %d try to take lock\n", cos_get_thd_id());
 		/* printc("ser1: lock id %d\n", t_lock.lock_id); */
 		
 		LOCK1_TAKE();
 		
-		/* printc("thread h : %d has the lock\n", cos_get_thd_id()); */
+		printc("thread h : %d has the lock\n", cos_get_thd_id());
 		LOCK1_RELEASE();
 		
-		/* printc("thread h : %d released lock\n", cos_get_thd_id()); */
+		printc("thread h : %d released lock\n", cos_get_thd_id());
 
 		spin = 1;
 		timed_event_block(cos_spd_id(), 1);
 	}
-	
+	printc("\n\n[[ lock test done! ]]\n\n");	
+
+	while(1);
+
 	return;
 }
 
@@ -73,7 +88,10 @@ static void try_mp(void)
 {
 	int i = 0;
 	return;
-	while(1) {
+
+	unsigned long long j = 0;
+	/* while(1) { */
+	while(j++ < 30) {
 		/* printc("thread m : %d try to take lock\n", cos_get_thd_id()); */
 
 		LOCK1_TAKE();
@@ -91,24 +109,25 @@ static void try_lp(void)
 {
 	int i = 0;
 	unsigned long long j = 0;
-	while(1) {
-	/* while(j++ < 5) { */
+	/* while(1) { */
+	while(j++ < 35) {
 		/* printc("j is %llu\n", j); */
 		/* printc("<<< thread l : %d is doing somethingAAAAA \n", cos_get_thd_id()); */
-		/* printc("thread l : %d try to take lock\n", cos_get_thd_id()); */
+		printc("thread l : %d try to take lock\n", cos_get_thd_id());
 		LOCK1_TAKE();
-		/* printc("thread l : %d has the lock\n", cos_get_thd_id()); */
+		printc("thread l : %d has the lock\n", cos_get_thd_id());
 		
 		/* printc("thread l : %d is trying to take another lock...\n", cos_get_thd_id()); */
 		/* ec3_ser2_test(); */
 		
-		/* printc("thread l : %d spinning\n", cos_get_thd_id()); */
+		printc("thread l : %d spinning\n", cos_get_thd_id());
 		while (spin);
 		/* printc("thread l : %d is doing something\n", cos_get_thd_id()); */
-		/* printc("thread l : %d try to release lock\n", cos_get_thd_id()); */
+		printc("thread l : %d try to release lock\n", cos_get_thd_id());
 		LOCK1_RELEASE();
 	}
-	
+
+	while(1);
 	return;
 }
 
@@ -127,14 +146,13 @@ void
 cos_init(void)
 {
 	/* printc("ser 1:thd %d is trying to init lock\n", cos_get_thd_id()); */
-
 	LOCK1_INIT();
 	LOCK2_INIT();
+
 	/* printc("ser1: lock id %d\n", t_lock.lock_id); */
 	/* printc("ser1: lock2 id %d\n", t_lock2.lock_id);	 */
 
 	/* printc("after init LOCK\n"); */
-
 }
 
 #endif
@@ -156,7 +174,7 @@ long evt1;
 long evt2;
 static int test_num1 = 0;
 static int test_num2 = 1;
-#define TEST_NUM 10000
+#define TEST_NUM 200
 static void try_hp(void)
 {
 	long wait_ret = 0;
@@ -198,6 +216,7 @@ static void try_hp(void)
 		}
 #else
 	wait:
+		/* printc("(ser1) thd %d evt_wait\n", cos_get_thd_id()); */
 		wait_ret = evt_wait(cos_spd_id(), evt0);
 		/* printc("[[evt_wait return %d]]\n", wait_ret); */
 		if (unlikely(wait_ret < 0)) goto wait;
@@ -225,7 +244,7 @@ static void try_hp(void)
 static void try_mp(void)
 {
 	int i = 0;
-	while(test_num2) {
+	while(test_num2 || test_num1 < TEST_NUM + 5) {
 		if (i == 0) {ec3_ser3_pass(evt1); i = 1;}
 		if (i == 1) {ec3_ser3_pass(evt2); i = 0;}
 	}
@@ -285,6 +304,10 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 ****************************/
 
 #ifdef EXAMINE_TE
+
+extern void *alloc_page(void);
+extern void free_page(void *ptr);
+
 
 static void try_hp(void)
 {
@@ -358,9 +381,6 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 
 #ifdef EXAMINE_SCHED
 
-/* void *alloc_page(void){}; */
-/* void free_page(void *ptr){}; */
-
 #define LOCK()   if (sched_component_take(cos_spd_id())) assert(0);
 #define UNLOCK() if (sched_component_release(cos_spd_id())) assert(0);
 
@@ -368,47 +388,30 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 
 vaddr_t ec3_ser1_test(int low, int mid, int hig)
 {
-	int i = 0, j = 0;		
+	int i = 0, j = 0, k = 0;
 	int test_sched_lock = 0;
 	
 	if (cos_get_thd_id() == hig) {
 		printc("\n\n<< thd %d is in SCHED testing... >>>\n\n",
 		       cos_get_thd_id());
 		
-#ifdef TEST_SCHED_COMPONENT_TAKE
-		while(test_sched_lock++ < 20) {
+		while(test_sched_lock++ < 30) {
 			LOCK();
 			UNLOCK();
 		}
 		test_sched_lock = 0;
-#endif
-#ifdef TEST_SCHED_COMPONENT_RELEASE
-		while(test_sched_lock++ < 20) {
-			LOCK();
-			UNLOCK();
-		}
-		test_sched_lock = 0;
-#endif
 
 		while(i++ < ITER_SCHED) {
 			printc("\n<< high thd %d is blocking on mid thd %d in spd %d (iter %d) >>>\n", cos_get_thd_id(), mid, cos_spd_id(), i);
 			sched_block(cos_spd_id(), mid);
-
-#ifdef TEST_SCHED_COMPONENT_TAKE
+			
 			while(i == 4 && test_sched_lock++ < 30) {
 				LOCK();
 				UNLOCK();
 			}
-#endif
-#ifdef TEST_SCHED_COMPONENT_RELEASE
-			while(i == 4 && test_sched_lock++ < 30) {
-				LOCK();
-				UNLOCK();
-			}
-#endif
 		}
 		
-		if (periodic_wake_create(cos_spd_id(), 50) < 0) BUG();
+		if (periodic_wake_create(cos_spd_id(), 5) < 0) BUG();
 		i = 0;
 		while (i++ < ITER_SCHED) {
 			periodic_wake_wait(cos_spd_id());
@@ -416,8 +419,8 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 			       cos_get_thd_id());
 		}
 		periodic_wake_remove(cos_spd_id(), cos_get_thd_id());
-
-		printc("\n\n<< thd %d SCHED testing done... >>>\n\n",
+		
+		printc("\n<< thd %d SCHED testing done... >>>\n\n\n",
 		       cos_get_thd_id());
 	}
 	
@@ -425,14 +428,6 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 		while(j++ < ITER_SCHED) {
 			printc("\n<< mid thd %d is waking up high thd %d in spd %d (iter %d) >>>\n", cos_get_thd_id(), hig, cos_spd_id(), j);
 			sched_wakeup(cos_spd_id(), hig);
-		}
-	}
-
-	if (cos_get_thd_id() == low) {
-		if (periodic_wake_create(cos_spd_id(), 100) < 0) BUG();
-		while (1) {
-			periodic_wake_wait(cos_spd_id());
-			printc("thd periodic wakeup %d\n", cos_get_thd_id());
 		}
 	}
 
@@ -484,10 +479,10 @@ test_mmpage()
 	s_addr[0] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
 	vaddr_t ret = mman_get_page(cos_spd_id(), s_addr[0], MAPPING_RW);
 	if (ret != s_addr[0]) assert(0);
-	/* printc("\n[[[ser1: root returned addr %p]]]\n\n", s_addr[0]); */
+	printc("\n[[[ser1: root returned addr %p]]]\n\n", s_addr[0]);
 	
 	d_addr[0] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1);
-	/* printc("ser1: 1st returned addr %p\n", d_addr[0]); */
+	printc("ser1: 1st returned addr %p\n", d_addr[0]);
 	
 #ifdef BENCHMARK_MEAS_INV_OVERHEAD_MM
 	unsigned long long infra_overhead_start;
@@ -510,7 +505,7 @@ meas:
 #endif
 
 	d_addr[1] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1);
-	/* printc("ser1: 2nd returned addr %p\n", d_addr[1]); */
+	printc("ser1: 2nd returned addr %p\n", d_addr[1]);
 	if (d_addr[1] != mman_alias_page(cos_spd_id(), s_addr[0], 
 					 cos_spd_id()+1, d_addr[1], MAPPING_RW))
 		assert(0);
@@ -540,19 +535,20 @@ meas:
 	/* printc("\n[[3]]\n"); */
 	/* d_addr[2] = ec3_ser2_test(0); */
 	d_addr[2] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+2, 1);
-	/* printc("ser1: 3rd returned addr %p\n", d_addr[2]); */
+	printc("ser1: 3rd returned addr %p\n", d_addr[2]);
 	if (d_addr[2] != mman_alias_page(cos_spd_id(), s_addr[0], 
 					 cos_spd_id()+2, d_addr[2], MAPPING_RW))
 		assert(0);
 
 	/* printc("\n[[4]] get a page to revoke for testing ]]\n"); */
 	s_addr[1] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
+	printc("ser1: 4th returned addr %p\n", s_addr[1]);
 	ret = mman_get_page(cos_spd_id(), s_addr[1], MAPPING_RW);
 	if (ret != s_addr[1]) assert(0);
 	mman_revoke_page(cos_spd_id(), s_addr[1], MAPPING_RW);
 
 	/* printc("\n[[5]]\n"); */
-	/* printc("ser1: revoking page %p\n", s_addr[0]); */
+	printc("ser1: revoking page %p\n", s_addr[0]);
 	if (mman_revoke_page(cos_spd_id(), s_addr[0], MAPPING_RW)) assert(0);
 
 	return;
@@ -574,6 +570,7 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 		
 		int i = 0;
 		while(i++ < 20) {
+			printc("\nnext mm test\n\n");
 			test_mmpage();
 		}
 
@@ -598,10 +595,11 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 			
 		break;
 	}
+#ifdef RECOVERY_MM_TEST
 	case COS_UPCALL_RECOVERY:
 	{
-		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",  */
-		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
 #ifdef MM_C3
 		mem_mgr_cli_if_recover_upcall_entry((vaddr_t)arg1);
 #endif
@@ -609,8 +607,8 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	}
 	case COS_UPCALL_RECOVERY_SUBTREE:
 	{
-		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n",  */
-		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n",
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
 #ifdef MM_C3
 		mem_mgr_cli_if_recover_upcall_subtree_entry((vaddr_t)arg1);
 #endif
@@ -618,8 +616,8 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	}
 	case COS_UPCALL_REMOVE_SUBTREE:
 	{
-		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to remove subtree\n",  */
-		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to remove subtree\n",
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
 #ifdef MM_C3
 		mem_mgr_cli_if_remove_upcall_subtree_entry((vaddr_t)arg1);
 #endif
@@ -634,6 +632,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 /* #endif */
 /* 		break; */
 /* 	} */
+#endif
 	default:
 		return;
 	}

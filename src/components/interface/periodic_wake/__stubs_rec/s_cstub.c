@@ -1,3 +1,1 @@
-#include <cos_component.h>
-#include <print.h>
-
+__IDL_s_cstub.c

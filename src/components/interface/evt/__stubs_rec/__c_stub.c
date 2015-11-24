@@ -154,15 +154,15 @@ rd_update(int evtid, int state)
 
 	// root
 	if (!evtid) {
-		/* printc("found the root, just return and create\n"); */
+		printc("found the root, just return and create\n");
 		return;
 	}
 
-	/* printc("AAAAA\n"); */
+	printc("AAAAA\n");
         rd = rdevt_lookup(evtid);
-	/* printc("BBBBB\n"); */
+	printc("BBBBB\n");
 	if (unlikely(!rd)) {
-		/* printc("cli: evt_upcal_creator %d\n", evtid); */
+		printc("cli: evt_upcal_creator %d\n", evtid);
 		evt_upcall_creator(cos_spd_id(), evtid);
 		goto done;
 	}
@@ -181,8 +181,8 @@ again:
 
 	id = evt_split_exist(rd->spdid, pevtid, rd->grp, evtid);
 	if (id == -EINVAL) {
-		/* printc("the parent id (%d) needs to be created now!!!!\n", */
-		/* 	rd->p_evtid); */
+		printc("the parent id (%d) needs to be created now!!!!\n",
+			rd->p_evtid);
 		rd_update(pevtid, EVT_SPLIT);
 		goto again;
 	}
@@ -265,7 +265,7 @@ redo:
 
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, parent_evt, grp);
 	if (unlikely (fault)){
-		/* printc("evt_split sees a fault\n"); */
+		printc("evt_split sees a fault\n");
 		CSTUB_FAULT_UPDATE();
 		goto redo;
 	}
@@ -298,6 +298,7 @@ CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
 		first = 1;
 	}
 
+redo:
 	rdtscll(ubenchmark_end);
 	if (evt_wait_ubenchmark_flag) {
 		evt_wait_ubenchmark_flag = 0;
@@ -305,8 +306,8 @@ CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
 		       ubenchmark_end - ubenchmark_start);
 	}
 
-	/* printc("evt cli: evt_wait thd %d in spd %ld (extern_evt %d)\n", */
-	/*        cos_get_thd_id(), cos_spd_id(), extern_evt); */
+	printc("evt cli: evt_wait thd %d in spd %ld (extern_evt %d)\n",
+	       cos_get_thd_id(), cos_spd_id(), extern_evt);
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
         if (unlikely (fault)){
@@ -316,9 +317,16 @@ CSTUB_FN(long, evt_wait) (struct usr_inv_cap *uc,
 		rdtscll(ubenchmark_start);
 
 		CSTUB_FAULT_UPDATE();
-		rd_update(extern_evt, EVT_STATE_WAITING);
-		return -1;
+		/* rd_update(extern_evt, EVT_STATE_WAITING); */
+		/* return -1; */
+		goto redo;
         }
+
+	if (unlikely(ret == -EINVAL)) {
+		printc("cli: evt_wait returns -EINVAL\n");
+		rd_update(extern_evt, EVT_STATE_TRIGGER);
+		goto redo;
+	}
 
 	return ret;
 }
@@ -336,16 +344,16 @@ CSTUB_FN(int, evt_trigger) (struct usr_inv_cap *uc,
 		first = 1;
 	}
 
-	/* printc("evt cli: evt_trigger thd %d from spd %ld (evt id %ld)\n",  */
-	/*        cos_get_thd_id(), cos_spd_id(), extern_evt); */
+	printc("evt cli: evt_trigger thd %d from spd %ld (evt id %ld)\n",
+	       cos_get_thd_id(), cos_spd_id(), extern_evt);
 redo:
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
 	if (unlikely(fault)){
-		/* printc("cli: see a fault during evt_trigger evt %d (thd %d in spd %ld)\n", */
-		/*        extern_evt, cos_get_thd_id(), cos_spd_id()); */
+		printc("cli: see a fault during evt_trigger evt %d (thd %d in spd %ld)\n",
+		       extern_evt, cos_get_thd_id(), cos_spd_id());
 		CSTUB_FAULT_UPDATE();
-		rd_update(extern_evt, EVT_STATE_TRIGGER);
-		return -1;
+		goto redo;
+		/* return -1; */
 	}
 
 	/* trigger has not tracking to tell if a descriptor exists, so
@@ -353,7 +361,11 @@ redo:
 	 * evt component after it has been recovered before. Notice
 	 * that this logic is used to be in the evt component, now it
 	 * is moved here, this is why we call evt_upcall_creator*/
-	if (unlikely(ret == -EINVAL)) goto redo;
+	if (unlikely(ret == -EINVAL)) {
+		printc("cli: evt_trigger returns -EINVAL\n");
+		rd_update(extern_evt, EVT_STATE_TRIGGER);
+		goto redo;
+	}
 
 	/* return 0; */
 	return ret;  // remember to check this when debug the web server

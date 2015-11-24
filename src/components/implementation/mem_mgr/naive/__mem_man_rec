@@ -118,8 +118,11 @@ frame_alloc_index(int idx)
 static inline void
 frame_deref(struct frame *f)
 { 
-	assert(f->nmaps > 0);
-	f->nmaps--; 
+	/* assert(f->nmaps > 0); */
+	/* f->nmaps--;  */
+	// Jiguo: change above to this. I think above is a bug
+	if (f->nmaps > 0) f->nmaps--;
+
 	if (f->nmaps == 0) {
 		f->c.free = freelist;
 		freelist  = f;
@@ -399,7 +402,9 @@ mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, vaddr_t to, int fl
 	}
 	assert(cv->pages);
 	if (cvect_lookup(cv->pages, idx)) {
-		printc("a test msg\n");
+		struct mapping *test = cvect_lookup(cv->pages, idx);
+		printc("Collision!!! a test msg: test->spdid %d test->addr %p\n",
+		       test->spdid, test->addr);
 		goto collision;
 	}
 
@@ -588,8 +593,15 @@ __mman_get_page(spdid_t spd, vaddr_t addr, int flags, int exist)
 	
 done:
 	UNLOCK();
+	/* printc("mman_get_page return %p\n", ret); */
 	return ret;
 dealloc:
+	
+        /* /\* Jiguo: hack this for the lock which does not depend on */
+	/*  * valloc. TODO: track all used pages from the heap and give */
+	/*  * them back when the client (e.g., lock) fails *\/ */
+	/* if (spd == 10) goto done; */
+
 	frame_deref(f);
 	goto done;		/* -EINVAL */
 }
@@ -632,13 +644,13 @@ __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_ad
 
 	m = mapping_lookup(s_spd, s_addr);
 	if (unlikely(!m)) {
-		/* printc("__mman_alias_page: can not find mapping for s_spd %d s_addr %p\n", */
-		/*        s_spd, s_addr); */
-		/* printc("__mman_alias_page: now introspect root page (flags %d)\n", */
-		/*        flags); */
+		printc("__mman_alias_page: can not find mapping for s_spd %d s_addr %p\n",
+		       s_spd, s_addr);
+		printc("__mman_alias_page: now introspect root page (flags %d)\n",
+		       flags);
 		if (cos_mmap_introspect(COS_MMAP_INTROSPECT_ROOTPAGE, 
 					flags, s_spd, s_addr, 0)){
-			/* printc("!!!! this is a root page\n"); */
+			printc("!!!! this is a root page\n");
 			ret = -ECHILD;   // error and s_addr is the root page
 		} else {
 			ret = -EINVAL;
@@ -653,7 +665,7 @@ __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_ad
 	/* 	       cos_get_thd_id(), cos_spd_id(), s_spd, d_spd, test_control++); */
 	/* } */
 
-	if (s_spd == 18 && cos_get_thd_id() == 13 && test_control++ == 2) {
+	if (s_spd == 18 && cos_get_thd_id() == 13 && test_control++ == 3) {
 		printc("trigger fault in mman_alias_page: thd %d spd %ld passed s_spd %d dest_spd %d\n", cos_get_thd_id(), cos_spd_id(), s_spd, d_spd);
 		assert(0);
 	}
@@ -676,7 +688,7 @@ __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_ad
 
 done:
 	UNLOCK();
-	/* printc("in alias function.....return %p\n", ret); */
+	/* printc("in alias function.....return %d\n", ret); */
 	return ret;
 }
 
@@ -927,7 +939,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		*PERCPU_GET(initialized_core) = 1;
 		break;
 	case COS_UPCALL_REBOOT:
-		/* printc("mm: cos_upcall here to reboot 2 (passed arg1 %d)\n", (int)arg1); */
+		printc("mm: cos_upcall here to reboot 2 (passed arg1 %d)\n", (int)arg1);
 		mm_init();
 		
 		/* Jiguo: here is the situation 1) we need reserve

@@ -37,6 +37,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		       cos_get_thd_id(), arg1, t, cos_spd_id());
 		break;
 	}
+#ifdef RECOVERY_MM_TEST
 	case COS_UPCALL_RECOVERY:
 	{
 		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",  */
@@ -73,6 +74,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 /* #endif */
 /* 		break; */
 /* 	} */
+#endif
 	default:
 		return;
 	}

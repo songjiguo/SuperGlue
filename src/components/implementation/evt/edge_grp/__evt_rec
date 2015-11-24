@@ -23,6 +23,8 @@
 #include <evt.h>
 #include <sched.h>
 
+#include <lock.h>
+
 #include <name_server.h>
 extern int lock_reflect(spdid_t spdid);
 
@@ -170,6 +172,11 @@ __evt_trigger(spdid_t spdid, long eid)
 	/* 	e = cvect_lookup(&evt_map, eid); */
 	/* } */
 	/* assert(e);	// remove this Jiguo. Then interface should handle this */
+
+	if (!e) {
+		printc("can not find event id %d\n", eid);
+	} else if(e->type != EVT_NORMAL) 
+		printc("event type is wrong\n");
 
 	/* can't trigger groups */
 	if (!e || e->type != EVT_NORMAL) return -EINVAL;
@@ -350,7 +357,8 @@ long evt_wait(spdid_t spdid, long evt_id)
 		lock_take(&evt_lock);
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_BEFORE)
-		if (test_num++ > 2000) {
+		// thd 13 is the testing thread
+		if (test_num++ > 20) {
 			/* printc("trigger fault in evt_wait before (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
 			assert(0);
 		}
@@ -362,7 +370,7 @@ long evt_wait(spdid_t spdid, long evt_id)
 		if (!ret && 0 > sched_block(cos_spd_id(), 0)) BUG();
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_AFTER)
-		if (test_num++ > 2000) {
+		if (test_num++ > 20) {
 			/* printc("trigger fault in evt_wait after (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
 			assert(0);
 		}
@@ -377,10 +385,12 @@ evt_trigger(spdid_t spdid, long evt_id)
 {
 	int ret;
 	lock_take(&evt_lock);
-	/* printc("thd %d triggers evt %d\n", cos_get_thd_id(), evt_id); */
+	printc("thd %d triggers evt %d\n", cos_get_thd_id(), evt_id);
+
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_BEFORE)
-	if (test_num++ > 2000) {
+	// thread 14 is the test thread
+	if (test_num++ > 20) {
 		/* printc("trigger fault in evt_trigger before: thd %d passed spd %d (evt %d)\n", */
 		/*        cos_get_thd_id(), spdid, evt_id); */
 		assert(0);
@@ -395,7 +405,7 @@ evt_trigger(spdid_t spdid, long evt_id)
 
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_AFTER)
-	if (test_num++ > 2000) {
+	if (test_num++ > 20) {
 		/* printc("trigger fault in evt_trigger after: thd %d passed spd %d (evt %d)\n", */
 		/*        cos_get_thd_id(), spdid, evt_id); */
 		assert(0);
@@ -427,7 +437,8 @@ rd_reflection()
 	/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
 	/* } */
 
-	sched_reflection(cos_spd_id());
+	
+	sched_client_fault_notification(cos_spd_id());
 
 	// to reflect all threads blocked from evt component, such as evt_wait
 	/* int wake_thd; */
@@ -453,7 +464,8 @@ rd_reflection()
 	 pass lock id, just use the owner thread id to identify the
 	 lock meta data structure?
 	 */
-	lock_reflect(cos_spd_id());
+	lock_client_fault_notification(cos_spd_id());
+
 	lock_release(&evt_lock);
 	
 	return;
@@ -467,9 +479,9 @@ cos_init(void)
 	cvect_init_static(&evt_map);
 
 	if (unlikely(cos_fault_cntl(COS_CAP_REFLECT_UPDATE, cos_spd_id(), 0))) {
-		/* printc("\evt reflection start!!!\n"); */
+		printc("\nevt reflection start!!!\n");
 		rd_reflection();
-		/* printc("evt reflection done!!!\n\n"); */
+		printc("evt reflection done!!!\n\n");
 	}
 
 }
@@ -496,6 +508,15 @@ int evt_stats_len(spdid_t spdid) { return 0; }
 long __evt_create(spdid_t spdid) {return 0;}
 
 int evt_reflection(spdid_t spdid) {return 0;}
-int evt_upcall_creator(spdid_t spdid, int evtid) {return 0;}
+int evt_client_fault_notification(spdid_t spdid) { return 0; }
+
+int evt_upcall_creator(spdid_t spdid, int evtid) 
+{
+	int ret = 0;
+	
+	ns_upcall(spdid, evtid, 0);
+	
+	return ret;
+}
 
 

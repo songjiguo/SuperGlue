@@ -10,10 +10,6 @@
 #ifndef   	MEM_MGR_H
 #define   	MEM_MGR_H
 
-/* #define TEST_MM_GET_PAGE */
-/* #define TEST_MM_ALIAS_PAGE */
-/* #define TEST_MM_REVOKE_PAGE */
-
 /* Map a physical frame into a component. */
 vaddr_t mman_get_page(spdid_t spd, vaddr_t addr, int flags);
 /* 
@@ -31,7 +27,5 @@ static inline vaddr_t
 mman_alias_page(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr, int flags)
 { return __mman_alias_page(s_spd, s_addr, ((u32_t)d_spd<<16)|flags, d_addr); }
 void mman_print_stats(void);
-
-vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
 
 #endif 	    /* !MEM_MGR_H */

@@ -110,7 +110,8 @@ static long mapping_create(spdid_t spdid, struct evt *e)
 	 call evt_updateid to indicate the client has received id
 	 
 	 */
-	long id = ns_alloc(cos_spd_id(), spdid);
+	/* long id = ns_alloc(cos_spd_id(), spdid); */
+	long id = 0;   // Jiguo: disable this for now
 	assert(id >= 0);
 
         /* why need to delete such id?? After fault, we might find an
@@ -516,7 +517,8 @@ int evt_trigger(spdid_t spdid, long extern_evt)
 	 * invocation to the name server here to get the actual server
 	 * side id --- TODO: use cache to speed up this process at the
 	 * price of more data bookkeeping here */
-	int actual_evtid = ns_lookup(cos_spd_id(), extern_evt);
+	/* int actual_evtid = ns_lookup(cos_spd_id(), extern_evt); */
+	int actual_evtid = 0; // Jiguo: diable this for now
 	assert(actual_evtid >= 1);  // the event has been freed by the woken thread ?
 	e = mapping_find(actual_evtid);
 
@@ -640,29 +642,38 @@ rd_reflection()
 	int count_obj = 0; // reflected objects
 	int dest_spd = cos_spd_id();
 	
-	// remove the mapped page for evt spd
-	vaddr_t addr;
-	count_obj = mman_reflect(cos_spd_id(), dest_spd, 1);
-	/* printc("evt relfects on mmgr: %d objs\n", count_obj); */
-	while (count_obj--) {
-		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
-		/* printc("evt mman_release: %p addr\n", (void *)addr); */
-		mman_release_page(cos_spd_id(), addr, dest_spd);
-	}
+	/* // remove the mapped page for evt spd */
+	/* vaddr_t addr; */
+	/* count_obj = mman_reflect(cos_spd_id(), dest_spd, 1); */
+	/* /\* printc("evt relfects on mmgr: %d objs\n", count_obj); *\/ */
+	/* while (count_obj--) { */
+	/* 	addr = mman_reflect(cos_spd_id(), dest_spd, 0); */
+	/* 	/\* printc("evt mman_release: %p addr\n", (void *)addr); *\/ */
+	/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
+	/* } */
 
-	// to reflect all threads blocked from evt component
-	int wake_thd;
-	count_obj = sched_reflect(cos_spd_id(), dest_spd, 1);
-	/* printc("evt relfects on sched: %d objs\n", count_obj); */
-	while (count_obj--) {
-		wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0);
-		/* printc("wake_thd %d\n", wake_thd); */
-		/* evt_trigger(cos_spd_id(), evt_id); */  // pointless to call evt mgr
-		sched_wakeup(cos_spd_id(), wake_thd);
-	}
+	/* // to reflect all threads blocked from evt component */
+	/* int wake_thd; */
+	/* count_obj = sched_reflect(cos_spd_id(), dest_spd, 1); */
+	/* /\* printc("evt relfects on sched: %d objs\n", count_obj); *\/ */
+	/* while (count_obj--) { */
+	/* 	wake_thd = sched_reflect(cos_spd_id(), dest_spd, 0); */
+	/* 	/\* printc("wake_thd %d\n", wake_thd); *\/ */
+	/* 	/\* evt_trigger(cos_spd_id(), evt_id); *\/  // pointless to call evt mgr */
+	/* 	sched_wakeup(cos_spd_id(), wake_thd); */
+	/* } */
 
-        //TODO: reflection on lock manager as well
-	lock_trigger_all(cos_spd_id(), cos_spd_id());
+        /* //TODO: reflection on lock manager as well */
+	/* lock_trigger_all(cos_spd_id(), cos_spd_id()); */
 
 	return;
 }
+
+
+long 
+evt_split_exist(spdid_t spdid, long parent, int group, int existing_id) 
+{
+	return 0;
+}
+int evt_upcall_creator(spdid_t spdid, int evtid) {return 0;}
+int evt_client_fault_notification(spdid_t spdid) { return 0; }

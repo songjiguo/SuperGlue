@@ -69,13 +69,13 @@ cos_init(void)
 #ifdef EXAMINE_SCHED
 		if (cos_get_thd_id() == high) {
 			printc("<<<high thd %d>>>\n", cos_get_thd_id());
-			timed_event_block(cos_spd_id(), 1);
+			/* timed_event_block(cos_spd_id(), 1); */
 			ec3_ser1_test(low, med, high);
 		}
 		
 		if (cos_get_thd_id() == med) {
 			printc("<<<med thd %d>>>\n", cos_get_thd_id());
-			timed_event_block(cos_spd_id(), 1);
+			/* timed_event_block(cos_spd_id(), 1); */
 			ec3_ser1_test(low, med, high);
 		}
 

@@ -10,6 +10,12 @@
 #ifndef   	MEM_MGR_H
 #define   	MEM_MGR_H
 
+#include <c3_test.h>
+
+/* #define TEST_MM_GET_PAGE */
+/* #define TEST_MM_ALIAS_PAGE */
+/* #define TEST_MM_REVOKE_PAGE */
+
 /* Map a physical frame into a component. */
 vaddr_t mman_get_page(spdid_t spd, vaddr_t addr, int flags);
 /* 
@@ -21,7 +27,7 @@ vaddr_t mman_get_page(spdid_t spd, vaddr_t addr, int flags);
 int mman_release_page(spdid_t spd, vaddr_t addr, int flags);
 /* remove all descendent mappings of this one (but not this one). */ 
 int mman_revoke_page(spdid_t spd, vaddr_t addr, int flags); 
-
+/* The invoking component (s_spd) must own the mapping. */
 vaddr_t __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_addr);
 static inline vaddr_t 
 mman_alias_page(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr, int flags)
@@ -29,5 +35,13 @@ mman_alias_page(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr, in
 void mman_print_stats(void);
 
 vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
+vaddr_t mman_get_page_exist(spdid_t spd, vaddr_t addr);
+
+#ifdef MM_C3
+extern void mem_mgr_cli_if_recover_upcall_entry(vaddr_t addr);
+extern void mem_mgr_cli_if_recover_upcall_subtree_entry(vaddr_t addr);
+extern void mem_mgr_cli_if_remove_upcall_subtree_entry(vaddr_t addr);
+extern void mem_mgr_cli_if_recover_all_aias_upcall_entry(vaddr_t addr);
+#endif
 
 #endif 	    /* !MEM_MGR_H */

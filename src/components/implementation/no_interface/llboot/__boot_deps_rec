@@ -198,10 +198,10 @@ static int second = 0;
 int
 recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 {
-	/* printc("LL: llbooter upcall to spd %d, arg %x thd %d op %d\n", */
-	/*        dest, (unsigned int)arg, cos_get_thd_id(), op); */
+	printc("LL: llbooter upcall to spd %d, arg %x thd %d op %d\n",
+	       dest, (unsigned int)arg, cos_get_thd_id(), op);
 
-	/* printc("recovery_upcall has been called %d times\n",second); */
+	printc("recovery_upcall has been called %d times\n",second);
 	if(second++ >= 1000) {
 		printc("Andy 1000 times\n");
 		sched_exit();
@@ -253,9 +253,9 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	struct llbooter_per_core *llboot = PERCPU_GET(llbooter);
 	int reboot_sched = (spdid == LLBOOT_SCHED) ? 1:0;
 
-	/* printc("\nLL: rec_thd %d, alpha %d, init_thd %d\n",  */
-	/*        llboot->recovery_thd, llboot->alpha, llboot->init_thd); */
-	/* printc("LL: <<0>> thd %d : failed spd %d (this spd %ld)\n", cos_get_thd_id(), spdid, cos_spd_id()); */
+	printc("\nLL: rec_thd %d, alpha %d, init_thd %d\n",
+	       llboot->recovery_thd, llboot->alpha, llboot->init_thd);
+	printc("LL: <<0>> thd %d : failed spd %d (this spd %ld)\n", cos_get_thd_id(), spdid, cos_spd_id());
 
 	/* if (spdid == 2) sched_exit();  // test only -- remove this when test scheduler */
 	
@@ -343,13 +343,13 @@ static int thrid = 0;
 int
 fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 {
-	/* printc("parameters: spdid %d fault_addr %p flags %d ip %p (thd %d)\n",  */
-	/*        spdid, fault_addr, flags, ip, cos_get_thd_id()); */
+	printc("parameters: spdid %d fault_addr %p flags %d ip %p (thd %d)\n",
+	       spdid, fault_addr, flags, ip, cos_get_thd_id());
 	unsigned long r_ip;
 	struct llbooter_per_core *llboot = PERCPU_GET(llbooter);
 	
 	int tid = cos_get_thd_id();
-	/* printc("<< LL fault notification handler (tid %d) >>\n", tid); */
+	printc("<< LL fault notification handler (tid %d) >>\n", tid);
 
 	/* printc("fault_flt_notif_handler has been called %d times\n", third); */
 	if(thrid++ >= 1000) {
@@ -366,7 +366,7 @@ fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 #endif
 
 	if(!cos_thd_cntl(COS_THD_INV_FRAME_REM, tid, 1, 0)) {
-		/* printc("llbooter: remove the invfrm_ip\n"); */
+		printc("llbooter: remove the invfrm_ip\n");
 		assert(r_ip = cos_thd_cntl(COS_THD_INVFRM_IP, tid, 1, 0));
 		assert(!cos_thd_cntl(COS_THD_INVFRM_SET_IP, tid, 1, r_ip-8));
 		return 0;

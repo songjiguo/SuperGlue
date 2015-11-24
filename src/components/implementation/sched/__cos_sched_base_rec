@@ -538,8 +538,8 @@ static void sched_timer_tick(void)
 			//cos_stats();
 		}
 		/* are we done running? */
-		/* printc("PERCPU_GET(sched_base_state)->ticks %llu\n", */
-		/*        PERCPU_GET(sched_base_state)->ticks); */
+		printc("PERCPU_GET(sched_base_state)->ticks %llu (RUNTIME %d)\n",
+		       PERCPU_GET(sched_base_state)->ticks, RUNTIME_SEC*TIMER_FREQ+1);
 		if (unlikely(PERCPU_GET(sched_base_state)->ticks >= RUNTIME_SEC*TIMER_FREQ+1)) {
 			sched_exit();
 			while (COS_SCHED_RET_SUCCESS !=
@@ -746,21 +746,24 @@ void sched_timeout(spdid_t spdid, unsigned long amnt)
 	
 	abs_timeout = PERCPU_GET(sched_base_state)->ticks + amnt;
 	
+	/* printc("sched_timeout: passed in amnt %lu ticks %llu abs_timeout %llu\n", */
+	/*        amnt, PERCPU_GET(sched_base_state)->ticks, abs_timeout); */
+	
 	if (0 == PERCPU_GET(sched_base_state)->wakeup_time || abs_timeout < PERCPU_GET(sched_base_state)->wakeup_time) {
 		PERCPU_GET(sched_base_state)->wakeup_time = abs_timeout;
 	}
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_TIMEOUT)
 	printc("sched_timeout: thd %d spd %ld passed spd %d (num %d)\n",
-	       cos_get_thd_id(), cos_spd_id(), spdid, test_control++);
+	       cos_get_thd_id(), cos_spd_id(), spdid, test_control);
 	/* if (spdid == 11 && cos_get_thd_id() == 13 && test_control++ == 1) { */
 	/* 	printc("trigger fault in sched_timeout: thd %d spd %ld passed spd %d\n", */
 	/* 	       cos_get_thd_id(), cos_spd_id(), spdid); */
 	/* 	assert(0); */
 	/* } */
 
-	if (spdid == 11 && cos_get_thd_id() == 10 && test_control++ == 19) {
-		printc("trigger fault in sched_timeout: thd %d spd %ld passed spd %d\n",
+	if (spdid == 11 && cos_get_thd_id() == 10 && test_control++ == 9) {
+		printc("trigger fault in sched_timeout: timer thd %d te spd %ld from spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
 	}
@@ -852,7 +855,7 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	int ret;
 	struct sched_thd *thd;
 
-	printc("thread %d waking up thread %d.\n", cos_get_thd_id(), thd_id);
+	/* printc("thread %d waking up thread %d.\n", cos_get_thd_id(), thd_id); */
 	
 	if (!sched_thd_on_current_core(thd_id)) {
 		/* Cross-core wakeup */
@@ -995,6 +998,10 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 	struct sched_thd *thd, *dep = NULL;
 	int ret, first = 1;
 	unsigned short int dependency_thd = dep_thd;
+
+	
+	/* printc("sched_block: thd %d spd %ld passed dep thd %d\n", */
+	/*        cos_get_thd_id(), cos_spd_id(), dep_thd); */
 
 	// Added by Gabe 08/19
 	if (unlikely(dep_thd == cos_get_thd_id())) return -EINVAL;
@@ -1180,6 +1187,8 @@ int sched_component_take(spdid_t spdid)
 
 	WAIT_FAULT();
 
+	/* printc("sched component take %d by thd %d\n", spdid, cos_get_thd_id()); */
+
 	cos_sched_lock_take();
 	report_event(COMP_TAKE);
 	curr = sched_get_current();
@@ -1204,8 +1213,15 @@ int sched_component_take(spdid_t spdid)
 
 		holder = sched_take_crit_sect(spdid, curr);
 		if (NULL == holder) break;
+		/* printc("hodler is %d\n", holder->id); */
 
-		if (curr == holder) break;  // Jiguo: see sched_take_crit_sect
+		/* Jiguo: see sched_take_crit_sect. This can not be
+		 * tracked at the server interface because only the
+		 * holder (current thread) can release the lock, while
+		 * the reflection is done by the re-init thread
+		 * now. If we want the current thread to do this, the
+		 * logic at the interface need change */
+		if (curr == holder) break;
 
 		curr->flags |= THD_DEPENDENCY;
 		
@@ -1231,7 +1247,7 @@ int sched_component_release(spdid_t spdid)
 {
 	struct sched_thd *curr;
 
-	printc("sched component release %d by thd %d\n", spdid, cos_get_thd_id());
+	/* printc("sched component release %d by thd %d\n", spdid, cos_get_thd_id()); */
 
 	WAIT_FAULT();
 
@@ -1605,7 +1621,8 @@ static int current_core_create_thread_default(spdid_t spdid, u32_t sched_param_0
 
 	if (!new) return -1;
 
-	return new->id;
+	/* return new->id; */
+	return 0;
 }
 
 /* Create a thread in target with the default parameters */
@@ -1632,7 +1649,8 @@ sched_create_thread_default(spdid_t spdid, u32_t sched_param_0,
 		ret = xcore_exec(core_id, (void *)current_core_create_thread_default, 4, param, 1);
 	}
 
-	return ret;
+	/* return ret; */
+	return 0;
 }
 
 static void activate_child_sched(struct sched_thd *g)
@@ -1941,6 +1959,17 @@ int sched_priority(unsigned short int tid)
 unsigned long sched_timestamp(void)
 {
 	return (unsigned long)PERCPU_GET(sched_base_state)->ticks;
+}
+
+// Jiguo: restore the most recent ticks, assume no overflow for now
+int sched_restore_ticks(unsigned long last_ticks)
+{
+	if (last_ticks <= PERCPU_GET(sched_base_state)->ticks) {
+		return -1;
+	} else {
+		PERCPU_GET(sched_base_state)->ticks = last_ticks;
+		return 0;
+	}
 }
 
 int sched_create_net_acap(spdid_t spdid, int acap_id, unsigned short int port)
@@ -2488,4 +2517,8 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 
 // this is dummy function for export purpose
 // the reflection occurs over the server interface
-int sched_reflect(spdid_t spdid) { return 0; }
+int sched_reflection(spdid_t spdid) { return 0; }
+int sched_client_fault_notification(spdid_t spdid) { return 0; }
+
+/* Jiguo: get the creation timestamp */
+unsigned long sched_get_creation_timestamp(void){return 0;}

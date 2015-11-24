@@ -413,15 +413,8 @@ int lock_stats_len(spdid_t spdid) { return 0; }
 
 #endif
 
-int lock_component_reflect(spdid_t spd, int thd)
-{
-	return 0;
-}
-
 void cos_init(void *arg)
 {
 	cos_vect_init_static(&bthds);
 }
-
-int lock_trigger_all(spdid_t spdid, int dest) {return 0;}
 

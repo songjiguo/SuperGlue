@@ -653,7 +653,7 @@ static void start_timer_thread(void)
 				   * same protection domain as the
 				   * scheduler) */
 		ticks = sched_timestamp();
-		/* printc("timer thread sched_component_take now....\n"); */
+		/* printc("timer thread sched_component_take now....ticks %llu\n", ticks); */
 		if (sched_component_take(spdid)) {
 			prints("fprr: scheduler lock failed!!!");
 			BUG();
@@ -689,7 +689,8 @@ static void start_timer_thread(void)
 				prints("fprr: scheduler lock release failed!!!");
 				BUG();
 			}
-			/* printc("timer thread %d calls sched_timeout....\n", cos_get_thd_id()); */
+			/* printc("timer thread %d calls sched_timeout....(wakeup amnt %d)\n",  */
+			/*        cos_get_thd_id(), wakeup); */
 			sched_timeout(spdid, wakeup);
 		}
 	}

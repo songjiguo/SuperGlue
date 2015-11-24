@@ -3,23 +3,6 @@
 
 #include <res_spec.h>
 
-/* #define TEST_SCHED_CREATE_THD */
-/* #define TEST_SCHED_CREATE_THD_DEFAULT */
-/* #define TEST_SCHED_WAKEUP */
-#define TEST_SCHED_BLOCK
-/* #define TEST_SCHED_COMPONENT_TAKE */
-/* #define TEST_SCHED_COMPONENT_RELEASE */
-/* #define TEST_SCHED_TIMEOUT_THD */
-/* #define TEST_SCHED_TIMEOUT */
-
-
-//#define MEASU_SCHED_INTERFACE_CREATE
-//#define MEASU_SCHED_INTERFACE_DEFAULT
-//#define MEASU_SCHED_INTERFACE_WAKEUP
-//#define MEASU_SCHED_INTERFACE_BLOCK
-//#define MEASU_SCHED_INTERFACE_COM_TAKE
-//#define MEASU_SCHED_INTERFACE_COM_RELEASE
-
 int sched_wakeup(spdid_t spdid, unsigned short int thd_id);
 int sched_block(spdid_t spdid, unsigned short int dependency_thd);
 
@@ -46,7 +29,11 @@ int sched_component_release(spdid_t spdid);
 /* to reflect the owner of a critical section -- Jiguo */
 int sched_reflection_component_owner(spdid_t spdid);
 
-int sched_reflect(spdid_t spdid, int src_spd, int cnt);
+int sched_reflection(spdid_t spdid);
+unsigned long sched_get_creation_timestamp(void);
+int sched_client_fault_notification(spdid_t spdid);
+
+int sched_restore_ticks(unsigned long last_ticks);
 
 #include "cos_thd_creation.h"
 

@@ -26,13 +26,13 @@
 #ifdef EXAMINE_LOCK
 /* #define TEST_LOCK_ALLOC */
 /* #define TEST_LOCK_PRETAKE */
-/* #define TEST_LOCK_TAKE_BEFORE */
+#define TEST_LOCK_TAKE_BEFORE
 /* #define TEST_LOCK_TAKE_AFTER */
 /* #define TEST_LOCK_RELEASE_BEFORE */
 /* #define TEST_LOCK_RELEASE_AFTER */
 
-#define BENCHMARK_MEAS_INV_OVERHEAD_LOCK
-#define BENCHMARK_MEAS_INV_OVERHEAD_NO_SERVER_TRACK_LOCK
+/* #define BENCHMARK_MEAS_INV_OVERHEAD_LOCK */
+/* #define BENCHMARK_MEAS_INV_OVERHEAD_NO_SERVER_TRACK_LOCK */
 
 /* #define BENCHMARK_MEAS_TAKE */
 /* #define BENCHMARK_MEAS_PRETAKE */
@@ -48,14 +48,15 @@
 | ||  __/
  \__\___|
 ****************************/
-#define EXAMINE_TE
+/* #define EXAMINE_TE */
 
 #ifdef EXAMINE_TE
+
 /* #define TEST_PTE_CREATE_BEFORE */
 /* #define TEST_PTE_CREATE_AFTER  */
 /* #define TEST_PTE_WAIT_BEFORE */
-#define TEST_PTE_WAIT_AFTER
-/* #define TEST_PTE_TIMER_THD_BEFORE */
+/* #define TEST_PTE_WAIT_AFTER */
+#define TEST_PTE_TIMER_THD_BEFORE
 /* #define TEST_PTE_TIMER_THD_AFTER */
 
 /* #define BENCHMARK_MEAS_CREATE */
@@ -73,15 +74,17 @@
 /* #define EXAMINE_EVT */
 
 #ifdef EXAMINE_EVT
-#define EVT_C3            // enable upcall to each client to recover the events
+
+// enable upcall to each client to recover the events
+#define EVT_C3
 
 /* #define BENCHMARK_MEAS_INV_OVERHEAD_EVT */
 #ifdef BENCHMARK_MEAS_INV_OVERHEAD_EVT
 #else
 /* #define TEST_EVT_SPLIT */
 /* #define TEST_EVT_TRIGGER_BEFORE */
-/* #define TEST_EVT_TRIGGER_AFTER */
-#define TEST_EVT_WAIT_BEFORE
+#define TEST_EVT_TRIGGER_AFTER
+/* #define TEST_EVT_WAIT_BEFORE */
 /* #define TEST_EVT_WAIT_AFTER */
 /* #define TEST_EVT_FREE_BEFORE */
 /* #define TEST_EVT_FREE_AFTER */
@@ -112,11 +115,12 @@
 
 /* #define TEST_SCHED_CREATE_THD */
 /* #define TEST_SCHED_CREATE_THD_DEFAULT */
+/* #define TEST_SCHED_TIMEOUT_THD */
+
 #define TEST_SCHED_WAKEUP
 /* #define TEST_SCHED_BLOCK */
 /* #define TEST_SCHED_COMPONENT_TAKE */
 /* #define TEST_SCHED_COMPONENT_RELEASE */
-/* #define TEST_SCHED_TIMEOUT_THD */
 /* #define TEST_SCHED_TIMEOUT */
 
 //#define MEASU_SCHED_INTERFACE_CREATE
@@ -139,8 +143,11 @@
 #ifdef EXAMINE_MM
 #define MM_C3            // enable upcall to each client to recover the pages
 
+// enable this if needs upcall entry in client
+#define RECOVERY_MM_TEST   
+
 /* #define TEST_MM_GET_PAGE */
-/* #define TEST_MM_ALIAS_PAGE */
+#define TEST_MM_ALIAS_PAGE
 /* #define TEST_MM_REVOKE_PAGE */
 
 /* #define BENCHMARK_MEAS_INV_OVERHEAD_MM */
@@ -154,21 +161,21 @@
 | | | (_| | | | | | |  _\__ \
 |_|  \__,_|_| |_| |_|_| |___/
 ****************************/
-/* #define EXAMINE_RAMFS */
+#define EXAMINE_RAMFS
 
 #ifdef EXAMINE_RAMFS
 #define TEST_RAMFS_C3    // using cbufp version of treadp and twritep
 
 /* #define TEST_RAMFS_TSPLIT_BEFORE */
 /* #define TEST_RAMFS_TSPLIT_AFTER */
-/* #define TEST_RAMFS_TREADP */
+#define TEST_RAMFS_TREADP
 /* #define TEST_RAMFS_TWRITEP_BEFORE */
 /* #define TEST_RAMFS_TWRITEP_AFTER */
 /* #define TEST_RAMFS_TRELEASE */
 /* #define TEST_RAMFS_TMERGE */
 
-#define BENCHMARK_MEAS_INV_OVERHEAD_RAMFS
-#define BENCHMARK_MEAS_INV_OVERHEAD_NO_SERVER_TRACK_RAMFS
+/* #define BENCHMARK_MEAS_INV_OVERHEAD_RAMFS */
+/* #define BENCHMARK_MEAS_INV_OVERHEAD_NO_SERVER_TRACK_RAMFS */
 
 #endif
 

@@ -357,6 +357,4 @@ int lock_stats_len(spdid_t spdid)
 unsigned long *lock_stats(spdid_t spdid, unsigned long *stats) { return NULL; }
 int lock_stats_len(spdid_t spdid) { return 0; }
 
-int lock_reflect(spdid_t spdid) {return 0;}
-
 #endif

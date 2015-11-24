@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Wed Oct 28 19:58:37 2015 */
+/* IDL generated code ver 0.1 ---  Tue Nov 24 09:16:26 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -19,8 +19,6 @@ extern void free_page(void *ptr);
 #define CVECT_ALLOC() alloc_page()
 #define CVECT_FREE(x) free_page(x)
 #include <cvect.h>
-
-volatile unsigned long long ubenchmark_start, ubenchmark_end;
 
 static char *param_save(char *param, int param_len)
 {
@@ -47,89 +45,27 @@ struct desc_track {
 	int offset;
 	unsigned int state;
 	unsigned int next_state;
-	int server_tid;
 	unsigned long long fault_cnt;
+	int server_tid;
+
 };
 
 static volatile unsigned long global_fault_cnt = 0;
+static volatile unsigned long last_system_ticks = 0;
+static int first_map_init = 0;
 
-/* tracking thread state for data recovery */
-//CVECT_CREATE_STATIC(rd_vect);
 COS_MAP_CREATE_STATIC(ramfs_desc_maps);
 CSLAB_CREATE(ramfs_slab, sizeof(struct desc_track));
 
-// assumption: marshalled function is not same as the block/wakeup function
-struct __ser_tsplit_marshalling {
-	spdid_t spdid;
-	td_t parent_tid;
-	int len;
-	tor_flags_t tflags;
-	long evtid;
-	char data[0];
-};
-
-enum state_codes { state_tsplit, state_trelease, state_treadp, state_twritep,
-	    state_null };
-
-static inline void block_cli_if_recover(int id);
-static inline void block_cli_if_basic_id(int id);
-static inline void call_restore_data(struct desc_track *desc);
-static inline void call_save_data(int id, void *data);
-static inline int block_cli_if_invoke_tsplit(spdid_t spdid, td_t parent_tid,
-					     char *param, int len,
-					     tor_flags_t tflags, long evtid,
-					     int ret, long *fault,
-					     struct usr_inv_cap *uc);
-static inline int block_cli_if_marshalling_invoke_tsplit(spdid_t spdid,
-							 td_t parent_tid,
-							 char *param, int len,
-							 tor_flags_t tflags,
-							 long evtid, int ret,
-							 long *fault,
-							 struct usr_inv_cap *uc,
-							 struct
-							 __ser_tsplit_marshalling
-							 *md, int sz,
-							 cbuf_t cb);
-static inline void block_cli_if_desc_update_tsplit();
-static inline int block_cli_if_track_tsplit(int ret, spdid_t spdid,
-					    td_t parent_tid, char *param,
-					    int len, tor_flags_t tflags,
-					    long evtid);
-static inline int block_cli_if_invoke_treadp(spdid_t spdid, td_t tid, int len,
-					     int *_retval_cbuf_off,
-					     int *_retval_sz, int ret,
-					     long *fault,
-					     struct usr_inv_cap *uc);
-
-static inline void block_cli_if_desc_update_treadp(int id);
-static inline int block_cli_if_track_treadp(int ret, spdid_t spdid, td_t tid,
-					    int len, int *_retval_cbuf_off,
-					    int *_retval_sz);
-static inline int block_cli_if_invoke_twritep(spdid_t spdid, td_t tid, int cbid,
-					      int sz, int ret, long *fault,
-					      struct usr_inv_cap *uc);
-
-static inline void block_cli_if_desc_update_twritep(int id);
-static inline int block_cli_if_track_twritep(int ret, spdid_t spdid, td_t tid,
-					     int cbid, int sz);
-static inline int block_cli_if_invoke_trelease(spdid_t spdid, td_t tid, int ret,
-					       long *fault,
-					       struct usr_inv_cap *uc);
-
-static inline void block_cli_if_desc_update_trelease(int id);
-static inline int block_cli_if_track_trelease(int ret, spdid_t spdid, td_t tid);
-
-static inline struct desc_track *call_desc_lookup(int id)
+static inline struct desc_track *call_desc_lookup(td_t id)
 {
-	/* return (struct desc_track *)cvect_lookup(&rd_vect, id); */
 	return (struct desc_track *)cos_map_lookup(&ramfs_desc_maps, id);
 }
 
 static inline struct desc_track *call_desc_alloc()
 {
 	struct desc_track *desc = NULL;
-	int map_id = 0;
+	td_t map_id = 0;
 
 	while (1) {
 		desc = cslab_alloc_ramfs_slab();
@@ -147,7 +83,7 @@ static inline struct desc_track *call_desc_alloc()
 static inline void call_desc_dealloc(struct desc_track *desc)
 {
 	assert(desc);
-	int id = desc->tid;
+	td_t id = desc->tid;
 	desc->server_tid = -1;	// reset to -1
 	assert(desc);
 	cslab_free_ramfs_slab(desc);
@@ -155,7 +91,86 @@ static inline void call_desc_dealloc(struct desc_track *desc)
 	return;
 }
 
-static inline void call_desc_cons(struct desc_track *desc, int id,
+struct __ser_tsplit_marshalling {
+	spdid_t spdid;
+	td_t parent_tid;
+	int len;
+	tor_flags_t tflags;
+	long evtid;
+	char data[0];
+};
+
+enum state_codes { state_tsplit, state_trelease, state_treadp, state_twritep,
+	    state_null };
+
+static inline struct desc_track *call_desc_update(td_t id, int next_state);
+static inline void call_map_init();
+static inline void block_cli_if_recover(td_t id);
+static inline void block_cli_if_basic_id(td_t id);
+static inline void block_cli_if_recover_data(struct desc_track *desc);
+static inline void call_save_data(td_t id, void *data);
+static inline void block_cli_if_upcall_creator(td_t id);
+static inline int block_cli_if_invoke_tsplit(spdid_t spdid, td_t parent_tid,
+					     char *param, int len,
+					     tor_flags_t tflags, long evtid,
+					     int ret, long *fault,
+					     struct usr_inv_cap *uc);
+static inline int block_cli_if_desc_update_post_fault_tsplit();
+static inline int block_cli_if_track_tsplit(int ret, spdid_t spdid,
+					    td_t parent_tid, char *param,
+					    int len, tor_flags_t tflags,
+					    long evtid);
+static inline void block_cli_if_desc_update_tsplit(spdid_t spdid,
+						   td_t parent_tid, char *param,
+						   int len, tor_flags_t tflags,
+						   long evtid);
+static inline void call_desc_cons(struct desc_track *desc, td_t id,
+				  spdid_t spdid, td_t parent_tid, char *param,
+				  int len, tor_flags_t tflags, long evtid);
+static inline int block_cli_if_invoke_treadp(spdid_t spdid, td_t tid, int len,
+					     int *_retval_cbuf_off,
+					     int *_retval_sz, int ret,
+					     long *fault,
+					     struct usr_inv_cap *uc);
+static inline int block_cli_if_desc_update_post_fault_treadp();
+static inline int block_cli_if_track_treadp(int ret, spdid_t spdid, td_t tid,
+					    int len, int *_retval_cbuf_off,
+					    int *_retval_sz);
+static inline void block_cli_if_desc_update_treadp(spdid_t spdid, td_t tid,
+						   int len,
+						   int *_retval_cbuf_off,
+						   int *_retval_sz);
+static inline int block_cli_if_invoke_twritep(spdid_t spdid, td_t tid, int cbid,
+					      int sz, int ret, long *fault,
+					      struct usr_inv_cap *uc);
+static inline int block_cli_if_desc_update_post_fault_twritep();
+static inline int block_cli_if_track_twritep(int ret, spdid_t spdid, td_t tid,
+					     int cbid, int sz);
+static inline void block_cli_if_desc_update_twritep(spdid_t spdid, td_t tid,
+						    int cbid, int sz);
+static inline int block_cli_if_invoke_trelease(spdid_t spdid, td_t tid, int ret,
+					       long *fault,
+					       struct usr_inv_cap *uc);
+static inline void block_cli_if_recover_upcall_subtree(td_t id);
+static inline int block_cli_if_desc_update_post_fault_trelease();
+static inline int block_cli_if_track_trelease(int ret, spdid_t spdid, td_t tid);
+static inline void block_cli_if_desc_update_trelease(spdid_t spdid, td_t tid);
+
+static inline void call_map_init()
+{
+	if (unlikely(!first_map_init)) {
+		first_map_init = 1;
+		cos_map_init_static(&ramfs_desc_maps);
+	}
+	return;
+}
+
+static inline void block_cli_if_recover(td_t id)
+{
+	block_cli_if_basic_id(id);
+}
+
+static inline void call_desc_cons(struct desc_track *desc, td_t id,
 				  spdid_t spdid, td_t parent_tid, char *param,
 				  int len, tor_flags_t tflags, long evtid)
 {
@@ -175,44 +190,58 @@ static inline void call_desc_cons(struct desc_track *desc, int id,
 	return;
 }
 
-/* static inline struct desc_track *call_desc_alloc(int id) { */
-/* 	struct desc_track *_desc_track; */
+static inline void block_cli_if_basic_id(td_t id)
+{
+	assert(id);
+	struct desc_track *desc = call_desc_lookup(id);
+	assert(desc);
 
-/* 	_desc_track = (struct desc_track *)cslab_alloc_rdservice(); */
-/* 	assert(_desc_track); */
-/* 	if (cvect_add(&rd_vect, _desc_track, id)) { */
-/* 		assert(0); */
-/* 	} */
-/* 	_desc_track->tid = id; */
-/* 	return _desc_track; */
-/* } */
+	int retval = 0;
+ again:
+	retval =
+	    tsplit(desc->spdid, desc->parent_tid, desc->param, desc->len,
+		   desc->tflags, desc->evtid);
+	//TODO: define the error code for non-recovered parent
+	// thinking...1111111
+	if (retval == -EINVAL) {
+		id = desc->parent_tid;
+		call_desc_update(id, state_tsplit);
+		goto again;
+	}
 
-/* static inline void call_desc_dealloc(struct desc_track *desc) { */
-/* 	assert(desc); */
-/* 	assert(!cvect_del(&rd_vect, desc->tid)); */
-/* 	cslab_free_rdservice(desc); */
-/* } */
+	assert(retval);
+	desc->state = state_tsplit;	// set the state to the initial state
+	desc->fault_cnt = global_fault_cnt;	// set the fault counter to the global
+	block_cli_if_recover_data(desc);
+	return;
+}
 
-/* static inline void call_desc_cons(struct desc_track *desc, int id, spdid_t spdid, td_t parent_tid, char * param, int len, tor_flags_t tflags, long evtid) { */
-/* 	assert(desc); */
+static inline void block_cli_if_recover_data(struct desc_track *desc)
+{
+	assert(desc);
+}
 
-/* 	desc->tid = id; */
-/* 	desc->server_tid = id; */
-/* 	desc->spdid=spdid;
- desc->parent_tid=parent_tid;
- desc->param=param_save(param, len);;
- desc->len=len;
- desc->tflags=tflags;
- desc->evtid=evtid;
- */
-/* 	return; */
-/* } */
+static inline void block_cli_if_upcall_creator(td_t id)
+{
+}
 
-static inline struct desc_track *call_desc_update(int id, int next_state)
+static inline void call_save_data(td_t id, void *data)
+{
+}
+
+static inline void block_cli_if_save_data(td_t id, void *data)
+{
+	call_save_data(id, data);
+}
+
+static inline struct desc_track *call_desc_update(td_t id, int next_state)
 {
 	struct desc_track *desc = NULL;
 	unsigned int from_state = 0;
 	unsigned int to_state = 0;
+
+	if (id == 1)
+		return NULL;
 
 	desc = call_desc_lookup(id);
 	if (unlikely(!desc))
@@ -233,54 +262,6 @@ static inline struct desc_track *call_desc_update(int id, int next_state)
 	return desc;
 }
 
-static inline void call_restore_data(struct desc_track *desc)
-{
-}
-
-static inline void block_cli_if_recover_data(struct desc_track *desc)
-{
-	assert(desc);
-	call_restore_data(desc);
-}
-
-static inline void block_cli_if_basic_id(int id)
-{
-	assert(id);
-	struct desc_track *desc = call_desc_lookup(id);
-	assert(desc);
-
-	int retval = 0;
- again:
-	retval =
-	    tsplit(desc->spdid, desc->parent_tid, desc->param, desc->len,
-		   desc->tflags, desc->evtid);
-	//TODO: define the error code for non-recovered parent
-	// thinking...
-	if (retval == -EINVAL) {
-		id = desc->parent_tid;
-		call_desc_update(id, state_tsplit);
-		goto again;
-	}
-
-	assert(retval);
-	desc->state = state_tsplit;
-	block_cli_if_recover_data(desc);
-}
-
-static inline void block_cli_if_recover(int id)
-{
-	block_cli_if_basic_id(id);
-}
-
-static inline void call_save_data(int id, void *data)
-{
-}
-
-static inline void block_cli_if_save_data(int id, void *data)
-{
-	call_save_data(id, data);
-}
-
 static inline int block_cli_if_track_tsplit(int ret, spdid_t spdid,
 					    td_t parent_tid, char *param,
 					    int len, tor_flags_t tflags,
@@ -298,8 +279,18 @@ static inline int block_cli_if_track_tsplit(int ret, spdid_t spdid,
 	return desc->tid;
 }
 
-static inline void block_cli_if_desc_update_tsplit()
+static inline void block_cli_if_desc_update_tsplit(spdid_t spdid,
+						   td_t parent_tid, char *param,
+						   int len, tor_flags_t tflags,
+						   long evtid)
 {
+	call_desc_update(parent_tid, state_tsplit);
+}
+
+static inline int block_cli_if_desc_update_post_fault_tsplit()
+{
+
+	return 1;
 }
 
 static inline int block_cli_if_marshalling_invoke_tsplit(spdid_t spdid,
@@ -333,11 +324,39 @@ static inline int block_cli_if_marshalling_invoke_tsplit(spdid_t spdid,
 	return ret;
 }
 
+static inline void block_cli_if_desc_update_trelease(spdid_t spdid, td_t tid)
+{
+	call_desc_update(tid, state_trelease);
+}
+
+static inline void block_cli_if_recover_upcall_subtree(td_t id)
+{
+}
+
+static inline int block_cli_if_desc_update_post_fault_trelease()
+{
+
+	return 1;
+}
+
+static inline int block_cli_if_invoke_trelease(spdid_t spdid, td_t tid, int ret,
+					       long *fault,
+					       struct usr_inv_cap *uc)
+{
+	long __fault = 0;
+	struct desc_track *desc = call_desc_lookup(tid);
+
+	CSTUB_INVOKE(ret, __fault, uc, 2, spdid, desc->server_tid);
+	*fault = __fault;
+
+	return ret;
+}
+
 static inline int block_cli_if_track_trelease(int ret, spdid_t spdid, td_t tid)
 {
 	struct desc_track *desc = call_desc_lookup(tid);
-	assert(desc);
-	call_desc_dealloc(desc);
+	if (desc)
+		call_desc_dealloc(desc);
 
 	return ret;
 	// TODO: this needs to be changed
@@ -347,47 +366,40 @@ static inline int block_cli_if_track_trelease(int ret, spdid_t spdid, td_t tid)
 	/* } */
 }
 
-static inline void block_cli_if_desc_update_trelease(int id)
-{
-	call_desc_update(id, state_trelease);
-}
-
-static inline int block_cli_if_invoke_trelease(spdid_t spdid, td_t tid, int ret,
-					       long *fault,
-					       struct usr_inv_cap *uc)
-{
-	struct desc_track *desc = call_desc_lookup(tid);
-	assert(desc);		// must be created in the same component
-
-	long __fault = 0;
-	CSTUB_INVOKE(ret, __fault, uc, 2, spdid, desc->server_tid);
-	*fault = __fault;
-
-	return ret;
-}
-
 static inline int block_cli_if_track_twritep(int ret, spdid_t spdid, td_t tid,
 					     int cbid, int sz)
 {
 	struct desc_track *desc = call_desc_lookup(tid);
-	assert(desc);
+	if (desc) {
+	}
+
+	if (ret == -EINVAL) {
+		block_cli_if_basic_id(tid);
+		ret = -ELOOP;
+	}
 
 	return ret;
 }
 
-static inline void block_cli_if_desc_update_twritep(int id)
+static inline void block_cli_if_desc_update_twritep(spdid_t spdid, td_t tid,
+						    int cbid, int sz)
 {
-	call_desc_update(id, state_twritep);
+	call_desc_update(tid, state_twritep);
+}
+
+static inline int block_cli_if_desc_update_post_fault_twritep()
+{
+
+	return 1;
 }
 
 static inline int block_cli_if_invoke_twritep(spdid_t spdid, td_t tid, int cbid,
 					      int sz, int ret, long *fault,
 					      struct usr_inv_cap *uc)
 {
-	struct desc_track *desc = call_desc_lookup(tid);
-	assert(desc);		// must be created in the same component
-
 	long __fault = 0;
+	struct desc_track *desc = call_desc_lookup(tid);
+
 	CSTUB_INVOKE(ret, __fault, uc, 4, spdid, desc->server_tid, cbid, sz);
 	*fault = __fault;
 
@@ -399,14 +411,29 @@ static inline int block_cli_if_track_treadp(int ret, spdid_t spdid, td_t tid,
 					    int *_retval_sz)
 {
 	struct desc_track *desc = call_desc_lookup(tid);
-	assert(desc);
+	if (desc) {
+	}
+
+	if (ret == -EINVAL) {
+		block_cli_if_basic_id(tid);
+		ret = -ELOOP;
+	}
 
 	return ret;
 }
 
-static inline void block_cli_if_desc_update_treadp(int id)
+static inline void block_cli_if_desc_update_treadp(spdid_t spdid, td_t tid,
+						   int len,
+						   int *_retval_cbuf_off,
+						   int *_retval_sz)
 {
-	call_desc_update(id, state_treadp);
+	call_desc_update(tid, state_treadp);
+}
+
+static inline int block_cli_if_desc_update_post_fault_treadp()
+{
+
+	return 1;
 }
 
 static inline int block_cli_if_invoke_treadp(spdid_t spdid, td_t tid, int len,
@@ -415,10 +442,9 @@ static inline int block_cli_if_invoke_treadp(spdid_t spdid, td_t tid, int len,
 					     long *fault,
 					     struct usr_inv_cap *uc)
 {
-	struct desc_track *desc = call_desc_lookup(tid);
-	assert(desc);		// must be created in the same component
-
 	long __fault = 0;
+	struct desc_track *desc = call_desc_lookup(tid);
+
 	CSTUB_INVOKE_3RETS(ret, __fault, *_retval_cbuf_off, *_retval_sz, uc, 3,
 			   spdid, desc->server_tid, len);
 	*fault = __fault;
@@ -426,32 +452,23 @@ static inline int block_cli_if_invoke_treadp(spdid_t spdid, td_t tid, int len,
 	return ret;
 }
 
-static int tsplit_ubenchmark_flag;
 CSTUB_FN(td_t, tsplit) (struct usr_inv_cap * uc, spdid_t spdid, td_t parent_tid,
 			char *param, int len, tor_flags_t tflags, long evtid) {
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!ramfs_desc_maps.data.depth)) {
-		cos_map_init_static(&ramfs_desc_maps);
-	}
+	call_map_init();
 
 	struct __ser_tsplit_marshalling *md = NULL;
 	cbuf_t cb = 0;
 	int sz = len + sizeof(struct __ser_tsplit_marshalling);
 
  redo:
-	block_cli_if_desc_update_tsplit();
+	block_cli_if_desc_update_tsplit(spdid, parent_tid, param, len, tflags,
+					evtid);
 
 	md = (struct __ser_tsplit_marshalling *)cbuf_alloc(sz, &cb);
 	assert(md);		// assume we always get cbuf for now
-
-	rdtscll(ubenchmark_end);
-	if (tsplit_ubenchmark_flag) {
-		tsplit_ubenchmark_flag = 0;
-		printc("tsplit(IDL):recover per object end-end cost: %llu\n",
-		       ubenchmark_end - ubenchmark_start);
-	}
 
 	ret =
 	    block_cli_if_marshalling_invoke_tsplit(spdid, parent_tid, param,
@@ -460,12 +477,11 @@ CSTUB_FN(td_t, tsplit) (struct usr_inv_cap * uc, spdid_t spdid, td_t parent_tid,
 
 	if (unlikely(fault)) {
 
-		tsplit_ubenchmark_flag = 1;
-		rdtscll(ubenchmark_start);
-
 		CSTUB_FAULT_UPDATE();
 		cbuf_free(cb);
-		goto redo;
+		if (block_cli_if_desc_update_post_fault_tsplit()) {
+			goto redo;
+		}
 	}
 	cbuf_free(cb);
 
@@ -473,111 +489,91 @@ CSTUB_FN(td_t, tsplit) (struct usr_inv_cap * uc, spdid_t spdid, td_t parent_tid,
 	    block_cli_if_track_tsplit(ret, spdid, parent_tid, param, len,
 				      tflags, evtid);
 
+	if (unlikely(ret == -ELOOP))
+		goto redo;
+
 	return ret;
 }
 
-static int trelease_ubenchmark_flag;
-CSTUB_FN(int, trelease) (struct usr_inv_cap * uc, spdid_t spdid, td_t tid) {
+CSTUB_FN(int, trelease)(struct usr_inv_cap * uc, spdid_t spdid, td_t tid) {
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!ramfs_desc_maps.data.depth)) {
-		cos_map_init_static(&ramfs_desc_maps);
-	}
+	call_map_init();
 
  redo:
-	block_cli_if_desc_update_trelease(tid);
-
-	rdtscll(ubenchmark_end);
-	if (trelease_ubenchmark_flag) {
-		trelease_ubenchmark_flag = 0;
-		printc("trelease:recover per object end-end cost: %llu\n",
-		       ubenchmark_end - ubenchmark_start);
-	}
+	block_cli_if_desc_update_trelease(spdid, tid);
 
 	ret = block_cli_if_invoke_trelease(spdid, tid, ret, &fault, uc);
 	if (unlikely(fault)) {
 
-		trelease_ubenchmark_flag = 1;
-		rdtscll(ubenchmark_start);
-
 		CSTUB_FAULT_UPDATE();
-		goto redo;
+		if (block_cli_if_desc_update_post_fault_trelease()) {
+			goto redo;
+		}
 	}
 	ret = block_cli_if_track_trelease(ret, spdid, tid);
+
+	if (unlikely(ret == -ELOOP))
+		goto redo;
 
 	return ret;
 }
 
-static int twritep_ubenchmark_flag;
-CSTUB_FN(int, twritep) (struct usr_inv_cap * uc, spdid_t spdid, td_t tid,
-			int cbid, int sz) {
+CSTUB_FN(int, twritep)(struct usr_inv_cap * uc, spdid_t spdid, td_t tid,
+		       int cbid, int sz) {
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!ramfs_desc_maps.data.depth)) {
-		cos_map_init_static(&ramfs_desc_maps);
-	}
+	call_map_init();
 
  redo:
-	block_cli_if_desc_update_twritep(tid);
-
-	rdtscll(ubenchmark_end);
-	if (twritep_ubenchmark_flag) {
-		twritep_ubenchmark_flag = 0;
-		printc("twritep:recover per object end-end cost: %llu\n",
-		       ubenchmark_end - ubenchmark_start);
-	}
+	block_cli_if_desc_update_twritep(spdid, tid, cbid, sz);
 
 	ret =
 	    block_cli_if_invoke_twritep(spdid, tid, cbid, sz, ret, &fault, uc);
 	if (unlikely(fault)) {
 
-		twritep_ubenchmark_flag = 1;
-		rdtscll(ubenchmark_start);
-
 		CSTUB_FAULT_UPDATE();
-		goto redo;
+		if (block_cli_if_desc_update_post_fault_twritep()) {
+			goto redo;
+		}
 	}
 	ret = block_cli_if_track_twritep(ret, spdid, tid, cbid, sz);
+
+	if (unlikely(ret == -ELOOP))
+		goto redo;
 
 	return ret;
 }
 
-static int treadp_ubenchmark_flag;
-CSTUB_FN(int, treadp) (struct usr_inv_cap * uc, spdid_t spdid, td_t tid,
-		       int len, int *_retval_cbuf_off, int *_retval_sz) {
+CSTUB_FN(int, treadp)(struct usr_inv_cap * uc, spdid_t spdid, td_t tid, int len,
+		      int *_retval_cbuf_off, int *_retval_sz) {
 	long fault = 0;
 	int ret = 0;
 
-	if (unlikely(!ramfs_desc_maps.data.depth)) {
-		cos_map_init_static(&ramfs_desc_maps);
-	}
+	call_map_init();
 
  redo:
-	block_cli_if_desc_update_treadp(tid);
-
-	rdtscll(ubenchmark_end);
-	if (treadp_ubenchmark_flag) {
-		treadp_ubenchmark_flag = 0;
-		printc("treadp:recover per object end-end cost: %llu\n",
-		       ubenchmark_end - ubenchmark_start);
-	}
+	block_cli_if_desc_update_treadp(spdid, tid, len, _retval_cbuf_off,
+					_retval_sz);
 
 	ret =
 	    block_cli_if_invoke_treadp(spdid, tid, len, _retval_cbuf_off,
 				       _retval_sz, ret, &fault, uc);
 	if (unlikely(fault)) {
 
-		treadp_ubenchmark_flag = 1;
-		rdtscll(ubenchmark_start);
-
 		CSTUB_FAULT_UPDATE();
-		goto redo;
+		if (block_cli_if_desc_update_post_fault_treadp()) {
+			goto redo;
+		}
 	}
 	ret =
 	    block_cli_if_track_treadp(ret, spdid, tid, len, _retval_cbuf_off,
 				      _retval_sz);
+
+	if (unlikely(ret == -ELOOP))
+		goto redo;
 
 	return ret;
 }

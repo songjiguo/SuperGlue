@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Wed Oct 28 19:58:37 2015 */
+/* IDL generated code ver 0.1 ---  Tue Nov 24 09:16:26 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -16,7 +16,6 @@ int __ser_treadp(spdid_t spdid, int tid, int len, int __pad0, int *off_len)
 	return ret;
 }
 
-// assumption: marshalled function is not same as the block/wakeup function
 struct __ser_tsplit_marshalling {
 	spdid_t spdid;
 	td_t parent_tid;
@@ -25,6 +24,7 @@ struct __ser_tsplit_marshalling {
 	long evtid;
 	char data[0];
 };
+
 td_t __ser_tsplit(spdid_t spdid, cbuf_t cbid, int len)
 {
 	struct __ser_tsplit_marshalling *md = NULL;
@@ -41,9 +41,3 @@ td_t __ser_tsplit(spdid_t spdid, cbuf_t cbid, int len)
 	return tsplit(md->spdid, md->parent_tid, &md->data[0], md->len,
 		      md->tflags, md->evtid);
 }
-
-struct track_block {
-	int tid;
-	struct track_block *next, *prev;
-};
-struct track_block tracking_block_list[MAX_NUM_SPDS];

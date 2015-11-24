@@ -156,12 +156,14 @@ static void
 rd_recover_state(struct rec_data_lk *rd)
 {
 	assert(rd && rd->c_lkid);
-	/* printc("thd %d is creating a new server side lock id\n", cos_get_thd_id()); */
+	printc("thd %d is creating a new server side lock id\n", cos_get_thd_id());
 
 	struct rec_data_lk *tmp;
 	int tmp_lkid = lock_component_alloc(cos_spd_id());
 	assert(tmp_lkid);
 	
+	printc("thd %d is creating a new server side lock id %d\n", 
+	       cos_get_thd_id(), tmp_lkid);
 	assert((tmp = rdlk_lookup(tmp_lkid)));
 	rd->s_lkid = tmp->s_lkid;
 	rdlk_dealloc(tmp_lkid);
@@ -204,7 +206,7 @@ rd_update(int lkid, int state)
 		/* There is no need to goto redo since reflection will
 		 * wake up all threads from lock spd and client has
 		 * set owner to be 0 */
-		rd_recover_state(rd);
+		/* rd_recover_state(rd); */
 		break;
 	default:
 		assert(0);
@@ -302,14 +304,23 @@ redo:
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, rd->s_lkid, thd);
 	
 	if (unlikely(fault)){
-
+		printc("cli:thd %d see a fault in lock_component_pretake!\n", 
+		       cos_get_thd_id());
 #ifdef BENCHMARK_MEAS_PRETAKE
 		test_flag = 1;
 		rdtscll(meas_start);
 #endif		
-		CSTUB_FAULT_UPDATE();
+		CSTUB_FAULT_UPDATE();		
 		goto redo;  // update the generation number
 	}
+
+	if (ret == -EINVAL) {
+		/* printc("cli:thd %d lock_component_pretake return EINVAL\n", cos_get_thd_id()); */
+		rd_recover_state(rd);
+		goto redo;
+	}
+
+	/* printc("cli:thd %d lock_component_pretake return %d\n", cos_get_thd_id(), ret); */
 	
 	return ret;
 }
@@ -340,7 +351,7 @@ redo:
 	CSTUB_INVOKE(ret, fault, uc, 3, spdid, rd->s_lkid, thd);
 	
 	if (unlikely (fault)){
-		
+		/* printc("cli:thd %d see a fault in lock_component_take!\n", cos_get_thd_id()); */
 		lock_component_take_ubenchmark_flag = 1;
 		rdtscll(ubenchmark_start);
 
@@ -350,19 +361,25 @@ redo:
 		/* printc("a fault(thd %d start %llu)!!!!\n", cos_get_thd_id(), meas_start); */
 #endif		
 		CSTUB_FAULT_UPDATE();
-		/* goto redo; */
-		rd = rd_update(lock_id, LOCK_TAKE);
-		ret = 0; 
-		rdtscll(ubenchmark_end);
-		if (lock_component_take_ubenchmark_flag) {
-			lock_component_take_ubenchmark_flag = 0;
-			printc
-				("lock_component_take(C3):recover per object end-end cost: %llu\n",
-				 ubenchmark_end - ubenchmark_start);
-		}
+		goto redo;
+		/* rd = rd_update(lock_id, LOCK_TAKE); */
+		/* ret = 0;  */
+		/* rdtscll(ubenchmark_end); */
+		/* if (lock_component_take_ubenchmark_flag) { */
+		/* 	lock_component_take_ubenchmark_flag = 0; */
+		/* 	printc */
+		/* 		("lock_component_take(C3):recover per object end-end cost: %llu\n", */
+		/* 		 ubenchmark_end - ubenchmark_start); */
+		/* } */
 		
 	}
+	if (ret == -EINVAL) {
+		/* printc("cli:thd %d lock_component_take return EINVAL\n", cos_get_thd_id()); */
+		rd_recover_state(rd);
+		goto redo;
+	}
 
+	/* printc("cli:thd %d lock_component_take return %d\n", cos_get_thd_id(), ret); */
 	return ret;
 }
 
@@ -375,18 +392,29 @@ CSTUB_FN(int, lock_component_release) (struct usr_inv_cap *uc,
 	int ret;
 
         struct rec_data_lk *rd = NULL;
-
+redo:
         rd = rd_update(lock_id, LOCK_RELEASE);
-	if (!rd) {
-		printc("try to release a non-tracking lock\n");
-		return -1;
-	}
+	assert(rd);
+	/* if (!rd) { */
+	/* 	printc("try to release a non-tracking lock\n"); */
+	/* 	return -1; */
+	/* } */
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, rd->s_lkid);
 
 	if (unlikely (fault)){
+		/* printc("cli:thd %d see a fault in lock_component_release!\n",  */
+		/*        cos_get_thd_id()); */
 		CSTUB_FAULT_UPDATE();
+		goto redo;
 	}
-	
+
+	if (ret == -EINVAL) {
+		/* printc("cli:thd %d lock_component_release return EINVAL\n", cos_get_thd_id()); */
+		/* rd_recover_state(rd); */
+		/* goto redo; */
+		ret = 0;
+	}
+	/* printc("cli:thd %d lock_component_release return %d\n", cos_get_thd_id(), ret);	 */
 	return ret;
 }

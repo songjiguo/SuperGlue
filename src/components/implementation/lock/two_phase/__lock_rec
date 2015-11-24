@@ -242,9 +242,9 @@ int lock_component_pretake(spdid_t spd, unsigned long lock_id, unsigned short in
 //	lock_print_all();
 	ml = lock_find(lock_id, spd);
 	if (NULL == ml) {
-		printc("thd %d can not find ml for lock %ld spd %d\n", 
-		       cos_get_thd_id(), lock_id, spd);
-		ret = -1;
+		/* printc("pretake: thd %d can not find ml for lock %ld spd %d\n",  */
+		/*        cos_get_thd_id(), lock_id, spd); */
+		ret = -EINVAL;
 		goto done;
 	}
 	ml->gen_num = generation;
@@ -296,8 +296,8 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_TAKE_BEFORE)	
 	/* printc("trigger fault in lock take before: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
 	/* if (spd == 17 && cos_get_thd_id() == 10 && test_num++ == 2) { */
-	if (test_num++ > 20) {
-		/* printc("trigger fault in lock take before: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
+	if (test_num++ > 5) {
+		printc("trigger fault in lock take before: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}
 #endif
@@ -305,7 +305,8 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	ml = lock_find(lock_id, spd);
 	/* tried to access a lock not yet created */
 	if (!ml) {
-		printc("lock id %lu goto error 1\n", lock_id);
+		/* printc("lock id %lu goto error: can not find lock\n", lock_id); */
+		ret = -EINVAL;
 		goto error;
 	}
 
@@ -318,7 +319,7 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	if (ml->gen_num != generation) {
 		ml->gen_num = generation;
 		ret = 1;
-		printc("goto error 2\n");
+		/* printc("goto error 2\n"); */
 		goto error;
 	}
 	generation++;
@@ -346,7 +347,7 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	/* printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
 		
 	/* if (spd == 17 && cos_get_thd_id() == 10 && test_num++ >= 0)  */
-	if (test_num++ > 20) {
+	if (test_num++ > 5) {
 		printc("trigger fault in lock take after: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
 	}
@@ -392,13 +393,14 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 	struct blocked_thds *sent, *bt;
 	spdid_t spdid = cos_spd_id();
 
+	int ret = -1;
+
 	ACT_RECORD(ACT_UNLOCK, spd, lock_id, cos_get_thd_id(), 0);
 	TAKE(spdid);
 
 	generation++;
 	ml = lock_find(lock_id, spd);
 	if (!ml) goto error;
-
 
 	WAIT_FAULT();
 	/* int tt = 0; */
@@ -411,7 +413,7 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 	/* printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n", */
 	/*        cos_get_thd_id(), cos_spd_id(), spd); */
 	/* if (spd == 16 && cos_get_thd_id() == 13 && test_num++ == 2) { */
-	if (test_num++ > 20) {
+	if (test_num++ > 5) {
 		printc("trigger fault in lock release before: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spd);
 		assert(0);
@@ -467,7 +469,7 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 		/* printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n", */
 		/*        cos_get_thd_id(), cos_spd_id(), spd); */
 		/* if (spd == 16 && cos_get_thd_id() == 13 && test_num++ == 2) { */
-		if (test_num++ > 20) {
+		if (test_num++ > 5) {
 			printc("trigger fault in lock release after: thd %d spd %ld passed spd %d\n",
 			       cos_get_thd_id(), cos_spd_id(), spd);
 			assert(0);
@@ -478,10 +480,13 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 		bt = next;
 	}
 
-	return 0;
-error:
+	ret = 0;
+done:	
 	RELEASE(spdid);
-	return -1;
+	return ret;
+error:
+	ret = -EINVAL;
+	goto done;
 }
 
 unsigned long lock_component_alloc(spdid_t spd)
@@ -489,9 +494,11 @@ unsigned long lock_component_alloc(spdid_t spd)
 	struct meta_lock *l;
 	spdid_t spdid = cos_spd_id();
 
+	/* printc("lock_component_alloc 1\n"); */
 	TAKE(spdid);
+	/* printc("lock_component_alloc 1.1.....\n"); */
 	l = lock_alloc(spd);
-
+	/* printc("lock_component_alloc 2\n"); */
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_ALLOC)
 	/* printc("trigger fault in lock alloc: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
 	if (spd == 17 && test_num++ == 2) {
@@ -502,7 +509,7 @@ unsigned long lock_component_alloc(spdid_t spd)
 #endif
 
 	RELEASE(spdid);
-	
+	/* printc("lock_component_alloc 3\n"); */
 	if (!l) return 0;
 	/* printc("lock_component_alloc id %lu(request by spd %d)\n", l->lock_id, spd); */
  	return l->lock_id;
@@ -608,7 +615,7 @@ rd_reflection()
 	/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
 	/* } */
 
-	sched_reflection(cos_spd_id());
+	sched_client_fault_notification(cos_spd_id());
 	// to reflect all threads blocked from lock component
 	/* int wake_thd; */
 	/* count_obj = sched_reflect(cos_spd_id(), dest_spd, 1); */
@@ -620,7 +627,7 @@ rd_reflection()
 	/* 	sched_wakeup(cos_spd_id(), wake_thd); */
 	/* } */
 
-	/* printc("lock reflection done (thd %d)\n\n", cos_get_thd_id()); */
+	printc("lock reflection done (thd %d)\n\n", cos_get_thd_id());
 
 	return;
 }

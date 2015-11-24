@@ -97,7 +97,7 @@ ns_alloc(spdid_t server_spd, spdid_t cli_spdid, int existing_id)
 		ret = en->id;
 	}
 
-	/* printc("evt name server getting id %d (from spd %d)\n", ret, cli_spdid); */
+	printc("evt name server getting id %d (from spd %d)\n", ret, cli_spdid);
 
 	/* if (cos_get_thd_id() != 2) UNLOCK(); */
 done:
@@ -150,8 +150,8 @@ ns_upcall(spdid_t spdid, int id, int type)
 	if (!en) goto done;
 
 	int dest_spd = en->creator;
-	/* printc("evt_ns: ready to upcall (thd %d upcall to %d for evt id %d)\n", */
-	/*        cos_get_thd_id(), dest_spd, id); */
+	printc("evt_ns: ready to upcall (thd %d upcall to %d for evt id %d)\n",
+	       cos_get_thd_id(), dest_spd, id);
 	UNLOCK();
 	recovery_upcall(cos_spd_id(), COS_UPCALL_RECEVT, dest_spd, id);
 	LOCK();

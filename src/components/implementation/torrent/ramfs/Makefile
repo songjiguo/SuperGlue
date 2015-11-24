@@ -5,4 +5,8 @@ INTERFACES=rtorrent
 DEPENDENCIES=printc sched cbufp cbuf_c evt lock mem_mgr_large valloc uniq_map pgfault ll_log
 
 include ../../Makefile.subsubdir
-##MANDITORY_LIB=simple_stklib.o
+# ifeq (${ENABLE_STACK_MANAGER},1)
+# # $(info Using Simple Stack)
+#  MANDITORY_LIB=simple_stklib.o
+# endif
+

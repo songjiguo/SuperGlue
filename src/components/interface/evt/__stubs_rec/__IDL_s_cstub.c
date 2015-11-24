@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Thu Nov  5 12:52:22 2015 */
+/* IDL generated code ver 0.1 ---  Mon Nov 23 20:12:46 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -13,7 +13,7 @@
 extern cos_lock_t evt_lock;
 
 struct track_block {
-	int evtid;
+	long evtid;
 	struct track_block *next, *prev;
 };
 struct track_block tracking_block_list[MAX_NUM_SPDS];
@@ -54,14 +54,6 @@ long __ser_evt_wait(spdid_t spdid, long evtid)
 	return block_ser_if_block_track_evt_wait(spdid, evtid);
 }
 
-long __ser_evt_split_exist(spdid_t spdid, long parent_evtid, int grp,
-			   int existing_id)
-{
-	long ret = 0;
-	ret = evt_split_exist(spdid, parent_evtid, grp, existing_id);
-	return ret;
-}
-
 static inline void block_ser_if_client_fault_notification(int spdid)
 {
 	struct track_block *tb;
@@ -98,15 +90,4 @@ void __ser_evt_client_fault_notification(int spdid)
 {
 	block_ser_if_client_fault_notification(spdid);
 	return;
-}
-
-extern int ns_upcall(spdid_t spdid, int id, int type);
-
-int __sg_evt_upcall_creator(spdid_t spdid, int evtid)
-{
-	int ret = 0;
-	printc("ser: evt_upcall_creator calling ns_upcall\n");
-	ns_upcall(spdid, evtid, 0);
-	
-	return ret;
 }

@@ -39,6 +39,8 @@
 #ifndef   	MEM_MGR_H
 #define   	MEM_MGR_H
 
+#include <c3_test.h>
+
 /* #define TEST_MM_GET_PAGE */
 /* #define TEST_MM_ALIAS_PAGE */
 /* #define TEST_MM_REVOKE_PAGE */
