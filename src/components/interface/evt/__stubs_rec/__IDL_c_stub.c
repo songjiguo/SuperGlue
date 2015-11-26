@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Mon Nov 23 20:12:46 2015 */
+/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -31,7 +31,6 @@ struct desc_track {
 };
 
 static volatile unsigned long global_fault_cnt = 0;
-static volatile unsigned long last_system_ticks = 0;
 static int first_map_init = 0;
 
 CVECT_CREATE_STATIC(evt_desc_maps);
@@ -261,7 +260,6 @@ static inline void block_cli_if_desc_update_evt_wait(spdid_t spdid, long evtid)
 
 static inline int block_cli_if_desc_update_post_fault_evt_wait()
 {
-
 	return 1;
 }
 
@@ -312,7 +310,6 @@ static inline void block_cli_if_desc_update_evt_split(spdid_t spdid,
 
 static inline int block_cli_if_desc_update_post_fault_evt_split()
 {
-
 	return 1;
 }
 
@@ -345,7 +342,6 @@ static inline void block_cli_if_recover_upcall_subtree(long id)
 
 static inline int block_cli_if_desc_update_post_fault_evt_free()
 {
-
 	return 1;
 }
 

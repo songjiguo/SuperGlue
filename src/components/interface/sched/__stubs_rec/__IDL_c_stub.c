@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Mon Nov 23 20:12:02 2015 */
+/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -22,14 +22,14 @@ extern void free_page(void *ptr);
 
 struct desc_track {
 	int thdid;
-	unsigned dependency_thd;
+	u16_t dependency_thd;
+	ul_t amnt;
 	unsigned int state;
 	unsigned int next_state;
 	unsigned long long fault_cnt;
 };
 
 static volatile unsigned long global_fault_cnt = 0;
-static volatile unsigned long last_system_ticks = 0;
 static int first_map_init = 0;
 
 CVECT_CREATE_STATIC(sched_desc_maps);
@@ -62,7 +62,8 @@ static inline void call_desc_dealloc(struct desc_track *desc)
 
 enum state_codes { state_sched_create_thd, state_sched_block,
 	    state_sched_wakeup, state_sched_component_take,
-	    state_sched_component_release, state_null };
+	    state_sched_component_release, state_sched_timeout,
+	    state_sched_timestamp, state_null };
 
 static inline struct desc_track *call_desc_update(int id, int next_state);
 static inline void call_map_init();
@@ -91,24 +92,22 @@ static inline void call_desc_cons(struct desc_track *desc, int id,
 				  spdid_t spdid, u32_t sched_param0,
 				  u32_t sched_param1, u32_t sched_param2);
 static inline int block_cli_if_invoke_sched_block(spdid_t spdid,
-						  unsigned dependency_thd,
-						  int ret, long *fault,
+						  u16_t dependency_thd, int ret,
+						  long *fault,
 						  struct usr_inv_cap *uc);
 static inline int block_cli_if_desc_update_post_fault_sched_block();
 static inline int block_cli_if_track_sched_block(int ret, spdid_t spdid,
-						 unsigned dependency_thd);
+						 u16_t dependency_thd);
 static inline void block_cli_if_desc_update_sched_block(spdid_t spdid,
-							unsigned
-							dependency_thd);
-static inline int block_cli_if_invoke_sched_wakeup(spdid_t spdid,
-						   unsigned thdid, int ret,
-						   long *fault,
+							u16_t dependency_thd);
+static inline int block_cli_if_invoke_sched_wakeup(spdid_t spdid, u16_t thdid,
+						   int ret, long *fault,
 						   struct usr_inv_cap *uc);
 static inline int block_cli_if_desc_update_post_fault_sched_wakeup();
 static inline int block_cli_if_track_sched_wakeup(int ret, spdid_t spdid,
-						  unsigned thdid);
+						  u16_t thdid);
 static inline void block_cli_if_desc_update_sched_wakeup(spdid_t spdid,
-							 unsigned thdid);
+							 u16_t thdid);
 static inline int block_cli_if_invoke_sched_component_take(spdid_t spdid,
 							   int ret, long *fault,
 							   struct usr_inv_cap
@@ -127,15 +126,14 @@ static inline int block_cli_if_track_sched_component_release(int ret,
 							     spdid_t spdid);
 static inline void block_cli_if_desc_update_sched_component_release(spdid_t
 								    spdid);
-static inline int block_cli_if_invoke_sched_timeout(spdid_t spdid,
-						    unsigned amnt, int ret,
-						    long *fault,
+static inline int block_cli_if_invoke_sched_timeout(spdid_t spdid, ul_t amnt,
+						    int ret, long *fault,
 						    struct usr_inv_cap *uc);
 static inline int block_cli_if_desc_update_post_fault_sched_timeout();
 static inline int block_cli_if_track_sched_timeout(int ret, spdid_t spdid,
-						   unsigned amnt);
+						   ul_t amnt);
 static inline void block_cli_if_desc_update_sched_timeout(spdid_t spdid,
-							  unsigned amnt);
+							  ul_t amnt);
 static inline int block_cli_if_invoke_sched_timestamp(int ret, long *fault,
 						      struct usr_inv_cap *uc);
 static inline int block_cli_if_desc_update_post_fault_sched_timestamp();
@@ -218,27 +216,20 @@ static inline int block_cli_if_track_sched_timestamp(int ret)
 	}
 	//testsetset
 	if (ret == -EINVAL) {
-		call_desc_update(cos_get_thd_id(), 0);
+		call_desc_update(cos_get_thd_id(), state_sched_timestamp);
 		ret = -ELOOP;
 	}
-
-	if (last_system_ticks > ret) {
-		sched_restore_ticks(last_system_ticks);
-		ret = last_system_ticks;
-	} else
-		last_system_ticks = ret;
 
 	return ret;
 }
 
 static inline void block_cli_if_desc_update_sched_timestamp()
 {
-	call_desc_update(cos_get_thd_id(), 0);
+	call_desc_update(cos_get_thd_id(), state_sched_timestamp);
 }
 
 static inline int block_cli_if_desc_update_post_fault_sched_timestamp()
 {
-
 	return 1;
 }
 
@@ -253,7 +244,7 @@ static inline int block_cli_if_invoke_sched_timestamp(int ret, long *fault,
 }
 
 static inline int block_cli_if_track_sched_block(int ret, spdid_t spdid,
-						 unsigned dependency_thd)
+						 u16_t dependency_thd)
 {
 	struct desc_track *desc = call_desc_lookup(cos_get_thd_id());
 	if (desc) {
@@ -268,20 +259,19 @@ static inline int block_cli_if_track_sched_block(int ret, spdid_t spdid,
 }
 
 static inline void block_cli_if_desc_update_sched_block(spdid_t spdid,
-							unsigned dependency_thd)
+							u16_t dependency_thd)
 {
 	call_desc_update(cos_get_thd_id(), state_sched_block);
 }
 
 static inline int block_cli_if_desc_update_post_fault_sched_block()
 {
-
 	return 1;
 }
 
 static inline int block_cli_if_invoke_sched_block(spdid_t spdid,
-						  unsigned dependency_thd,
-						  int ret, long *fault,
+						  u16_t dependency_thd, int ret,
+						  long *fault,
 						  struct usr_inv_cap *uc)
 {
 	long __fault = 0;
@@ -292,14 +282,14 @@ static inline int block_cli_if_invoke_sched_block(spdid_t spdid,
 }
 
 static inline int block_cli_if_track_sched_timeout(int ret, spdid_t spdid,
-						   unsigned amnt)
+						   ul_t amnt)
 {
 	struct desc_track *desc = call_desc_lookup(cos_get_thd_id());
 	if (desc) {
 	}
 	//testsetset
 	if (ret == -EINVAL) {
-		call_desc_update(cos_get_thd_id(), 0);
+		call_desc_update(cos_get_thd_id(), state_sched_timeout);
 		ret = -ELOOP;
 	}
 
@@ -307,20 +297,18 @@ static inline int block_cli_if_track_sched_timeout(int ret, spdid_t spdid,
 }
 
 static inline void block_cli_if_desc_update_sched_timeout(spdid_t spdid,
-							  unsigned amnt)
+							  ul_t amnt)
 {
-	call_desc_update(cos_get_thd_id(), 0);
+	call_desc_update(cos_get_thd_id(), state_sched_timeout);
 }
 
 static inline int block_cli_if_desc_update_post_fault_sched_timeout()
 {
-	sched_restore_ticks(last_system_ticks);
 	return 1;
 }
 
-static inline int block_cli_if_invoke_sched_timeout(spdid_t spdid,
-						    unsigned amnt, int ret,
-						    long *fault,
+static inline int block_cli_if_invoke_sched_timeout(spdid_t spdid, ul_t amnt,
+						    int ret, long *fault,
 						    struct usr_inv_cap *uc)
 {
 	long __fault = 0;
@@ -357,7 +345,6 @@ static inline void block_cli_if_desc_update_sched_create_thd(spdid_t spdid,
 
 static inline int block_cli_if_desc_update_post_fault_sched_create_thd()
 {
-
 	return 1;
 }
 
@@ -399,7 +386,6 @@ static inline void block_cli_if_desc_update_sched_component_release(spdid_t
 
 static inline int block_cli_if_desc_update_post_fault_sched_component_release()
 {
-
 	return 1;
 }
 
@@ -438,7 +424,6 @@ static inline void block_cli_if_desc_update_sched_component_take(spdid_t spdid)
 
 static inline int block_cli_if_desc_update_post_fault_sched_component_take()
 {
-
 	return 1;
 }
 
@@ -455,7 +440,7 @@ static inline int block_cli_if_invoke_sched_component_take(spdid_t spdid,
 }
 
 static inline int block_cli_if_track_sched_wakeup(int ret, spdid_t spdid,
-						  unsigned thdid)
+						  u16_t thdid)
 {
 	struct desc_track *desc = call_desc_lookup(cos_get_thd_id());
 	if (desc) {
@@ -470,7 +455,7 @@ static inline int block_cli_if_track_sched_wakeup(int ret, spdid_t spdid,
 }
 
 static inline void block_cli_if_desc_update_sched_wakeup(spdid_t spdid,
-							 unsigned thdid)
+							 u16_t thdid)
 {
 	call_desc_update(cos_get_thd_id(), state_sched_wakeup);
 }
@@ -480,9 +465,8 @@ static inline int block_cli_if_desc_update_post_fault_sched_wakeup()
 	return 1;
 }
 
-static inline int block_cli_if_invoke_sched_wakeup(spdid_t spdid,
-						   unsigned thdid, int ret,
-						   long *fault,
+static inline int block_cli_if_invoke_sched_wakeup(spdid_t spdid, u16_t thdid,
+						   int ret, long *fault,
 						   struct usr_inv_cap *uc)
 {
 	long __fault = 0;
@@ -492,7 +476,7 @@ static inline int block_cli_if_invoke_sched_wakeup(spdid_t spdid,
 	return ret;
 }
 
-CSTUB_FN(unsigned long, sched_timestamp)(struct usr_inv_cap * uc) {
+CSTUB_FN(ul_t, sched_timestamp) (struct usr_inv_cap * uc) {
 	long fault = 0;
 	int ret = 0;
 
@@ -518,7 +502,7 @@ CSTUB_FN(unsigned long, sched_timestamp)(struct usr_inv_cap * uc) {
 }
 
 CSTUB_FN(int, sched_block)(struct usr_inv_cap * uc, spdid_t spdid,
-			   unsigned dependency_thd) {
+			   u16_t dependency_thd) {
 	long fault = 0;
 	int ret = 0;
 
@@ -545,8 +529,7 @@ CSTUB_FN(int, sched_block)(struct usr_inv_cap * uc, spdid_t spdid,
 	return ret;
 }
 
-CSTUB_FN(int, sched_timeout)(struct usr_inv_cap * uc, spdid_t spdid,
-			     unsigned amnt) {
+CSTUB_FN(int, sched_timeout)(struct usr_inv_cap * uc, spdid_t spdid, ul_t amnt) {
 	long fault = 0;
 	int ret = 0;
 
@@ -656,8 +639,7 @@ CSTUB_FN(int, sched_component_take)(struct usr_inv_cap * uc, spdid_t spdid) {
 	return ret;
 }
 
-CSTUB_FN(int, sched_wakeup)(struct usr_inv_cap * uc, spdid_t spdid,
-			    unsigned thdid) {
+CSTUB_FN(int, sched_wakeup)(struct usr_inv_cap * uc, spdid_t spdid, u16_t thdid) {
 	long fault = 0;
 	int ret = 0;
 

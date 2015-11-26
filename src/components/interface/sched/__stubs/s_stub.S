@@ -22,22 +22,6 @@ cos_asm_server_stub(sched_cyc_per_tick)
 cos_asm_server_stub(sched_timestamp)
 cos_asm_server_stub(sched_timer_stopclock)
 cos_asm_server_stub(sched_priority)
-
-//cos_asm_server_fn_stub_spdid(sched_reflect, __sg_sched_reflect)
 	
 cos_asm_server_stub_spdid(sched_component_take)
-//cos_asm_server_stub_spdid(sched_component_release)
-
-/* After the fault, a thread might call sched to take the lock again,
-   it will check if the lock has been taken and release the lock if so
-   before it can take the lock again. This check is done on the
-   recovery path which is on the client interface. We need pass the
-   correct component id to the scheduler to release the lock. So I
-   change this interface function to "not" use _stub_spid which will
-   enfore only the caller spd can release the lock. We do not need
-   change this for sched_component_take -- Jiguo */
-cos_asm_server_stub(sched_component_release)
-
-/* Jiguo: this is used to reflect the owner of a critical section. We
-   do not need this on the noraml path. */
-cos_asm_server_stub(sched_reflection_component_owner)
+cos_asm_server_stub_spdid(sched_component_release)

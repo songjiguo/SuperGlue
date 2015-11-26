@@ -2301,8 +2301,8 @@ sched_init()
 	return 0;
 }
 
-extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt);
-extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags); 
+/* extern vaddr_t mman_reflect(spdid_t spd, int src_spd, int cnt); */
+/* extern int mman_release_page(spdid_t spd, vaddr_t addr, int flags);  */
 
 /* C3: sched_reboot is the function to rebuild scheduler state */
 static int
@@ -2311,20 +2311,20 @@ sched_reboot(int arg)
 	int ret = 0;
 	int llboot_init_thd, fault_thd;
 
-	// remove the mapped page for evt spd
-	int count_obj = 0; // reflected objects
-	int dest_spd = cos_spd_id();
-	vaddr_t addr;
-	count_obj = mman_reflect(cos_spd_id(), dest_spd, 1);
-	/* printc("evt relfects on mmgr: %d objs\n", count_obj); */
-	while (count_obj--) {
-		addr = mman_reflect(cos_spd_id(), dest_spd, 0);
-		/* printc("evt mman_release: %p addr\n", (void *)addr); */
-		assert(addr);
-		// zero out anything on this page before release
-		memset((void *)addr, 0, PAGE_SIZE); 
-		mman_release_page(cos_spd_id(), addr, dest_spd);
-	}
+	/* // remove the mapped page for evt spd */
+	/* int count_obj = 0; // reflected objects */
+	/* int dest_spd = cos_spd_id(); */
+	/* vaddr_t addr; */
+	/* count_obj = mman_reflect(cos_spd_id(), dest_spd, 1); */
+	/* /\* printc("evt relfects on mmgr: %d objs\n", count_obj); *\/ */
+	/* while (count_obj--) { */
+	/* 	addr = mman_reflect(cos_spd_id(), dest_spd, 0); */
+	/* 	/\* printc("evt mman_release: %p addr\n", (void *)addr); *\/ */
+	/* 	assert(addr); */
+	/* 	// zero out anything on this page before release */
+	/* 	memset((void *)addr, 0, PAGE_SIZE);  */
+	/* 	mman_release_page(cos_spd_id(), addr, dest_spd); */
+	/* } */
 
 
 	llboot_init_thd = arg & 0xFFFF;
@@ -2478,7 +2478,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		}
 		break;
 	case COS_UPCALL_REBOOT:
-		/* printc("sched: cos_upcall here to reboot 2 (passed arg1 %d)\n", (int)arg1); */
+		printc("sched: cos_upcall here to reboot 2 (passed arg1 %d)\n", (int)arg1);
 		sched_reboot((int)arg1);
 		break;
 	case COS_UPCALL_DESTROY:
@@ -2502,6 +2502,27 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		swifi_ready = 0; // now other thread can continue
 		break;
 	}
+	case COS_UPCALL_RECOVERY:
+	{
+		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n", */
+		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
+		mem_mgr_cli_if_recover_upcall_entry((vaddr_t)arg1);
+		break;
+	}
+	case COS_UPCALL_RECOVERY_SUBTREE:
+	{
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n",
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		mem_mgr_cli_if_recover_upcall_subtree_entry((vaddr_t)arg1);
+		break;
+	}
+	case COS_UPCALL_REMOVE_SUBTREE:
+	{
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to remove subtree\n",
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		mem_mgr_cli_if_remove_upcall_subtree_entry((vaddr_t)arg1);
+		break;
+	}
 	default:
 		printc("fp_rr: cos_upcall_fn error - type %x, arg1 %d, arg2 %d\n", 
 		      (unsigned int)t, (unsigned int)arg1, (unsigned int)arg2);
@@ -2515,10 +2536,6 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	return;
 }
 
-// this is dummy function for export purpose
-// the reflection occurs over the server interface
-int sched_reflection(spdid_t spdid) { return 0; }
-int sched_client_fault_notification(spdid_t spdid) { return 0; }
-
-/* Jiguo: get the creation timestamp */
+void sched_client_fault_notification(spdid_t spdid) { return; }
 unsigned long sched_get_creation_timestamp(void){return 0;}
+ul_t sched_restore_data_sched_timestamp() {return 0;}

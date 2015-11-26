@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Mon Nov 23 20:13:14 2015 */
+/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:58 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -8,3 +8,14 @@
 #include <cos_list.h>
 #include <cstub.h>
 #include <periodic_wake.h>
+
+extern void *alloc_page(void);
+extern void free_page(void *ptr);
+
+#define CSLAB_ALLOC(sz)   alloc_page()
+#define CSLAB_FREE(x, sz) free_page(x)
+#include <cslab.h>
+
+#define CVECT_ALLOC() alloc_page()
+#define CVECT_FREE(x) free_page(x)
+#include <cvect.h>

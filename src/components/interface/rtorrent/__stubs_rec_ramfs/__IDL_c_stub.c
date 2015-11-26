@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Tue Nov 24 09:16:26 2015 */
+/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -7,7 +7,7 @@
 #include <cos_map.h>
 #include <cos_list.h>
 #include <cstub.h>
-#include <ramfs.h>
+#include <torrent.h>
 
 extern void *alloc_page(void);
 extern void free_page(void *ptr);
@@ -51,7 +51,6 @@ struct desc_track {
 };
 
 static volatile unsigned long global_fault_cnt = 0;
-static volatile unsigned long last_system_ticks = 0;
 static int first_map_init = 0;
 
 COS_MAP_CREATE_STATIC(ramfs_desc_maps);
@@ -94,7 +93,7 @@ static inline void call_desc_dealloc(struct desc_track *desc)
 struct __ser_tsplit_marshalling {
 	spdid_t spdid;
 	td_t parent_tid;
-	int len;
+	int len[2];
 	tor_flags_t tflags;
 	long evtid;
 	char data[0];
@@ -289,7 +288,6 @@ static inline void block_cli_if_desc_update_tsplit(spdid_t spdid,
 
 static inline int block_cli_if_desc_update_post_fault_tsplit()
 {
-
 	return 1;
 }
 
@@ -312,7 +310,8 @@ static inline int block_cli_if_marshalling_invoke_tsplit(spdid_t spdid,
 
 	md->spdid = spdid;
 	md->parent_tid = parent_tid;
-	md->len = len;
+	md->len[0] = 0;
+	md->len[1] = len;
 	md->tflags = tflags;
 	md->evtid = evtid;
 	memcpy(&md->data[0], param, len + 1);
@@ -335,7 +334,6 @@ static inline void block_cli_if_recover_upcall_subtree(td_t id)
 
 static inline int block_cli_if_desc_update_post_fault_trelease()
 {
-
 	return 1;
 }
 
@@ -389,7 +387,6 @@ static inline void block_cli_if_desc_update_twritep(spdid_t spdid, td_t tid,
 
 static inline int block_cli_if_desc_update_post_fault_twritep()
 {
-
 	return 1;
 }
 
@@ -432,7 +429,6 @@ static inline void block_cli_if_desc_update_treadp(spdid_t spdid, td_t tid,
 
 static inline int block_cli_if_desc_update_post_fault_treadp()
 {
-
 	return 1;
 }
 

@@ -37,44 +37,27 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		       cos_get_thd_id(), arg1, t, cos_spd_id());
 		break;
 	}
-#ifdef RECOVERY_MM_TEST
 	case COS_UPCALL_RECOVERY:
 	{
 		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",  */
 		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
-#ifdef MM_C3
 		mem_mgr_cli_if_recover_upcall_entry((vaddr_t)arg1);
-#endif
 		break;
 	}
 	case COS_UPCALL_RECOVERY_SUBTREE:
 	{
 		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n",  */
 		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
-#ifdef MM_C3
 		mem_mgr_cli_if_recover_upcall_subtree_entry((vaddr_t)arg1);
-#endif
 		break;
 	}
 	case COS_UPCALL_REMOVE_SUBTREE:
 	{
 		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to remove subtree\n",  */
 		/*        cos_get_thd_id(), arg1, t, cos_spd_id()); */
-#ifdef MM_C3
 		mem_mgr_cli_if_remove_upcall_subtree_entry((vaddr_t)arg1);
-#endif
 		break;
 	}
-/* 	case COS_UPCALL_RECOVERY_ALL_ALIAS: */
-/* 	{ */
-/* 		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover all alias\n",  */
-/* 		       cos_get_thd_id(), arg1, t, cos_spd_id()); */
-/* #ifdef MM_C3 */
-/* 		mem_mgr_cli_if_recover_all_alias_upcall_entry((vaddr_t)arg1); */
-/* #endif */
-/* 		break; */
-/* 	} */
-#endif
 	default:
 		return;
 	}

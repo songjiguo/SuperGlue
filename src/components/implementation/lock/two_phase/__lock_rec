@@ -229,7 +229,7 @@ int lock_component_pretake(spdid_t spd, unsigned long lock_id, unsigned short in
 	ACT_RECORD(ACT_PRELOCK, spd, lock_id, cos_get_thd_id(), thd);
 	TAKE(spdid);
 
-
+	WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_PRETAKE)
 	/* printc("trigger fault in lock pre_take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
 	/* if (spd == 16 && cos_get_thd_id() == 13 && test_num++ == 2) { */
@@ -292,6 +292,10 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	/* 	if (tt++ < 1) printc("thread %d is spinning...\n", cos_get_thd_id()); */
 	/* }  */
 	/* printc("thread %d continues\n", cos_get_thd_id()); */
+	
+	/* printc("lock take before: thd %d spd %ld passed spd %d\n",  */
+	/*        cos_get_thd_id(), cos_spd_id(), spd); */
+	/* if (spd == 17 && cos_get_thd_id() == 14) while(1); */
 
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_TAKE_BEFORE)	
 	/* printc("trigger fault in lock take before: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
@@ -343,6 +347,7 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 		if (-1 == sched_block(spdid, 0)) assert(0);
 	}
 
+	WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_TAKE_AFTER)
 	/* printc("trigger fault in lock take: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
 		
@@ -465,6 +470,7 @@ int lock_component_release(spdid_t spd, unsigned long lock_id)
 		/* printc("CPU %ld: %d waking up %d for lock %d\n", cos_cpuid(), cos_get_thd_id(), tid, lock_id); */
 		sched_wakeup(spdid, tid);
 
+		WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_RELEASE_AFTER)
 		/* printc("trigger fault in lock release: thd %d spd %ld passed spd %d\n", */
 		/*        cos_get_thd_id(), cos_spd_id(), spd); */
@@ -499,6 +505,7 @@ unsigned long lock_component_alloc(spdid_t spd)
 	/* printc("lock_component_alloc 1.1.....\n"); */
 	l = lock_alloc(spd);
 	/* printc("lock_component_alloc 2\n"); */
+	WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_LOCK_ALLOC)
 	/* printc("trigger fault in lock alloc: thd %d spd %ld passed spd %d\n", cos_get_thd_id(), cos_spd_id(), spd); */
 	if (spd == 17 && test_num++ == 2) {
@@ -654,6 +661,27 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	case COS_UPCALL_SWIFI_AFTER:   // allow other thread to proceed 
 	{
 		swifi_ready = 0; // now other thread can continue
+		break;
+	}
+	case COS_UPCALL_RECOVERY:
+	{
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		mem_mgr_cli_if_recover_upcall_entry((vaddr_t)arg1);
+		break;
+	}
+	case COS_UPCALL_RECOVERY_SUBTREE:
+	{
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n",
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		mem_mgr_cli_if_recover_upcall_subtree_entry((vaddr_t)arg1);
+		break;
+	}
+	case COS_UPCALL_REMOVE_SUBTREE:
+	{
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to remove subtree\n",
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		mem_mgr_cli_if_remove_upcall_subtree_entry((vaddr_t)arg1);
 		break;
 	}
 	default:

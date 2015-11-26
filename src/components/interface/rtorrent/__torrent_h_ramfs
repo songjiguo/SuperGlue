@@ -9,10 +9,10 @@
 #define TORRENT_H
 
 #include <cos_component.h>
-#include <cbuf_c.h>
 #include <cbuf.h>
 #include <evt.h>
 
+/* torrent descriptor */
 typedef int td_t;
 static const td_t td_null = 0, td_root = 1;
 typedef enum {
@@ -20,7 +20,7 @@ typedef enum {
 	TOR_READ  = 0x2,
 	TOR_SPLIT = 0x4,
 	TOR_NONPERSIST = 0x8,
-	TOR_WAIT  = 0x10,   // Jiguo: add this to differentiate the evt_wait after tsplit
+	TOR_WAIT  = 0x10,   // Jiguo: add this for the evt_wait after tsplit
 	TOR_RW    = TOR_WRITE | TOR_READ, 
 	TOR_ALL   = TOR_RW    | TOR_SPLIT /* 0 is a synonym */
 } tor_flags_t;
@@ -29,41 +29,22 @@ td_t tsplit(spdid_t spdid, td_t tid, char *param, int len, tor_flags_t tflags, l
 void trelease(spdid_t spdid, td_t tid);
 int tmerge(spdid_t spdid, td_t td, td_t td_into, char *param, int len);
 int tread(spdid_t spdid, td_t td, int cbid, int sz);
-/* No idea why do we need off returned? */
 int treadp(spdid_t spdid, td_t td, int len, int *off, int *sz);
-
 int twrite(spdid_t spdid, td_t td, int cbid, int sz);
 int twritep(spdid_t spdid, td_t td, int cbid, int sz);
 int trmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, char *retval, unsigned int max_rval_len);
 int twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen);
 
 
-extern int fs_treadp(spdid_t spdid, td_t td, int len, int *off, int *sz);
-extern int fs_tread(spdid_t spdid, td_t td, int cbid, int sz);
-extern int fs_twritep(spdid_t spdid, td_t td, int cbid, int sz);
-extern int fs_twrite(spdid_t spdid, td_t td, int cbid, int sz);
 /* treadp/twritep version of pack -- using cbufp */
 static inline int
 treadp_pack(spdid_t spdid, td_t td, char *data, int len)
 {
 	cbufp_t cb;
 	char *d;
-	int off = 0;
-	int sz = 0;
-
-#ifdef BENCHMARK_MEAS_INV_OVERHEAD_RAMFS
-	unsigned long long infra_overhead_start;
-	unsigned long long infra_overhead_end;	
-meas:
-	rdtscll(infra_overhead_start);
-	cb = fs_treadp(spdid, td, len, &off, &sz);
-	rdtscll(infra_overhead_end);
-	printc("infra_overhead (treadp) cost %llu\n", infra_overhead_end - infra_overhead_start);
-	goto meas;
-#else
-	cb = fs_treadp(spdid, td, len, &off, &sz);
-#endif
-
+	int off, sz;
+	
+	cb = treadp(spdid, td, len, &off, &sz);
 	/* printc("after treadp in tread_pack off %d sz %d\n", off, sz); */
 	if (!cb < 0) return 0;
 	d = cbufp2buf(cb, sz);
@@ -80,12 +61,11 @@ twritep_pack(spdid_t spdid, td_t td, char *data, int len)
 	char *d;
 	int ret;
 
-	printc("twritep_pack passed in len %d\n", len);
 	d = cbufp_alloc(len, &cb);
 	if (!d) return -1;
 	cbufp_send(cb);
 	memcpy(d, data, len);
-	ret = fs_twritep(spdid, td, cb, len);
+	ret = twritep(spdid, td, cb, len);
 	cbufp_deref(cb);
 	
 	return ret;
@@ -102,7 +82,7 @@ tread_pack(spdid_t spdid, td_t td, char *data, int len)
 	d = cbuf_alloc(len, &cb);
 	if (!d) return -1;
 
-	ret = fs_tread(spdid, td, cb, len);
+	ret = tread(spdid, td, cb, len);
         if (ret < 0) goto free;
         if (ret > len) {
                 ret = len; /* FIXME: this is broken, and we should figure out a better solution */
@@ -124,7 +104,7 @@ twrite_pack(spdid_t spdid, td_t td, char *data, int len)
 	if (!d) return -1;
 
 	memcpy(d, data, len);
-	ret = fs_twrite(spdid, td, cb, len);
+	ret = twrite(spdid, td, cb, len);
 	cbuf_free(cb);
 	
 	return ret;
@@ -144,4 +124,7 @@ twrite_pack(spdid_t spdid, td_t td, char *data, int len)
 /* }; */
 /* int twmeta(td_t td, int cbid, int sz); */
 
+/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
+
+#include <c3_test.h> 
 #endif /* TORRENT_H */ 

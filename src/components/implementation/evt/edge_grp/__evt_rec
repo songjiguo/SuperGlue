@@ -30,6 +30,11 @@ extern int lock_reflect(spdid_t spdid);
 
 #include <cvect.h>
 
+#if (RECOVERY_ENABLE == 1)
+#include <c3_test.h>
+#endif
+unsigned int swifi_ready = 0;  // explicitly initialize to 0
+
 static int test_num = 0;
 
 typedef enum {
@@ -282,6 +287,7 @@ __evt_split(spdid_t spdid, long parent, int group, int existing_id)
 	ret = e->eid;
 	assert(ret > 0);
 
+	WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_SPLIT)
 	/* printc("test_num %d\n", test_num); */
 	if (test_num++ > 1 && cos_get_thd_id() != 2) {
@@ -305,7 +311,7 @@ long evt_split(spdid_t spdid, long parent, int group)
 }
 
 long 
-evt_split_exist(spdid_t spdid, long parent, int group, int existing_id) 
+evt_split_exist(spdid_t spdid, long parent, int group, long existing_id) 
 {
 	return __evt_split(spdid, parent, group, existing_id);
 }
@@ -316,6 +322,7 @@ void evt_free(spdid_t spdid, long evt_id)
 
 	lock_take(&evt_lock);
 
+	WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_FREE_BEFORE)
 	if (test_num++ > 0) {
 		/* printc("trigger fault in evt_free before: thd %d spd %ld passed spd %d\n",  */
@@ -329,6 +336,7 @@ void evt_free(spdid_t spdid, long evt_id)
 	
 	if (!ret) ns_free(cos_spd_id(), spdid, evt_id);
 
+	WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_FREE_AFTER)
 	if (test_num++ > 0) {
 		/* printc("trigger fault in evt_free after: thd %d spd %ld passed spd %d\n",  */
@@ -356,6 +364,7 @@ long evt_wait(spdid_t spdid, long evt_id)
 	do {
 		lock_take(&evt_lock);
 
+		WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_BEFORE)
 		// thd 13 is the testing thread
 		if (test_num++ > 20) {
@@ -369,6 +378,7 @@ long evt_wait(spdid_t spdid, long evt_id)
 		/* printc("thd %d waiting on evt %d\n",cos_get_thd_id(), evt_id); */
 		if (!ret && 0 > sched_block(cos_spd_id(), 0)) BUG();
 
+		WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_WAIT_AFTER)
 		if (test_num++ > 20) {
 			/* printc("trigger fault in evt_wait after (test_num %d): thd %d spd %ld passed spd %d\n", test_num, cos_get_thd_id(), cos_spd_id(), spdid); */
@@ -385,9 +395,9 @@ evt_trigger(spdid_t spdid, long evt_id)
 {
 	int ret;
 	lock_take(&evt_lock);
-	printc("thd %d triggers evt %d\n", cos_get_thd_id(), evt_id);
+	/* printc("thd %d triggers evt %d\n", cos_get_thd_id(), evt_id); */
 
-
+	WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_BEFORE)
 	// thread 14 is the test thread
 	if (test_num++ > 20) {
@@ -403,7 +413,7 @@ evt_trigger(spdid_t spdid, long evt_id)
         // change this to return error code
 	if (ret > 0 && sched_wakeup(cos_spd_id(), ret)) BUG(); 
 
-
+	WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_EVT_TRIGGER_AFTER)
 	if (test_num++ > 20) {
 		/* printc("trigger fault in evt_trigger after: thd %d passed spd %d (evt %d)\n", */
@@ -471,7 +481,6 @@ rd_reflection()
 	return;
 }
 
-
 void 
 cos_init(void)
 {
@@ -508,9 +517,9 @@ int evt_stats_len(spdid_t spdid) { return 0; }
 long __evt_create(spdid_t spdid) {return 0;}
 
 int evt_reflection(spdid_t spdid) {return 0;}
-int evt_client_fault_notification(spdid_t spdid) { return 0; }
+void evt_client_fault_notification(spdid_t spdid) { return; }
 
-int evt_upcall_creator(spdid_t spdid, int evtid) 
+int evt_upcall_creator(spdid_t spdid, long evtid) 
 {
 	int ret = 0;
 	
@@ -520,3 +529,49 @@ int evt_upcall_creator(spdid_t spdid, int evtid)
 }
 
 
+void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
+{
+	printc("EVT: upcall type %d, core %ld, thd %d, args %p %p %p\n",
+	       t, cos_cpuid(), cos_get_thd_id(), arg1, arg2, arg3);
+	switch (t) {
+	case COS_UPCALL_THD_CREATE:
+	{
+		cos_init();
+		break;
+	}
+	case COS_UPCALL_SWIFI_BEFORE:   // prepare for swifi
+	{
+		swifi_ready = 1; // now other thread can spin for inject fault
+		break;
+	}
+	case COS_UPCALL_SWIFI_AFTER:   // allow other thread to proceed 
+	{
+		swifi_ready = 0; // now other thread can continue
+		break;
+	}
+	case COS_UPCALL_RECOVERY:
+	{
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		mem_mgr_cli_if_recover_upcall_entry((vaddr_t)arg1);
+		break;
+	}
+	case COS_UPCALL_RECOVERY_SUBTREE:
+	{
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n",
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		mem_mgr_cli_if_recover_upcall_subtree_entry((vaddr_t)arg1);
+		break;
+	}
+	case COS_UPCALL_REMOVE_SUBTREE:
+	{
+		printc("thread %d passing arg1 %p here (type %d spd %ld) to remove subtree\n",
+		       cos_get_thd_id(), arg1, t, cos_spd_id());
+		mem_mgr_cli_if_remove_upcall_subtree_entry((vaddr_t)arg1);
+		break;
+	}
+	default:
+		return;
+	}
+	return;
+}

@@ -174,7 +174,7 @@ long evt1;
 long evt2;
 static int test_num1 = 0;
 static int test_num2 = 1;
-#define TEST_NUM 200
+#define TEST_NUM 100000
 static void try_hp(void)
 {
 	long wait_ret = 0;
@@ -190,7 +190,8 @@ static void try_hp(void)
 	assert(evt2 > 0);
 	printc("evt2 -- %ld is created\n", evt2);
 
-	while(test_num1++ < TEST_NUM) {
+	/* while(test_num1++ < TEST_NUM) { */
+	while(1) {
 		/* printc("\n**** split (%d) ****\n", test_num1); */
 		/* printc("(ser1) thread h : %d is creating evts\n", cos_get_thd_id()); */
 		/* rdtscll(overhead_start); */
@@ -244,7 +245,8 @@ static void try_hp(void)
 static void try_mp(void)
 {
 	int i = 0;
-	while(test_num2 || test_num1 < TEST_NUM + 5) {
+	/* while(test_num2 || test_num1 < TEST_NUM + 5) { */
+	while(1) {
 		if (i == 0) {ec3_ser3_pass(evt1); i = 1;}
 		if (i == 1) {ec3_ser3_pass(evt2); i = 0;}
 	}
@@ -279,13 +281,10 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	case COS_UPCALL_RECEVT:
 		/* printc("test_ser1: upcall to recover the event (thd %d, spd %ld)\n", */
 		/*        cos_get_thd_id(), cos_spd_id()); */
-#ifdef EVT_C3
 		/* evt_cli_if_recover_upcall_entry(*(int *)arg3); */
 		/* printc("ser1: caling events_replay_all %d\n", (int)arg1); */
 		/* events_replay_all((int)arg1); */
 		evt_cli_if_recover_upcall_entry((int)arg1);
-#endif
-
 		break;
 	default:
 		return;
@@ -401,8 +400,9 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 		}
 		test_sched_lock = 0;
 
-		while(i++ < ITER_SCHED) {
-			printc("\n<< high thd %d is blocking on mid thd %d in spd %d (iter %d) >>>\n", cos_get_thd_id(), mid, cos_spd_id(), i);
+		/* while(i++ < ITER_SCHED) { */
+		while(1) {
+			/* printc("\n<< high thd %d is blocking on mid thd %d in spd %d (iter %d) >>>\n", cos_get_thd_id(), mid, cos_spd_id(), i); */
 			sched_block(cos_spd_id(), mid);
 			
 			while(i == 4 && test_sched_lock++ < 30) {
@@ -425,8 +425,9 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 	}
 	
 	if (cos_get_thd_id() == mid) {
-		while(j++ < ITER_SCHED) {
-			printc("\n<< mid thd %d is waking up high thd %d in spd %d (iter %d) >>>\n", cos_get_thd_id(), hig, cos_spd_id(), j);
+		/* while(j++ < ITER_SCHED) { */
+		while(1) {
+			/* printc("\n<< mid thd %d is waking up high thd %d in spd %d (iter %d) >>>\n", cos_get_thd_id(), hig, cos_spd_id(), j); */
 			sched_wakeup(cos_spd_id(), hig);
 		}
 	}
@@ -569,7 +570,8 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 		       cos_get_thd_id());
 		
 		int i = 0;
-		while(i++ < 20) {
+		/* while(i++ < 20) { */
+		while(1) {
 			printc("\nnext mm test\n\n");
 			test_mmpage();
 		}
@@ -588,51 +590,29 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	{
 		printc("thread %d passing arg1 %p here (type %d spd %ld)\n", 
 		       cos_get_thd_id(), arg1, t, cos_spd_id());
-		
-/* #ifdef MM_C3 */
-/* 		alias_replay((vaddr_t)arg1); */
-/* #endif */
-			
 		break;
 	}
-#ifdef RECOVERY_MM_TEST
 	case COS_UPCALL_RECOVERY:
 	{
 		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",
 		       cos_get_thd_id(), arg1, t, cos_spd_id());
-#ifdef MM_C3
 		mem_mgr_cli_if_recover_upcall_entry((vaddr_t)arg1);
-#endif
 		break;
 	}
 	case COS_UPCALL_RECOVERY_SUBTREE:
 	{
 		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover subtree\n",
 		       cos_get_thd_id(), arg1, t, cos_spd_id());
-#ifdef MM_C3
 		mem_mgr_cli_if_recover_upcall_subtree_entry((vaddr_t)arg1);
-#endif
 		break;
 	}
 	case COS_UPCALL_REMOVE_SUBTREE:
 	{
 		printc("thread %d passing arg1 %p here (type %d spd %ld) to remove subtree\n",
 		       cos_get_thd_id(), arg1, t, cos_spd_id());
-#ifdef MM_C3
 		mem_mgr_cli_if_remove_upcall_subtree_entry((vaddr_t)arg1);
-#endif
 		break;
 	}
-/* 	case COS_UPCALL_RECOVERY_ALL_ALIAS: */
-/* 	{ */
-/* 		/\* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover all alias\n",  *\/ */
-/* 		/\*        cos_get_thd_id(), arg1, t, cos_spd_id()); *\/ */
-/* #ifdef MM_C3 */
-/* 		mem_mgr_cli_if_recover_all_alias_upcall_entry((vaddr_t)arg1); */
-/* #endif */
-/* 		break; */
-/* 	} */
-#endif
 	default:
 		return;
 	}
@@ -714,21 +694,22 @@ ramfs_test(void)
 	int max_test;
 	
 	// need test for max number of allowed faults (ureboot)
-	for (max_test = 0; max_test < 10; max_test++) {
-		printc("\n>>>>>>ramfs test phase 3 start .... (iter %d)\n", max_test);
-		printc("....tsplit 1....\n");
+	/* for (max_test = 0; max_test < 10; max_test++) { */
+	while(1) {
+		/* printc("\n>>>>>>ramfs test phase 3 start .... (iter %d)\n", max_test); */
+		/* printc("....tsplit 1....\n"); */
 		t1 = fs_tsplit(cos_spd_id(), td_root, params2, strlen(params2), TOR_ALL, evt1);
-		printc("....tsplit 1....return t1 %d\n", t1);
-		printc("....tsplit 2....\n");
+		/* printc("....tsplit 1....return t1 %d\n", t1); */
+		/* printc("....tsplit 2....\n"); */
 		t2 = fs_tsplit(cos_spd_id(), t1, params1, strlen(params1), TOR_ALL, evt2);
 		if (t1 < 1 || t2 < 1) {
 			printc("UNIT TEST FAILED: later splits failed\n");
 			return;
 		}
-		printc("....tsplit 1....return t1 %d\n", t2);
+		/* printc("....tsplit 1....return t1 %d\n", t2); */
 
 #ifdef TEST_RAMFS_C3
-		printc("....treadp 1....(tid %d)\n", t1);
+		/* printc("....treadp 1....(tid %d)\n", t1); */
 		ret1 = treadp_pack(cos_spd_id(), t1, buffer, 1023);
 #else
 		ret1 = tread_pack(cos_spd_id(), t1, buffer, 1023);
@@ -737,11 +718,11 @@ ramfs_test(void)
 		assert(!strcmp(buffer, data1));
 		// treadp does not return length, instead return cbid
 		/* assert(ret1 == strlen(data1)); */
-		printc("read %d (%d): %s (%s)\n", ret1, strlen(data1), buffer, data1);
+		/* printc("read %d (%d): %s (%s)\n", ret1, strlen(data1), buffer, data1); */
 		buffer[0] = '\0';
 
 #ifdef TEST_RAMFS_C3
-		printc("....treadp 2....(tid %d)\n", t2);
+		/* printc("....treadp 2....(tid %d)\n", t2); */
 		ret1 = treadp_pack(cos_spd_id(), t2, buffer, 1023);
 #else
 		ret1 = tread_pack(cos_spd_id(), t2, buffer, 1023);
@@ -749,12 +730,12 @@ ramfs_test(void)
 		if (ret1 > 0) buffer[ret1] = '\0';
 		assert(!strcmp(buffer, data2));
 		/* assert(ret1 == strlen(data2)); */
-		printc("read %d (%d): %s (%s)\n", ret1, strlen(data2), buffer, data2);
+		/* printc("read %d (%d): %s (%s)\n", ret1, strlen(data2), buffer, data2); */
 		buffer[0] = '\0';
 		
-		printc("....trelease 1....(t2 %d)\n", t2);
+		/* printc("....trelease 1....(t2 %d)\n", t2); */
 		fs_trelease(cos_spd_id(), t2);
-		printc("....trelease 2....(t1 %d)\n", t1);
+		/* printc("....trelease 2....(t1 %d)\n", t1); */
 		fs_trelease(cos_spd_id(), t1);
 	}
 

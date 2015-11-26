@@ -14,6 +14,8 @@
 
 //#define NO_EXAMINE
 
+#define TEST_RAMFS_C3    // using cbufp version of treadp and twritep
+
 /****************************
  _            _    
 | | ___   ___| | __
@@ -21,12 +23,16 @@
 | | (_) | (__|   < 
 |_|\___/ \___|_|\_\
 ****************************/
-/* #define EXAMINE_LOCK */
+#define EXAMINE_LOCK
 
 #ifdef EXAMINE_LOCK
+
+#ifdef SWIFI_ON
+#define SWIFI_SPD 10   // see above info, check this before run
+#else
 /* #define TEST_LOCK_ALLOC */
 /* #define TEST_LOCK_PRETAKE */
-#define TEST_LOCK_TAKE_BEFORE
+/* #define TEST_LOCK_TAKE_BEFORE */
 /* #define TEST_LOCK_TAKE_AFTER */
 /* #define TEST_LOCK_RELEASE_BEFORE */
 /* #define TEST_LOCK_RELEASE_AFTER */
@@ -38,6 +44,7 @@
 /* #define BENCHMARK_MEAS_PRETAKE */
 /* #define BENCHMARK_MEAS_ALLOC */
 /* #define BENCHMARK_MEAS_CREATION_TIME */
+#endif
 
 #endif
 
@@ -52,16 +59,20 @@
 
 #ifdef EXAMINE_TE
 
+#ifdef SWIFI_ON
+#define SWIFI_SPD 11
+#else
 /* #define TEST_PTE_CREATE_BEFORE */
 /* #define TEST_PTE_CREATE_AFTER  */
-/* #define TEST_PTE_WAIT_BEFORE */
+#define TEST_PTE_WAIT_BEFORE
 /* #define TEST_PTE_WAIT_AFTER */
-#define TEST_PTE_TIMER_THD_BEFORE
+/* #define TEST_PTE_TIMER_THD_BEFORE */
 /* #define TEST_PTE_TIMER_THD_AFTER */
 
 /* #define BENCHMARK_MEAS_CREATE */
 /* #define BENCHMARK_MEAS_WAIT */
 /* #define BENCHMARK_MEAS_TIMER_THD */
+#endif
 #endif
 
 /****************************
@@ -74,10 +85,12 @@
 /* #define EXAMINE_EVT */
 
 #ifdef EXAMINE_EVT
+/* // enable upcall to each client to recover the events */
+/* #define EVT_C3 */
 
-// enable upcall to each client to recover the events
-#define EVT_C3
-
+#ifdef SWIFI_ON
+#define SWIFI_SPD 12
+#else
 /* #define BENCHMARK_MEAS_INV_OVERHEAD_EVT */
 #ifdef BENCHMARK_MEAS_INV_OVERHEAD_EVT
 #else
@@ -89,7 +102,7 @@
 /* #define TEST_EVT_FREE_BEFORE */
 /* #define TEST_EVT_FREE_AFTER */
 /* #define TEST_EVT_CREATE */
-
+#endif
 #endif
 
 /* #define BENCHMARK_MEAS_SPLIT */
@@ -111,8 +124,10 @@
 /* #define EXAMINE_SCHED */
 
 #ifdef EXAMINE_SCHED
-#define SCHED_C3
 
+#ifdef SWIFI_ON
+#define SWIFI_SPD 2
+#else
 /* #define TEST_SCHED_CREATE_THD */
 /* #define TEST_SCHED_CREATE_THD_DEFAULT */
 /* #define TEST_SCHED_TIMEOUT_THD */
@@ -129,7 +144,7 @@
 //#define MEASU_SCHED_INTERFACE_BLOCK
 //#define MEASU_SCHED_INTERFACE_COM_TAKE
 //#define MEASU_SCHED_INTERFACE_COM_RELEASE
-
+#endif
 #endif
 
 /****************************
@@ -141,10 +156,14 @@
 /* #define EXAMINE_MM */
 
 #ifdef EXAMINE_MM
-#define MM_C3            // enable upcall to each client to recover the pages
 
+#ifdef SWIFI_ON
+#define SWIFI_SPD 3
+#else
+
+/* #define MM_C3            // enable upcall to each client to recover the pages */
 // enable this if needs upcall entry in client
-#define RECOVERY_MM_TEST   
+/* #define RECOVERY_MM_TEST    */
 
 /* #define TEST_MM_GET_PAGE */
 #define TEST_MM_ALIAS_PAGE
@@ -152,6 +171,7 @@
 
 /* #define BENCHMARK_MEAS_INV_OVERHEAD_MM */
 
+#endif
 #endif
 
 /****************************
@@ -161,10 +181,13 @@
 | | | (_| | | | | | |  _\__ \
 |_|  \__,_|_| |_| |_|_| |___/
 ****************************/
-#define EXAMINE_RAMFS
+/* #define EXAMINE_RAMFS */
 
 #ifdef EXAMINE_RAMFS
-#define TEST_RAMFS_C3    // using cbufp version of treadp and twritep
+
+#ifdef SWIFI_ON
+#define SWIFI_SPD 15
+#else
 
 /* #define TEST_RAMFS_TSPLIT_BEFORE */
 /* #define TEST_RAMFS_TSPLIT_AFTER */
@@ -177,6 +200,7 @@
 /* #define BENCHMARK_MEAS_INV_OVERHEAD_RAMFS */
 /* #define BENCHMARK_MEAS_INV_OVERHEAD_NO_SERVER_TRACK_RAMFS */
 
+#endif
 #endif
 
 /****************************

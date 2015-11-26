@@ -202,8 +202,8 @@ recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 	       dest, (unsigned int)arg, cos_get_thd_id(), op);
 
 	printc("recovery_upcall has been called %d times\n",second);
-	if(second++ >= 1000) {
-		printc("Andy 1000 times\n");
+	if(second++ >= 10000) {
+		printc("Andy 10000 times\n");
 		sched_exit();
 	}
 
@@ -264,8 +264,8 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	/* cos_brand_cntl(COS_BRAND_REMOVE_THD, 0, 0, 0); /\* remove the brand *\/ */
 	/* debug only: avoid endless faults and wait */
 	/* printc("fault_page_fault_handler has been called %d times\n", first); */
-	if(first++ > 10) {
-		printc("Kevin 10 times\n");
+	if(first++ > 1000) {
+		printc("Kevin 1000 times\n");
 		sched_exit();
 	}
 	/* printc("has failed %d times\n",first); */
@@ -309,6 +309,7 @@ fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *ip)
 	/* for scheduler...*/
 	printc("LL: <<2>>\n");
 	printc("reboot %d thd %d spd %d\n", reboot_sched, cos_get_thd_id(), spdid);
+	sched_exit();  // Jiguo: kill the system when exist, if see the fault
 	/* 
 	 * The thread was created in the failed component...just use
 	 * it to restart the component!  This might even be the

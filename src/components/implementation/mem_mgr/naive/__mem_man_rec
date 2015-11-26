@@ -540,7 +540,6 @@ __mman_get_page(spdid_t spd, vaddr_t addr, int flags, int exist)
 	struct mapping *m = NULL;
 	vaddr_t ret = -1;
 	
-	WAIT_FAULT();
 
 	LOCK();
 
@@ -569,7 +568,7 @@ __mman_get_page(spdid_t spd, vaddr_t addr, int flags, int exist)
 		m = mapping_crt(NULL, f, spd, addr, flags, exist);
 	}
 	
-	
+	WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MM_GET_PAGE)
 	if (spd == 17 && cos_get_thd_id() == 13 && test_control++ >= 4) {
 		printc("trigger fault in mman_get_page: thd %d from spd %d addr %p\n",
@@ -613,7 +612,7 @@ mman_get_page(spdid_t spd, vaddr_t addr, int flags)
 }
 
 vaddr_t 
-mman_get_page_exist(spdid_t spd, vaddr_t addr) 
+mman_get_page_exist(spdid_t spd, vaddr_t addr, int flags, vaddr_t exist)
 {
 	return __mman_get_page(spd, addr, 0, 1);
 }
@@ -629,8 +628,6 @@ __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_ad
 	d_spd = d_spd_flags >> 16;
 	flags = d_spd_flags & 0xFFFF;
 	
-	WAIT_FAULT();
-
 /* #ifdef BENCHMARK_MEAS_INV_OVERHEAD_MM */
 /* 	if (cos_get_thd_id() == 13) return ret; */
 /* #endif */
@@ -659,6 +656,7 @@ __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_ad
 	}
 	assert(m && m->f);
 
+	WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MM_ALIAS_PAGE)
 	/* if (s_spd == 18 && cos_get_thd_id() == 13) { */
 	/* 	printc("mman_alias_page: thd %d spd %ld passed s_spd %d dest_spd %d (num %d)\n", */
@@ -740,8 +738,6 @@ mman_revoke_page(spdid_t spd, vaddr_t addr, int flags)
 	struct mapping *m;
 	int ret = 0;
 
-	WAIT_FAULT();
-
 	/* printc("in mman_revoke by thd %d\n", cos_get_thd_id()); */
 
 	LOCK();
@@ -766,6 +762,7 @@ mman_revoke_page(spdid_t spd, vaddr_t addr, int flags)
 		/* LOCK(); */
 	}
 
+	WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_MM_REVOKE_PAGE)
 	if (spd == 17 && cos_get_thd_id() == 13 && test_control++ == 1) {
 		printc("trigger fault in mman_revoke_page: thd %d spd %ld passed spd %d\n", 

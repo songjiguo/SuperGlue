@@ -1,8 +1,6 @@
 #ifndef   	EVT_H
 #define   	EVT_H
 
-#include <c3_test.h>
-
 typedef enum {
 	EVT_NIL   = 0,
 	EVT_READ  = 0x1, 
@@ -29,14 +27,12 @@ int evt_set_prio(spdid_t spdid, long extern_evt, int prio);
 unsigned long *evt_stats(spdid_t spdid, unsigned long *stats);
 int evt_stats_len(spdid_t spdid);
 
-int evt_reflection(spdid_t spdid);
-int evt_upcall_creator(spdid_t spdid, int evtid);
-long evt_split_exist(spdid_t spdid, long parent_evt, int grp, int existing_id);
+/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
 
-#ifdef EVT_C3
-extern void events_replay_all(int id);
-extern void evt_cli_if_recover_upcall_entry(long evt_id);
-#endif
-int evt_client_fault_notification(spdid_t spdid);
+#include <c3_test.h> 
+long evt_split_exist(spdid_t spdid, long parent_evtid, int grp, long evtid);
+int evt_upcall_creator(spdid_t spdid, long evtid);
 
+extern void evt_cli_if_recover_upcall_entry(long evtid);
+void evt_client_fault_notification(spdid_t spdid);
 #endif 	    /* !EVT_H */

@@ -675,5 +675,5 @@ evt_split_exist(spdid_t spdid, long parent, int group, int existing_id)
 {
 	return 0;
 }
-int evt_upcall_creator(spdid_t spdid, int evtid) {return 0;}
-int evt_client_fault_notification(spdid_t spdid) { return 0; }
+int evt_upcall_creator(spdid_t spdid, long evtid) {return 0;}
+void evt_client_fault_notification(spdid_t spdid) { return 0; }

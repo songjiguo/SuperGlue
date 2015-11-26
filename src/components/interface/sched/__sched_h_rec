@@ -26,15 +26,11 @@ int sched_create_net_acap(spdid_t spdid, int acap_id, unsigned short int port);
 int sched_component_take(spdid_t spdid);
 int sched_component_release(spdid_t spdid);
 
-/* to reflect the owner of a critical section -- Jiguo */
-int sched_reflection_component_owner(spdid_t spdid);
-
-int sched_reflection(spdid_t spdid);
-unsigned long sched_get_creation_timestamp(void);
-int sched_client_fault_notification(spdid_t spdid);
-
-int sched_restore_ticks(unsigned long last_ticks);
-
 #include "cos_thd_creation.h"
 
+/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
+
+#include <c3_test.h> 
+ul_t sched_restore_data_sched_timestamp();
+void sched_client_fault_notification(spdid_t spdid);
 #endif 	    /* !SCHED_H */

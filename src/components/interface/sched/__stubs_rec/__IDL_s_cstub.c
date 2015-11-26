@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Mon Nov 23 20:12:02 2015 */
+/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -9,6 +9,17 @@
 #include <cstub.h>
 #include <sched.h>
 
+extern void *alloc_page(void);
+extern void free_page(void *ptr);
+
+#define CSLAB_ALLOC(sz)   alloc_page()
+#define CSLAB_FREE(x, sz) free_page(x)
+#include <cslab.h>
+
+#define CVECT_ALLOC() alloc_page()
+#define CVECT_FREE(x) free_page(x)
+#include <cvect.h>
+
 #include <../../../implementation/sched/cos_sched_sync.h>
 
 struct track_block {
@@ -16,9 +27,10 @@ struct track_block {
 	struct track_block *next, *prev;
 };
 struct track_block tracking_block_list[MAX_NUM_SPDS];
+unsigned long thd_tracking_data[MAX_NUM_THREADS];
 
 static inline int block_ser_if_block_track_sched_block(spdid_t spdid,
-						       unsigned dependency_thd)
+						       u16_t dependency_thd)
 {
 	int ret = 0;
 	struct track_block tb;	// track on stack
@@ -49,9 +61,34 @@ static inline int block_ser_if_block_track_sched_block(spdid_t spdid,
 	return ret;
 }
 
-int __ser_sched_block(spdid_t spdid, unsigned dependency_thd)
+int __ser_sched_block(spdid_t spdid, u16_t dependency_thd)
 {
 	return block_ser_if_block_track_sched_block(spdid, dependency_thd);
+}
+
+static inline void block_ser_if_save_data()
+{
+	unsigned long ret = 0;
+	ret = sched_timestamp();
+	thd_tracking_data[cos_get_thd_id()] = ret;
+	return;
+}
+
+ul_t __ser_sched_save_data_sched_timestamp()
+{
+	block_ser_if_save_data();
+	return;
+}
+
+static inline ul_t block_ser_if_restore_data()
+{
+	return thd_tracking_data[cos_get_thd_id()];
+}
+
+ul_t __ser_sched_restore_data_sched_timestamp()
+{
+
+	return block_ser_if_restore_data();
 }
 
 static inline void block_ser_if_client_fault_notification(int spdid)
@@ -90,18 +127,4 @@ void __ser_sched_client_fault_notification(int spdid)
 {
 	block_ser_if_client_fault_notification(spdid);
 	return;
-}
-
-unsigned long thd_timestamp_track[MAX_NUM_THREADS];
-unsigned long __sg_sched_timestamp()
-{
-	unsigned long ret = 0;
-	ret = sched_timestamp();
-	thd_timestamp_track[cos_get_thd_id()] = ret;
-	return ret;
-}
-
-unsigned long __sg_sched_get_creation_timestamp()
-{
-	return thd_timestamp_track[cos_get_thd_id()];
 }

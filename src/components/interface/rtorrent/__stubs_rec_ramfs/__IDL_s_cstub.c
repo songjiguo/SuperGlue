@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Tue Nov 24 09:16:26 2015 */
+/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -7,7 +7,18 @@
 #include <cos_map.h>
 #include <cos_list.h>
 #include <cstub.h>
-#include <ramfs.h>
+#include <torrent.h>
+
+extern void *alloc_page(void);
+extern void free_page(void *ptr);
+
+#define CSLAB_ALLOC(sz)   alloc_page()
+#define CSLAB_FREE(x, sz) free_page(x)
+#include <cslab.h>
+
+#define CVECT_ALLOC() alloc_page()
+#define CVECT_FREE(x) free_page(x)
+#include <cvect.h>
 
 int __ser_treadp(spdid_t spdid, int tid, int len, int __pad0, int *off_len)
 {
@@ -19,7 +30,7 @@ int __ser_treadp(spdid_t spdid, int tid, int len, int __pad0, int *off_len)
 struct __ser_tsplit_marshalling {
 	spdid_t spdid;
 	td_t parent_tid;
-	int len;
+	int len[2];
 	tor_flags_t tflags;
 	long evtid;
 	char data[0];
@@ -38,6 +49,6 @@ td_t __ser_tsplit(spdid_t spdid, cbuf_t cbid, int len)
 	/* if (unlikely(((int)(md->len[1] + sizeof(struct __ser_tsplit_data))) != len)) return -4; */
 	/* if (unlikely(md->tid == 0)) return -EINVAL; */
 
-	return tsplit(md->spdid, md->parent_tid, &md->data[0], md->len,
+	return tsplit(md->spdid, md->parent_tid, &md->data[0], md->len[1] - md->len[0],
 		      md->tflags, md->evtid);
 }

@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Mon Nov 23 20:13:14 2015 */
+/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:58 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -30,7 +30,6 @@ struct desc_track {
 };
 
 static volatile unsigned long global_fault_cnt = 0;
-static volatile unsigned long last_system_ticks = 0;
 static int first_map_init = 0;
 
 CVECT_CREATE_STATIC(periodic_wake_desc_maps);
@@ -151,7 +150,7 @@ static inline void block_cli_if_basic_id(int id)
 	struct desc_track *desc = call_desc_lookup(id);
 	assert(desc);
 
-	periodic_wake_create_exist(desc->spdid, desc->period);
+	periodic_wake_create_exist(desc->spdid, desc->period, 0);
 
 	desc->state = state_periodic_wake_create;	// set the state to the initial state
 	desc->fault_cnt = global_fault_cnt;	// set the fault counter to the global
@@ -219,7 +218,6 @@ static inline void block_cli_if_desc_update_periodic_wake_wait(spdid_t spdid)
 
 static inline int block_cli_if_desc_update_post_fault_periodic_wake_wait()
 {
-
 	return 1;
 }
 
@@ -259,7 +257,6 @@ static inline void block_cli_if_desc_update_periodic_wake_create(spdid_t spdid,
 
 static inline int block_cli_if_desc_update_post_fault_periodic_wake_create()
 {
-
 	return 1;
 }
 
@@ -287,7 +284,6 @@ static inline void block_cli_if_recover_upcall_subtree(int id)
 
 static inline int block_cli_if_desc_update_post_fault_periodic_wake_remove()
 {
-
 	return 1;
 }
 

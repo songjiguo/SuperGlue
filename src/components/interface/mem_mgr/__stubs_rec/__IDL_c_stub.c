@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Mon Nov 23 18:29:29 2015 */
+/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -35,7 +35,6 @@ struct desc_track {
 };
 
 static volatile unsigned long global_fault_cnt = 0;
-static volatile unsigned long last_system_ticks = 0;
 static int first_map_init = 0;
 
 CVECT_CREATE_STATIC(mem_mgr_desc_maps);
@@ -354,7 +353,6 @@ static inline void block_cli_if_remove_desc(vaddr_t addr)
 
 static inline int block_cli_if_desc_update_post_fault_mman_revoke_page()
 {
-
 	return 1;
 }
 
@@ -391,7 +389,7 @@ static inline int block_cli_if_track___mman_alias_page(int ret, spdid_t spd,
 		desc = call_desc_lookup(s_addr);
 		assert(desc);
 		int tmp;
-		tmp = mman_get_page_exist(spd, s_addr);
+		tmp = mman_get_page_exist(spd, s_addr, 0, s_addr);
 		if (tmp != s_addr)
 			assert(0);
 		desc->fault_cnt = global_fault_cnt;
@@ -420,7 +418,6 @@ static inline void block_cli_if_desc_update___mman_alias_page(spdid_t spd,
 
 static inline int block_cli_if_desc_update_post_fault___mman_alias_page()
 {
-
 	return 1;
 }
 
@@ -452,7 +449,6 @@ static inline void block_cli_if_desc_update_mman_get_page(spdid_t spd,
 
 static inline int block_cli_if_desc_update_post_fault_mman_get_page()
 {
-
 	return 1;
 }
 
@@ -522,13 +518,16 @@ con:
 			goto redo;
 		}
 	}
+
 	if (cos_spd_id() == 5) goto done;
+
 	ret =
 	    block_cli_if_track___mman_alias_page(ret, spd, s_addr, d_spd_flags,
 						 addr);
 
 	if (unlikely(ret == -ELOOP))
 		goto redo;
+
 done:
 	return ret;
 }
