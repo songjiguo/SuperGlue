@@ -23,5 +23,5 @@ cos_asm_server_stub_spdid(evt_stats_len)
 
 cos_asm_server_fn_stub_spdid(evt_wait, __sg_evt_wait)
 
-cos_asm_server_fn_stub_spdid(evt_reflection, __sg_evt_reflection)
 cos_asm_server_fn_stub(evt_upcall_creator, __sg_evt_upcall_creator)
+cos_asm_server_fn_stub_spdid(evt_client_fault_notification,__ser_evt_client_fault_notification)

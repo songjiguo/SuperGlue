@@ -565,6 +565,8 @@ err:
 	return -1;
 }
 
+#include <c3_test.h>
+
 int periodic_wake_wait(spdid_t spdinv)
 {
 	spdid_t spdid = cos_spd_id();
@@ -608,6 +610,10 @@ int periodic_wake_wait(spdid_t spdinv)
 	}
 	te->flags |= TE_BLOCKED;
 	RELEASE(spdid);
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_PTE  // testing overhead, no block
+	if (cos_get_thd_id() == MEAS_PTE_THREAD) return 0;
+#endif
 
 	// Jiguo: change to use event	
 	/* printc("periodic_wake_wait: thd %d calls evt_wait\n", cos_get_thd_id()); */

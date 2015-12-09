@@ -20,5 +20,6 @@ cos_asm_server_stub_spdid(lock_stats)
 cos_asm_server_stub_spdid(lock_stats_len)
 //cos_asm_server_stub_spdid(lock_trigger_all)
 //cos_asm_server_fn_stub_spdid(lock_trigger_all, __sg_lock_trigger_all)
-cos_asm_server_fn_stub_spdid(lock_reflect, __sg_lock_reflect)	
+//cos_asm_server_fn_stub_spdid(lock_reflect, __sg_lock_reflect)
+cos_asm_server_fn_stub_spdid(lock_client_fault_notification,__ser_lock_client_fault_notification)
 	

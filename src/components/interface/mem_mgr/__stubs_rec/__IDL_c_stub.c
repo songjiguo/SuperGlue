@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
+/* IDL generated code ver 0.1 ---  Fri Nov 27 10:24:09 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -387,6 +387,7 @@ static inline int block_cli_if_track___mman_alias_page(int ret, spdid_t spd,
 	} else if (ret == -ECHILD) {
 		//assert(spd ==  cos_spd_id());
 		desc = call_desc_lookup(s_addr);
+		if (!desc) return ret;
 		assert(desc);
 		int tmp;
 		tmp = mman_get_page_exist(spd, s_addr, 0, s_addr);
@@ -485,6 +486,7 @@ CSTUB_FN(int, mman_revoke_page)(struct usr_inv_cap * uc, spdid_t spd,
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_mman_revoke_page(ret, spd, addr, flags);
 
 	if (unlikely(ret == -ELOOP))
@@ -501,13 +503,15 @@ CSTUB_FN(vaddr_t, __mman_alias_page) (struct usr_inv_cap * uc, spdid_t spd,
 
 	call_map_init();
 
-	if (cos_spd_id() == 5) goto con;
+	if (cos_spd_id() == 5)
+		goto con;
 
  redo:
 	block_cli_if_desc_update___mman_alias_page(spd, s_addr, d_spd_flags,
 						   addr);
 
-con:
+ con:
+
 	ret =
 	    block_cli_if_invoke___mman_alias_page(spd, s_addr, d_spd_flags,
 						  addr, ret, &fault, uc);
@@ -519,7 +523,8 @@ con:
 		}
 	}
 
-	if (cos_spd_id() == 5) goto done;
+	if (cos_spd_id() == 5)
+		goto done;
 
 	ret =
 	    block_cli_if_track___mman_alias_page(ret, spd, s_addr, d_spd_flags,
@@ -528,7 +533,8 @@ con:
 	if (unlikely(ret == -ELOOP))
 		goto redo;
 
-done:
+ done:
+
 	return ret;
 }
 
@@ -552,6 +558,7 @@ CSTUB_FN(vaddr_t, mman_get_page) (struct usr_inv_cap * uc, spdid_t spd,
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_mman_get_page(ret, spd, s_addr, flags);
 
 	if (unlikely(ret == -ELOOP))

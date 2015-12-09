@@ -683,13 +683,12 @@ int periodic_wake_wait(spdid_t spdinv)
 	u16_t tid = cos_get_thd_id();
 	long long t;
 
-	printc("thd %d calling period_wake_wait\n", cos_get_thd_id());
+	/* printc("thd %d calling period_wake_wait\n", cos_get_thd_id()); */
 
 	TAKE(spdid);
 
 	// SWIFI thread shoulod not wait for fault, it is injecing fault!!
 	/* if (cos_get_thd_id() != 11) WAIT_FAULT(); */
-
 
 	te = te_pget(tid);
 	if (NULL == te) BUG();
@@ -705,7 +704,7 @@ int periodic_wake_wait(spdid_t spdinv)
 	WAIT_FAULT();
 #if (RECOVERY_ENABLE == 1) && defined(TEST_PTE_WAIT_BEFORE)
 	/* test_num++; */ 
-	if (spdinv == 17 && cos_get_thd_id() == 13 && test_num++ > 10) {
+	if (spdinv == 17 && cos_get_thd_id() == 14 && test_num++ > 10) {
 		printc("trigger fault in periodic_wake_wait before: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);
@@ -740,6 +739,10 @@ int periodic_wake_wait(spdid_t spdinv)
 	te->flags |= TE_BLOCKED;
 	RELEASE(spdid);
 
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_PTE  // testing overhead, no block
+	if (cos_get_thd_id() == MEAS_PTE_THREAD) return 0;
+#endif
+
 	// Jiguo: change to use event	
 	long wait_ret;
 redo:
@@ -762,7 +765,7 @@ redo:
 	/* /\* printc("in periodic_wake_wait: thd %d spd %d, test_num %d\n", *\/ */
 	/* /\*        cos_get_thd_id(), spdinv, test_num); *\/ */
 	/* if (spdinv == 16 && cos_get_thd_id() == 13 && test_num >= 2) { */
-	if (spdinv == 17 && cos_get_thd_id() == 13 && test_num++ > 10) {
+	if (spdinv == 17 && cos_get_thd_id() == 14 && test_num++ > 10) {
 		printc("trigger fault in periodic_wake_wait after: thd %d spd %d\n", 
 		       cos_get_thd_id(), spdid);
 		assert(0);

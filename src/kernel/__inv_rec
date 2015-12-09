@@ -1103,7 +1103,7 @@ switch_thread_get_target(unsigned short int tid, struct thread *curr,
 	if (unlikely(thd == curr)) {
 		cos_meas_event(COS_MEAS_SWITCH_SELF);
 		*ret_code = COS_SCHED_RET_AGAIN;
-		printk("cos: switch_thread_get_target 1\n");
+		/* printk("cos: switch_thread_get_target 1\n"); */
 		goto ret_err;
 	}
 	if (unlikely(NULL == thd)) {
@@ -1125,7 +1125,7 @@ switch_thread_get_target(unsigned short int tid, struct thread *curr,
 			*ret_code = COS_SCHED_RET_INVAL;
 		}
 		/* error otherwise */
-		printk("cos: switch_thread_get_target 2\n");
+		/* printk("cos: switch_thread_get_target 2\n"); */
 		goto ret_err;
 	}
 	
@@ -2819,6 +2819,8 @@ ainv_next_thread(struct async_cap *acap, struct thread *preempted, int preempt)
 /************** end functions for parsing async set urgencies ************/
 /* extern int sched_thread_lookup(struct spd *spd, int thd_id, int operation, int hrt); */
 
+static long system_ticks = 0;
+
 COS_SYSCALL int 
 cos_syscall_sched_introspect(int spd_id, int operation, int arg, int thd_id)
 {
@@ -2867,6 +2869,13 @@ cos_syscall_sched_introspect(int spd_id, int operation, int arg, int thd_id)
 		/* printk("looking for....\n"); */
 		assert(spd_is_scheduler(spd));
 		ret = sched_thread_lookup(spd, thd_id, operation, 1);  // 1 for hrt
+		break;
+	}
+	case COS_SCHED_INTRO_TICKS:
+	{
+		/* printk("introspecting timer_ticks %d (thd %d)\n",  */
+		/*        system_ticks, thd_id); */
+		ret = system_ticks;  // return the last tracked system ticks 
 		break;
 	}
 	case COS_SCHED_INTRO_THD_COUNT: /* hrt threads */
@@ -3100,7 +3109,7 @@ cos_syscall_sched_cntl(int spd_id, int operation, int thd_id, long option)
 		event_record("breaking preemption chain", thd_get_id(thd), 0);
 		/* 
 		 * This call is simple: make it so that when the
-		 * current thread (presumably an upcall) completes,
+		 * current thr5Aead (presumably an upcall) completes,
 		 * don't automatically switch to the preempted thread,
 		 * instead make an upcall into the scheduler.
 		 */
@@ -3116,6 +3125,12 @@ cos_syscall_sched_cntl(int spd_id, int operation, int thd_id, long option)
 	{
 		/* pass 1 for hard real time threads. 0 for BEST */
 		sched_thread_add(spd, thd_id, option, operation, 1);
+		break;
+	}
+	case COS_SCHED_TRACK_TICKS:
+	{
+		/* printk("tracking timer_ticks %d (thd %d)\n", option, thd_id); */
+		system_ticks = option;  // tracking the system ticks here
 		break;
 	}
 	case COS_SCHED_THD_REMOVE:
@@ -3620,8 +3635,8 @@ cos_syscall_mmap_cntl(int spdid, long op_flags_dspd, vaddr_t daddr, unsigned lon
 	   use ENONEMPTY or EEXIST to tell the different situations for fault tolerance
 	*/
 	if (virtual_namespace_query(daddr) != spd) {
-		printk("cos: (this spd %d) spd %d -- spd %d @ vaddr %x\n",
-		       spdid, dspd_id, virtual_namespace_query(daddr), (unsigned int)daddr);
+		/* printk("cos: (this spd %d) spd %d -- spd %d @ vaddr %x\n", */
+		/*        spdid, dspd_id, virtual_namespace_query(daddr), (unsigned int)daddr); */
 		return -ENOENT;
 	}
 	

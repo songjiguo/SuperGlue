@@ -678,7 +678,7 @@ CSTUB_FN(int, twrite)(struct usr_inv_cap *uc,
 	return ret;
 }
 
-void 
+void
 print_fs_rd_info(struct rec_data_tor *rd)
 {
 	assert(rd);

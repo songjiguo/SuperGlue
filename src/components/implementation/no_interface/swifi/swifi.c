@@ -18,8 +18,14 @@ int high;
 unsigned long counter = 0;
 
 // 10 for non-MM
-#define INJECTION_PERIOD 10
+//#define INJECTION_PERIOD 10
 #define INJECTION_ITER 10000
+
+#ifdef EXAMINE_MM
+#define INJECTION_PERIOD 5
+#else
+#define INJECTION_PERIOD 10
+#endif
 
 /* // hard code all components */
 /* enum SEL_SPD{ */
@@ -89,87 +95,7 @@ int fault_inject(int spd)
 	return 0;
 }
 
-
-/* void cos_init(void) */
-/* { */
-/* 	static int first = 0; */
-/* 	union sched_param sp; */
-/* 	int rand; */
-
-/* /\* #ifndef SWIFI_ON *\/ */
-/* /\* 	return; *\/ */
-/* /\* #else *\/ */
-/* #ifndef SWIFI_WEB */
-/* 	return; */
-/* #else */
-/* 	if(first == 0){ */
-/* 		first = 1; */
-/* 		sp.c.type = SCHEDP_PRIO; */
-/* 		sp.c.value = 4; */
-/* 		high = sched_create_thd(cos_spd_id(), sp.v, 0, 0); */
-
-/* 		int i; */
-/* 		for(i = 0; i < MAX_C3_SPD; i++) { */
-/* 			switch(i) { */
-/* 			case SEL_SH: */
-/* 				target_spd[i] = SH_SPD; */
-/* 				break; */
-/* 			case SEL_MM: */
-/* 				target_spd[i] = MM_SPD; */
-/* 				break; */
-/* 			case SEL_FS: */
-/* 				target_spd[i] = FS_SPD; */
-/* 				break; */
-/* 			case SEL_TE: */
-/* 				target_spd[i] = TE_SPD; */
-/* 				break; */
-/* 			case SEL_EV: */
-/* 				target_spd[i] = EV_SPD; */
-/* 				break; */
-/* 			case SEL_LK: */
-/* 				target_spd[i] = LK_SPD; */
-/* 				break; */
-/* 			case SEL_MB: */
-/* 				target_spd[i] = MB_SPD; */
-/* 				break; */
-/* 			default: */
-/* 				break;				 */
-/* 			} */
-/* 		} */
-
-/* 	} else { */
-/* 		if (cos_get_thd_id() == high) { */
-/* 			printc("\nfault injector %ld (high %d thd %d)\n",  */
-/* 			       cos_spd_id(), high, cos_get_thd_id()); */
-/* 			periodic_wake_create(cos_spd_id(), INJECTION_PERIOD); */
-/* 			timed_event_block(cos_spd_id(), 1); */
-
-/* #ifdef SWIFI_ON */
-/* 			// this is for each service fault coverage test */
-/* 			while(1) { */
-/* 				recovery_upcall(cos_spd_id(), COS_UPCALL_SWIFI_BEFORE,  */
-/* 						target_spd[TARGET_SPD], 0); */
-/* 				// in 1 tick, hope some thread is spinning there! */
-/* 				timed_event_block(cos_spd_id(), 1); */
-				
-/* 				fault_inject(target_spd[TARGET_SPD]); */
-/* 				recovery_upcall(cos_spd_id(), COS_UPCALL_SWIFI_AFTER,  */
-/* 						target_spd[TARGET_SPD], 0); */
-/* 				periodic_wake_wait(cos_spd_id()); */
-/* 			} */
-/* #endif */
-/* #ifdef SWIFI_WEB */
-/* 			// this is for web server fault injection only */
-/* 			while(1) { */
-/* 				fault_inject(target_spd[TARGET_SPD]); */
-/* 				periodic_wake_wait(cos_spd_id()); */
-/* 			} */
-/* #endif */
-/* 		} */
-/* 	} */
-/* #endif */
-	
-/* } */
+int test = 0;
 
 void cos_init(void)
 {
@@ -183,23 +109,27 @@ void cos_init(void)
 		high = sched_create_thd(cos_spd_id(), sp.v, 0, 0);
 	} else {
 		if (cos_get_thd_id() == high) {
-			printc("\nfault injector %ld (high %d thd %d)\n",
-			       cos_spd_id(), high, cos_get_thd_id());
 			periodic_wake_create(cos_spd_id(), INJECTION_PERIOD);
 			timed_event_block(cos_spd_id(), 1);
 #ifdef SWIFI_ON
 			// this is for each service fault coverage test
 			while(1) {
+				test++;
+				while (test == 3) timed_event_block(cos_spd_id(), 100);
 				recovery_upcall(cos_spd_id(), COS_UPCALL_SWIFI_BEFORE,
 						SWIFI_SPD, 0);
-				// in 1 tick, hope some thread is spinning there!
+				// in 1 tick, hope some thread is spinning in the target spd
+				/* printc("swifi....call timed_event_block\n"); */
 				timed_event_block(cos_spd_id(), 1);
+				/* printc("swifi....return from timed_event_block\n"); */
 				
 				fault_inject(SWIFI_SPD);
 
 				recovery_upcall(cos_spd_id(), COS_UPCALL_SWIFI_AFTER,
 						SWIFI_SPD, 0);
+				/* printc("swifi....call periodic_wake_wait\n"); */
 				periodic_wake_wait(cos_spd_id());
+				/* printc("swifi....return from periodic_wake_wait\n"); */
 			}
 #endif
 #ifdef SWIFI_WEB

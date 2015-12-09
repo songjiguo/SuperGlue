@@ -357,10 +357,6 @@ treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 	char *buf;
 	cbufp_t cb;
 
-#ifdef BENCHMARK_MEAS_INV_OVERHEAD_RAMFS
-	return 0;
-#endif
-
 	/* printc("ramfs: treadp (td %d len %d)\n", td, len); */
 	/* printc("ramfs: treadp (off %d sz %d)\n", *off, *sz); */
 	if (tor_isnull(td)) return -EINVAL;
@@ -386,7 +382,8 @@ treadp(spdid_t spdid, td_t td, int len, int *off, int *sz)
 #if (RECOVERY_ENABLE == 1) && defined(TEST_RAMFS_TREADP)
 	/* if (spdid == 22 && cos_get_thd_id() == 15 && test_num == 1000) { */
 	/* printc("treadp testnum %d\n", test_num); */
-	if (test_num++ > 0) {
+	/* if (test_num++ > 0) { */
+	if (spdid == 17 && test_num++ > 10) {
 		printc("trigger fault in ramfs treadp: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);

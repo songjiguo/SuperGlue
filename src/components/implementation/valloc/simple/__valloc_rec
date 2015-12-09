@@ -321,8 +321,8 @@ valloc_upcall(spdid_t spdid, vaddr_t addr, int upcall_type)
 	LOCK();
 
 	assert(addr);
-	printc("valloc_upcall: passed addr %p (called from spd %d type %d)-- id %d\n",
-	       addr, spdid, upcall_type, (addr >> PAGE_SHIFT) & 0xFFFF);
+	/* printc("valloc_upcall: passed addr %p (called from spd %d type %d)-- id %d\n", */
+	/*        addr, spdid, upcall_type, (addr >> PAGE_SHIFT) & 0xFFFF); */
 
 	reqtrac = cos_vect_lookup(&requestor_vect, (addr >> PAGE_SHIFT) & 0xFFFF);
 	if (!reqtrac) {
@@ -345,8 +345,8 @@ valloc_upcall(spdid_t spdid, vaddr_t addr, int upcall_type)
 	/* 	goto done; */
 	/* } */
 	
-	printc("valloc: ready to upcall (thd %d upcall to %d for alias %p upcall_type %d)\n",
-	       cos_get_thd_id(), dest_spd, addr, upcall_type);
+	/* printc("valloc: ready to upcall (thd %d upcall to %d for alias %p upcall_type %d)\n", */
+	/*        cos_get_thd_id(), dest_spd, addr, upcall_type); */
 
 	UNLOCK();
 

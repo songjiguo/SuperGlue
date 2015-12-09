@@ -198,10 +198,10 @@ static int second = 0;
 int
 recovery_upcall(spdid_t spdid, int op, spdid_t dest, vaddr_t arg)
 {
-	printc("LL: llbooter upcall to spd %d, arg %x thd %d op %d\n",
-	       dest, (unsigned int)arg, cos_get_thd_id(), op);
+	/* printc("LL: llbooter upcall to spd %d, arg %x thd %d op %d\n", */
+	/*        dest, (unsigned int)arg, cos_get_thd_id(), op); */
 
-	printc("recovery_upcall has been called %d times\n",second);
+	/* printc("recovery_upcall has been called %d times\n",second); */
 	if(second++ >= 10000) {
 		printc("Andy 10000 times\n");
 		sched_exit();

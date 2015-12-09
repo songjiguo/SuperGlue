@@ -267,8 +267,8 @@ redo:
 	rd = rd_update(cos_get_thd_id(), dep_thd, THD_STATE_WAKEUP);
 	assert(rd);
 	
-	printc("cli:thread %d calls << sched_wakeup thd %d>>\n",
-	       cos_get_thd_id(), dep_thd);
+	/* printc("cli:thread %d calls << sched_wakeup thd %d>>\n", */
+	/*        cos_get_thd_id(), dep_thd); */
 
 #ifdef MEASU_SCHED_INTERFACE_WAKEUP
 	rdtscll(start);
@@ -306,8 +306,8 @@ redo:
         rd = rd_update(cos_get_thd_id(), thd_id, THD_STATE_BLOCK);
 	assert(rd);
 
-	printc("cli: thread %d calls from spd %d << sched_block thd %d>>\n",
-	       cos_get_thd_id(), spdid, thd_id);
+	/* printc("cli: thread %d calls from spd %d << sched_block thd %d>>\n", */
+	/*        cos_get_thd_id(), spdid, thd_id); */
 	
 #ifdef MEASU_SCHED_INTERFACE_BLOCK
 	rdtscll(start);

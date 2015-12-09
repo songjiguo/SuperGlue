@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
+/* IDL generated code ver 0.1 ---  Fri Nov 27 10:24:09 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -93,7 +93,7 @@ static inline void call_desc_dealloc(struct desc_track *desc)
 struct __ser_tsplit_marshalling {
 	spdid_t spdid;
 	td_t parent_tid;
-	int len[2];
+	int len;
 	tor_flags_t tflags;
 	long evtid;
 	char data[0];
@@ -310,8 +310,7 @@ static inline int block_cli_if_marshalling_invoke_tsplit(spdid_t spdid,
 
 	md->spdid = spdid;
 	md->parent_tid = parent_tid;
-	md->len[0] = 0;
-	md->len[1] = len;
+	md->len = len;
 	md->tflags = tflags;
 	md->evtid = evtid;
 	memcpy(&md->data[0], param, len + 1);
@@ -508,6 +507,7 @@ CSTUB_FN(int, trelease)(struct usr_inv_cap * uc, spdid_t spdid, td_t tid) {
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_trelease(ret, spdid, tid);
 
 	if (unlikely(ret == -ELOOP))
@@ -535,6 +535,7 @@ CSTUB_FN(int, twritep)(struct usr_inv_cap * uc, spdid_t spdid, td_t tid,
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_twritep(ret, spdid, tid, cbid, sz);
 
 	if (unlikely(ret == -ELOOP))
@@ -564,6 +565,7 @@ CSTUB_FN(int, treadp)(struct usr_inv_cap * uc, spdid_t spdid, td_t tid, int len,
 			goto redo;
 		}
 	}
+
 	ret =
 	    block_cli_if_track_treadp(ret, spdid, tid, len, _retval_cbuf_off,
 				      _retval_sz);

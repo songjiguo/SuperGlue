@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
+/* IDL generated code ver 0.1 ---  Fri Nov 27 10:24:09 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -444,6 +444,7 @@ CSTUB_FN(long, evt_wait)(struct usr_inv_cap * uc, spdid_t spdid, long evtid) {
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_evt_wait(ret, spdid, evtid);
 
 	if (unlikely(ret == -ELOOP))
@@ -472,6 +473,7 @@ CSTUB_FN(long, evt_split)(struct usr_inv_cap * uc, spdid_t spdid,
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_evt_split(ret, spdid, parent_evtid, grp);
 
 	if (unlikely(ret == -ELOOP))
@@ -497,6 +499,7 @@ CSTUB_FN(int, evt_free)(struct usr_inv_cap * uc, spdid_t spdid, long evtid) {
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_evt_free(ret, spdid, evtid);
 
 	if (unlikely(ret == -ELOOP))
@@ -522,6 +525,7 @@ CSTUB_FN(int, evt_trigger)(struct usr_inv_cap * uc, spdid_t spdid, long evtid) {
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_evt_trigger(ret, spdid, evtid);
 
 	if (unlikely(ret == -ELOOP))

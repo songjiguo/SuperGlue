@@ -50,7 +50,7 @@ int fault_flt_notif_handler(spdid_t spdid, void *fault_addr, int flags, void *ip
 		/*        spdid, cos_get_thd_id()); */
 	}
 
-	if (test_num++ > 100) {
+	if (test_num++ > 1000) {
 		printc("notif has failed %d times\n", test_num);
 		assert(0);
 	}
@@ -67,7 +67,7 @@ int fault_page_fault_handler(spdid_t spdid, void *fault_addr, int flags, void *i
 
 	/* printc("pgfault parameters: spdid %d fault_addr %p flags %d ip %p (thd %d)\n", spdid, fault_addr, flags, ip, cos_get_thd_id()); */
 
-	if (test_num++ > 100) {
+	if (test_num++ > 1000) {
 		printc("has failed %d times\n", test_num);
 		assert(0);
 	}

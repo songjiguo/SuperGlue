@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
+/* IDL generated code ver 0.1 ---  Fri Nov 27 10:24:09 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -493,6 +493,7 @@ CSTUB_FN(ul_t, sched_timestamp) (struct usr_inv_cap * uc) {
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_sched_timestamp(ret);
 
 	if (unlikely(ret == -ELOOP))
@@ -521,6 +522,7 @@ CSTUB_FN(int, sched_block)(struct usr_inv_cap * uc, spdid_t spdid,
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_sched_block(ret, spdid, dependency_thd);
 
 	if (unlikely(ret == -ELOOP))
@@ -546,6 +548,7 @@ CSTUB_FN(int, sched_timeout)(struct usr_inv_cap * uc, spdid_t spdid, ul_t amnt) 
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_sched_timeout(ret, spdid, amnt);
 
 	if (unlikely(ret == -ELOOP))
@@ -577,6 +580,7 @@ CSTUB_FN(int, sched_create_thd)(struct usr_inv_cap * uc, spdid_t spdid,
 			goto redo;
 		}
 	}
+
 	ret =
 	    block_cli_if_track_sched_create_thd(ret, spdid, sched_param0,
 						sched_param1, sched_param2);
@@ -606,6 +610,7 @@ CSTUB_FN(int, sched_component_release)(struct usr_inv_cap * uc, spdid_t spdid) {
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_sched_component_release(ret, spdid);
 
 	if (unlikely(ret == -ELOOP))
@@ -631,6 +636,7 @@ CSTUB_FN(int, sched_component_take)(struct usr_inv_cap * uc, spdid_t spdid) {
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_sched_component_take(ret, spdid);
 
 	if (unlikely(ret == -ELOOP))
@@ -656,6 +662,7 @@ CSTUB_FN(int, sched_wakeup)(struct usr_inv_cap * uc, spdid_t spdid, u16_t thdid)
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_sched_wakeup(ret, spdid, thdid);
 
 	if (unlikely(ret == -ELOOP))

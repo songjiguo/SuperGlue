@@ -403,8 +403,8 @@ mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, vaddr_t to, int fl
 	assert(cv->pages);
 	if (cvect_lookup(cv->pages, idx)) {
 		struct mapping *test = cvect_lookup(cv->pages, idx);
-		printc("Collision!!! a test msg: test->spdid %d test->addr %p\n",
-		       test->spdid, test->addr);
+		/* printc("Collision!!! a test msg: test->spdid %d test->addr %p\n", */
+		/*        test->spdid, test->addr); */
 		goto collision;
 	}
 
@@ -424,7 +424,7 @@ mapping_crt(struct mapping *p, struct frame *f, spdid_t dest, vaddr_t to, int fl
 	if (!exist) {
 		int tmp = cos_mmap_cntl(COS_MMAP_GRANT, flags, dest, to, frame_index(f));
 		if (tmp && tmp != -1) {  // -1 means the entry is already in the table
-			printc("mem_man: could not grant at %x:%p (ret %d)\n", dest, to, tmp);
+			/* printc("mem_man: could not grant at %x:%p (ret %d)\n", dest, to, tmp); */
 			goto no_mapping;
 		}
 	}
@@ -628,9 +628,6 @@ __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_ad
 	d_spd = d_spd_flags >> 16;
 	flags = d_spd_flags & 0xFFFF;
 	
-/* #ifdef BENCHMARK_MEAS_INV_OVERHEAD_MM */
-/* 	if (cos_get_thd_id() == 13) return ret; */
-/* #endif */
 
 	/* if (s_spd != 5) { */
 	/* 	printc("__mman_alias_page: s_spd %d s_addr %p d_spd %d d_addr %p\n", */
@@ -663,7 +660,7 @@ __mman_alias_page(spdid_t s_spd, vaddr_t s_addr, u32_t d_spd_flags, vaddr_t d_ad
 	/* 	       cos_get_thd_id(), cos_spd_id(), s_spd, d_spd, test_control++); */
 	/* } */
 
-	if (s_spd == 18 && cos_get_thd_id() == 13 && test_control++ == 3) {
+	if (s_spd == 18 && cos_get_thd_id() == 14 && test_control++ == 3) {
 		printc("trigger fault in mman_alias_page: thd %d spd %ld passed s_spd %d dest_spd %d\n", cos_get_thd_id(), cos_spd_id(), s_spd, d_spd);
 		assert(0);
 	}

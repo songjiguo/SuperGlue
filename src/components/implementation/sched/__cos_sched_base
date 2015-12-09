@@ -1011,6 +1011,12 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		fp_block(thd, spdid);
 	}
 	assert(thd->wake_cnt < 2);
+
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_SCHED
+	if (cos_get_thd_id() == MEAS_SCHED_THREAD) goto unblock;
+#endif
+
 	while (0 == thd->wake_cnt) {
 		if (dependency_thd) {
 			assert(dep && dep == thd->dependency_thd);
@@ -1052,6 +1058,9 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		}
 		first = 0;
 	}
+
+	/* assert(thd->wake_cnt == 1); */
+	if (unlikely(thd->wake_cnt == 2)) thd->wake_cnt--;   // Jiguo: special case
 	assert(thd->wake_cnt == 1);
 	/* The amount of time we've blocked */
 	ret = PERCPU_GET(sched_base_state)->ticks - thd->block_time - 1;

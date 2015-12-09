@@ -627,7 +627,7 @@ cbufp_register(spdid_t spdid, long cbid)
 	void *p;
 	vaddr_t dest, ret = 0;
 
-	printl("cbufp_register\n");
+	/* printl("cbufp_register\n"); */
 	CBUFP_TAKE();
 	cci = cbufp_comp_info_get(spdid);
 	if (!cci) goto done;
@@ -666,9 +666,9 @@ cbufp_record(int cbid, int len, int offset, int fid)
 	void *page;
 	int ret = -EINVAL, off;
 	
-	printc("cbufp_record\n");
-	printc("passed in para: len %d offset %d cbid %d fid %d\n", 
-	       len, offset, cbid, fid);
+	/* printc("cbufp_record\n"); */
+	/* printc("passed in para: len %d offset %d cbid %d fid %d\n",  */
+	/*        len, offset, cbid, fid); */
 
 	CBUFP_TAKE();
 
@@ -694,7 +694,7 @@ cbufp_record(int cbid, int len, int offset, int fid)
 	/* printc("record: cbid %ld d->addr %p (d's spd %d, and addr is %p)\n",  */
 	/*        cbid, d->addr, d->owner.spd, d->owner.addr); */
 	vaddr_t vaddr = cbi->owner.addr;
-	printc("vaddr %p\n", (void *)vaddr);
+	/* printc("vaddr %p\n", (void *)vaddr); */
 	if (cos_mmap_cntl(COS_MMAP_SETRW, MAPPING_READ, cbi->owner.spdid, vaddr, 0)) {
 		printc("set page to be read only failed\n");
 		BUG();

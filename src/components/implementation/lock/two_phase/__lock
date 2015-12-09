@@ -216,6 +216,8 @@ done:
 	return ret;
 }
 
+
+#include <c3_test.h>
 /* 
  * Dependencies here (thus priority inheritance) will NOT be used if
  * you specify a timeout value.
@@ -232,6 +234,10 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	
 	ACT_RECORD(ACT_LOCK, spd, lock_id, cos_get_thd_id(), thd_id);
 	TAKE(spdid);
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_LOCK
+	if (cos_get_thd_id() == MEAS_LOCK_THREAD) goto error;
+#endif
 
 	ml = lock_find(lock_id, spd);
 	/* tried to access a lock not yet created */
@@ -259,6 +265,7 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 
 	/* printc("thd %d going to blocked in scheduler via lock component %ld\n",  */
 	/*        cos_get_thd_id(), cos_spd_id()); */
+
 	if (-1 == sched_block(spdid, thd_id)) {
 		printc("Deadlock including thdids %d -> %d in spd %d, lock id %d.\n", 
 		       cos_get_thd_id(), thd_id, spd, (int)lock_id);

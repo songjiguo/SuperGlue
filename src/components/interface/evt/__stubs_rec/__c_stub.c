@@ -200,7 +200,7 @@ done:
 }
 
 void
-evt_cli_if_recover_upcall_entry(int evtid)
+evt_cli_if_recover_upcall_entry(long evtid)
 {
 	assert(rd_update(evtid, EVT_SPLIT));
 	return;
@@ -306,8 +306,8 @@ redo:
 		       ubenchmark_end - ubenchmark_start);
 	}
 
-	printc("evt cli: evt_wait thd %d in spd %ld (extern_evt %d)\n",
-	       cos_get_thd_id(), cos_spd_id(), extern_evt);
+	/* printc("evt cli: evt_wait thd %d in spd %ld (extern_evt %d)\n", */
+	/*        cos_get_thd_id(), cos_spd_id(), extern_evt); */
 
 	CSTUB_INVOKE(ret, fault, uc, 2, spdid, extern_evt);
         if (unlikely (fault)){

@@ -463,6 +463,8 @@ enum {
 	COS_SCHED_REVOKE_SCHED,
 	COS_SCHED_REMOVE_THD,
 	COS_SCHED_BREAK_PREEMPTION_CHAIN,
+	/* c3 --  track the system timer ticks */
+	COS_SCHED_TRACK_TICKS,
 	/* c3 --  track the thread creation info */
 	COS_SCHED_THD_DEST,
 	COS_SCHED_THD_METRIC,
@@ -488,6 +490,7 @@ enum {
 	COS_SCHED_INTRO_THD_D,
 	COS_SCHED_INTRO_THD_PARAM,
 	COS_SCHED_INTRO_TIMEOUT_THD,
+	COS_SCHED_INTRO_TICKS,  // for restoring the system ticks
 	/* for best effort threads */
 	COS_SCHED_BES_THD_EXIST,
 	COS_SCHED_BES_THD_GET,

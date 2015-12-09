@@ -28,7 +28,7 @@ mman_alias_page(spdid_t s_spd, vaddr_t s_addr, spdid_t d_spd, vaddr_t d_addr, in
 { return __mman_alias_page(s_spd, s_addr, ((u32_t)d_spd<<16)|flags, d_addr); }
 void mman_print_stats(void);
 
-/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
+/* IDL generated code ver 0.1 ---  Fri Nov 27 10:24:09 2015 */
 
 #include <c3_test.h> 
 vaddr_t mman_get_page_exist(spdid_t spd, vaddr_t s_addr, int flags, vaddr_t addr);

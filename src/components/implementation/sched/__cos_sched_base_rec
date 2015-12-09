@@ -538,8 +538,8 @@ static void sched_timer_tick(void)
 			//cos_stats();
 		}
 		/* are we done running? */
-		printc("PERCPU_GET(sched_base_state)->ticks %llu (RUNTIME %d)\n",
-		       PERCPU_GET(sched_base_state)->ticks, RUNTIME_SEC*TIMER_FREQ+1);
+		/* printc("PERCPU_GET(sched_base_state)->ticks %llu (RUNTIME %d)\n", */
+		/*        PERCPU_GET(sched_base_state)->ticks, RUNTIME_SEC*TIMER_FREQ+1); */
 		if (unlikely(PERCPU_GET(sched_base_state)->ticks >= RUNTIME_SEC*TIMER_FREQ+1)) {
 			sched_exit();
 			while (COS_SCHED_RET_SUCCESS !=
@@ -558,6 +558,17 @@ static void sched_timer_tick(void)
 			}
 		}
 		PERCPU_GET(sched_base_state)->ticks++;
+		
+		/* Jiguo: track the time ticks, so we can restore the
+		 * correct ticks. This is hard to do at the client
+		 * interface, since we do know which function will
+		 * call sched_timestamp. Also we do not know which
+		 * client has the most recent timestamp. This is the
+		 * resource data and should be tracked in the third
+		 * party component ("kernel" in this case) */
+		cos_sched_cntl(COS_SCHED_TRACK_TICKS, cos_get_thd_id(),
+			       PERCPU_GET(sched_base_state)->ticks++);
+
 		sched_process_wakeups();
 		timer_tick(1);
 		sched_switch_thread(COS_SCHED_ACAP_WAIT, TIMER_SWITCH_LOOP);
@@ -870,7 +881,6 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 	
 	WAIT_FAULT();
 
-
         /* lock take start */
 	cos_sched_lock_take();
         /* lock take end */
@@ -881,7 +891,7 @@ int sched_wakeup(spdid_t spdid, unsigned short int thd_id)
 #if (RECOVERY_ENABLE == 1) && defined(TEST_SCHED_WAKEUP)
 	/* printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n", */
 	/*        cos_get_thd_id(), cos_spd_id(), spdid); */
-	if (spdid == 17 && cos_get_thd_id() == 14 && test_control++ == 4) {
+	if (spdid == 17 && cos_get_thd_id() == 15 && test_control++ == 4) {
 		printc("trigger fault in sched_wakeup: thd %d spd %ld passed spd %d\n",
 		       cos_get_thd_id(), cos_spd_id(), spdid);
 		assert(0);
@@ -1099,6 +1109,11 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 		fp_block(thd, spdid);
 	}
 	assert(thd->wake_cnt < 2);
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_SCHED
+	if (cos_get_thd_id() == MEAS_SCHED_THREAD) goto unblock;
+#endif
+
 	while (0 == thd->wake_cnt) {
 		if (dependency_thd) {
 			assert(dep && dep == thd->dependency_thd);
@@ -1158,7 +1173,11 @@ int sched_block(spdid_t spdid, unsigned short int dep_thd)
 done:
 	if (thd->wake_cnt == 2) thd->wake_cnt--;  // Jiguo: special case, same as above
 	assert(thd->wake_cnt == 1);
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_SCHED
+#else
 	assert(!sched_thd_dependent(thd));
+#endif
 	cos_sched_lock_release();
 	return ret; 
 warn:
@@ -1166,7 +1185,7 @@ warn:
 	ret = -1;
 	goto done;
 unblock:
-	printc("sched_block-- unblock: pre_wakeup thread %d\n", thd->id);
+	/* printc("sched_block-- unblock: pre_wakeup thread %d\n", thd->id); */
 	fp_pre_wakeup(thd);
 	ret = -1;
 	goto done;
@@ -1265,8 +1284,8 @@ int sched_component_release(spdid_t spdid)
 #endif
 
 	if (sched_release_crit_sect(spdid, curr)) {
-		printc("fprr: error releasing spd %d's critical section (contended %d)\n",
-		       spdid, curr->contended_component);
+		/* printc("fprr: error releasing spd %d's critical section (contended %d)\n", */
+		/*        spdid, curr->contended_component); */
 	}
 	sched_switch_thread(0, NULL_EVT);
 	assert(!sched_thd_dependent(curr));
@@ -2335,9 +2354,9 @@ sched_reboot(int arg)
 	printc("\n[[[[ this is rebooting (llboot_init thd %d fault_thd %d)!!!!]]]\n\n",
 	       llboot_init_thd, fault_thd);
 
-        // don't re-initialize. should be removed if doing recovery test. 
 	assert(!(PERCPU_GET(sched_base_state)->init));
 	if (cos_sched_cntl(COS_SCHED_EVT_REGION, 0, (long)PERCPU_GET(cos_sched_notifications))) BUG();
+
 	
 	if (cos_cpuid() == INIT_CORE) {
 		assert(initialized[INIT_CORE] == 0);
@@ -2402,6 +2421,11 @@ sched_reboot(int arg)
 			PERCPU_GET(sched_base_state)->timer = rec_thd;
 			assert(!cos_sched_cntl(COS_SCHED_THD_RESET_UPCALL, rec_thd->id, 0));
 			assert(!cos_sched_cntl(COS_SCHED_THD_RESET_FAULTCNT, rec_thd->id, 0));
+			int system_ticks = cos_sched_introspect(COS_SCHED_INTRO_TICKS, 0, 
+								cos_get_thd_id());
+			printc("introspect timer tick %d\n", system_ticks);
+			PERCPU_GET(sched_base_state)->ticks = system_ticks;
+
 			break;
 		case SCHEDP_IPI_HANDLER:
 			PERCPU_GET(sched_base_state)->IPI_handler = rec_thd;

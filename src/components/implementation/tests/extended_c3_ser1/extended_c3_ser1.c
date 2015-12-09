@@ -57,8 +57,8 @@ static void try_hp(void)
 	int i = 0;
 	unsigned long long j = 0;
 	printc("\n\n[[ lock test start..... ]]\n\n");
-	/* while(1) { */
-	while(j++ < 30) {
+	while(1) {
+	/* while(j++ < 30) { */
 		/* printc("thread h : %d is doing something\n", cos_get_thd_id()); */
 		/* printc("thread h : %d is trying to take another lock...\n", cos_get_thd_id()); */
 		/* ec3_ser2_test(); */
@@ -90,8 +90,8 @@ static void try_mp(void)
 	return;
 
 	unsigned long long j = 0;
-	/* while(1) { */
-	while(j++ < 30) {
+	while(1) {
+	/* while(j++ < 30) { */
 		/* printc("thread m : %d try to take lock\n", cos_get_thd_id()); */
 
 		LOCK1_TAKE();
@@ -109,8 +109,8 @@ static void try_lp(void)
 {
 	int i = 0;
 	unsigned long long j = 0;
-	/* while(1) { */
-	while(j++ < 35) {
+	while(1) {
+	/* while(j++ < 35) { */
 		/* printc("j is %llu\n", j); */
 		/* printc("<<< thread l : %d is doing somethingAAAAA \n", cos_get_thd_id()); */
 		printc("thread l : %d try to take lock\n", cos_get_thd_id());
@@ -156,6 +156,96 @@ cos_init(void)
 }
 
 #endif
+
+
+/****************************
+ _       
+| |_ ___ 
+| __/ _ \
+| ||  __/
+ \__\___|
+****************************/
+
+#ifdef EXAMINE_TE
+
+extern void *alloc_page(void);
+extern void free_page(void *ptr);
+
+
+static void try_hp(void)
+{
+	periodic_wake_create(cos_spd_id(), 2);
+
+	int i = 0;
+	/* while(i++ < 20) { */
+	while(1) {
+		/* printc("period blocked (50 ticks) thd %d\n", cos_get_thd_id()); */
+		/* rdtscll(overhead_start); */
+		/* printc("period thd ...... %d\n", cos_get_thd_id()); */
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_PTE
+		unsigned long long infra_overhead_start;
+		unsigned long long infra_overhead_end;
+		rdtscll(infra_overhead_start);
+#endif
+		
+		periodic_wake_wait(cos_spd_id());
+		
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_PTE
+		rdtscll(infra_overhead_end);
+		printc("infra_overhead (periodic_wake_wait) cost %llu\n",
+		       infra_overhead_end - infra_overhead_start);
+#endif
+	}
+	periodic_wake_remove(cos_spd_id(), cos_get_thd_id());
+	
+	return;
+}
+
+static void try_mp(void)
+{
+	/* timed_event_block(cos_spd_id(), 2); */
+
+	periodic_wake_create(cos_spd_id(), 3);
+
+	int i = 0;
+	/* while(i++ < 20) { */
+	while(1) {
+		/* printc("period blocked (35 ticks) thd %d\n", cos_get_thd_id()); */
+		/* rdtscll(overhead_start); */
+		/* printc("period thd ...... %d\n", cos_get_thd_id()); */
+		periodic_wake_wait(cos_spd_id());
+		/* rdtscll(overhead_end); */
+		/* printc("pte_m wake from wait overhead %llu\n", overhead_end - overhead_start); */
+	}
+	periodic_wake_remove(cos_spd_id(), cos_get_thd_id());
+
+	return;
+}
+
+vaddr_t ec3_ser1_test(int low, int mid, int hig)
+{
+	if (cos_get_thd_id() == hig) {
+		printc("\n<< Test start in spd %d ... >>>\n\n", cos_get_thd_id());
+		try_hp();
+		printc("\n<< ... Test done in spd %d >>>\n\n", cos_get_thd_id());
+	}
+
+	if (cos_get_thd_id() == mid) {
+		try_mp();
+	}
+	
+	/* /\* For benchmark, we use only one thread, so comment this for that *\/ */
+	/* if (cos_get_thd_id() == mid) try_mp(); */
+
+	/* try_mp();   // for fault coverage test */
+
+	/* while(1);  // quick fix the thread termination issue ??? */
+	return 0;
+}
+
+#endif
+
 
 /****************************
             _   
@@ -203,25 +293,22 @@ static void try_hp(void)
 #ifdef BENCHMARK_MEAS_INV_OVERHEAD_EVT
 		unsigned long long infra_overhead_start;
 		unsigned long long infra_overhead_end;
-	meas:
 		rdtscll(infra_overhead_start);
-	wait:
-		wait_ret = evt_wait(cos_spd_id(), evt0);
-		if (unlikely(wait_ret < 0)) goto wait;
-
-		if (cos_get_thd_id() == 13) {
-			rdtscll(infra_overhead_end);
-			printc("infra_overhead (evt_wait) cost %llu\n",
-			       infra_overhead_end - infra_overhead_start);
-			goto meas;
-		}
-#else
+#endif
+		
 	wait:
 		/* printc("(ser1) thd %d evt_wait\n", cos_get_thd_id()); */
 		wait_ret = evt_wait(cos_spd_id(), evt0);
+		
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_EVT
+		rdtscll(infra_overhead_end);
+		printc("infra_overhead (evt_wait) cost %llu\n",
+		       infra_overhead_end - infra_overhead_start);
+#endif
+		
 		/* printc("[[evt_wait return %d]]\n", wait_ret); */
 		if (unlikely(wait_ret < 0)) goto wait;
-#endif
+
 		/* rdtscll(overhead_end); */
 		/* printc("evt_wait...triggered(evt%d)...back to wait..(iter %d)\n",  */
 		/*        wait_ret, test_num1); */
@@ -278,6 +365,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 	{
 		return;
 	}
+#ifdef EVT_C3
 	case COS_UPCALL_RECEVT:
 		/* printc("test_ser1: upcall to recover the event (thd %d, spd %ld)\n", */
 		/*        cos_get_thd_id(), cos_spd_id()); */
@@ -286,85 +374,11 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		/* events_replay_all((int)arg1); */
 		evt_cli_if_recover_upcall_entry((int)arg1);
 		break;
+#endif
 	default:
 		return;
 	}
 	return;
-}
-
-#endif
-
-/****************************
- _       
-| |_ ___ 
-| __/ _ \
-| ||  __/
- \__\___|
-****************************/
-
-#ifdef EXAMINE_TE
-
-extern void *alloc_page(void);
-extern void free_page(void *ptr);
-
-
-static void try_hp(void)
-{
-	periodic_wake_create(cos_spd_id(), 2);
-
-	int i = 0;
-	while(i++ < 20) {
-		/* printc("period blocked (50 ticks) thd %d\n", cos_get_thd_id()); */
-		/* rdtscll(overhead_start); */
-		printc("period thd ...... %d\n", cos_get_thd_id());
-		periodic_wake_wait(cos_spd_id());
-		/* rdtscll(overhead_end); */
-		/* printc("pte_h wake from wait overhead %llu\n", overhead_end - overhead_start); */
-	}
-	periodic_wake_remove(cos_spd_id(), cos_get_thd_id());
-
-	return;
-}
-
-static void try_mp(void)
-{
-	/* timed_event_block(cos_spd_id(), 2); */
-
-	periodic_wake_create(cos_spd_id(), 3);
-
-	int i = 0;
-	while(i++ < 20) {
-		/* printc("period blocked (35 ticks) thd %d\n", cos_get_thd_id()); */
-		/* rdtscll(overhead_start); */
-		printc("period thd ...... %d\n", cos_get_thd_id());
-		periodic_wake_wait(cos_spd_id());
-		/* rdtscll(overhead_end); */
-		/* printc("pte_m wake from wait overhead %llu\n", overhead_end - overhead_start); */
-	}
-	periodic_wake_remove(cos_spd_id(), cos_get_thd_id());
-
-	return;
-}
-
-vaddr_t ec3_ser1_test(int low, int mid, int hig)
-{
-	if (cos_get_thd_id() == hig) {
-		printc("\n<< Test start in spd %d ... >>>\n\n", cos_get_thd_id());
-		try_hp();
-		printc("\n<< ... Test done in spd %d >>>\n\n", cos_get_thd_id());
-	}
-
-	if (cos_get_thd_id() == mid) {
-		try_mp();
-	}
-	
-	/* /\* For benchmark, we use only one thread, so comment this for that *\/ */
-	/* if (cos_get_thd_id() == mid) try_mp(); */
-
-	/* try_mp();   // for fault coverage test */
-
-	/* while(1);  // quick fix the thread termination issue ??? */
-	return 0;
 }
 
 #endif
@@ -399,11 +413,26 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 			UNLOCK();
 		}
 		test_sched_lock = 0;
-
+		
 		/* while(i++ < ITER_SCHED) { */
 		while(1) {
 			/* printc("\n<< high thd %d is blocking on mid thd %d in spd %d (iter %d) >>>\n", cos_get_thd_id(), mid, cos_spd_id(), i); */
+			
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_SCHED
+			unsigned long long infra_overhead_start;
+			unsigned long long infra_overhead_end;
+		meas:
+			rdtscll(infra_overhead_start);
+#endif
+			
 			sched_block(cos_spd_id(), mid);
+			
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_SCHED
+			rdtscll(infra_overhead_end);
+			printc("infra_overhead (sched_block) cost %llu\n",
+			       infra_overhead_end - infra_overhead_start);
+			goto meas;
+#endif
 			
 			while(i == 4 && test_sched_lock++ < 30) {
 				LOCK();
@@ -490,15 +519,18 @@ test_mmpage()
 	unsigned long long infra_overhead_end;
 meas:
 	rdtscll(infra_overhead_start);
-	if (d_addr[0] != mman_alias_page(cos_spd_id(), s_addr[0], 
-					 cos_spd_id()+1, d_addr[0], MAPPING_RW))
-		assert(0);
-	if (cos_get_thd_id() == 13) {
+
+	// do not check, since the page is already in the pgtbl for overhead testing
+	mman_alias_page(cos_spd_id(), s_addr[0], 
+			cos_spd_id()+1, d_addr[0], MAPPING_RW);
+
+	if (cos_get_thd_id() == MEAS_MM_THREAD) {
 		rdtscll(infra_overhead_end);
 		printc("infra_overhead (mman_alias) cost %llu\n",
 		       infra_overhead_end - infra_overhead_start);
 		goto meas;
 	}
+
 #else
 	if (d_addr[0] != mman_alias_page(cos_spd_id(), s_addr[0], 
 					 cos_spd_id()+1, d_addr[0], MAPPING_RW))
@@ -555,6 +587,27 @@ meas:
 	return;
 }
 
+// use this for swifi for saving time
+static void
+test_mmpage_swifi()
+{
+	int i;
+	unsigned long long loopi = 0;
+	s_addr[0] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id(), 1);
+	vaddr_t ret = mman_get_page(cos_spd_id(), s_addr[0], MAPPING_RW);
+
+	d_addr[0] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1);
+	mman_alias_page(cos_spd_id(), s_addr[0], 
+			cos_spd_id()+1, d_addr[0], MAPPING_RW);
+	d_addr[1] = (vaddr_t)valloc_alloc(cos_spd_id(), cos_spd_id()+1, 1);
+	mman_alias_page(cos_spd_id(), s_addr[0], 
+			cos_spd_id()+1, d_addr[1], MAPPING_RW);
+
+	mman_revoke_page(cos_spd_id(), s_addr[0], MAPPING_RW);
+
+	return;
+}
+
 vaddr_t ec3_ser1_test(int low, int mid, int hig)
 {
 	if (cos_get_thd_id() == hig) {
@@ -570,10 +623,11 @@ vaddr_t ec3_ser1_test(int low, int mid, int hig)
 		       cos_get_thd_id());
 		
 		int i = 0;
-		/* while(i++ < 20) { */
-		while(1) {
-			printc("\nnext mm test\n\n");
-			test_mmpage();
+		while(i++ < 1000) {  // avoid running out memory
+		/* while(1) { */
+			printc("\nnext mm test (%d)\n\n", i++);
+			//test_mmpage();
+			test_mmpage_swifi();
 		}
 
 		printc("\n<< thd %d  MM testing done!... >>>\n\n",
@@ -592,6 +646,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		       cos_get_thd_id(), arg1, t, cos_spd_id());
 		break;
 	}
+#ifdef MM_C3
 	case COS_UPCALL_RECOVERY:
 	{
 		printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",
@@ -613,6 +668,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		mem_mgr_cli_if_remove_upcall_subtree_entry((vaddr_t)arg1);
 		break;
 	}
+#endif
 	default:
 		return;
 	}
@@ -695,7 +751,9 @@ ramfs_test(void)
 	
 	// need test for max number of allowed faults (ureboot)
 	/* for (max_test = 0; max_test < 10; max_test++) { */
-	while(1) {
+	/* while(1) { */
+	int i = 0;
+	while(i++ < 1000) {  // avoid running out memory
 		/* printc("\n>>>>>>ramfs test phase 3 start .... (iter %d)\n", max_test); */
 		/* printc("....tsplit 1....\n"); */
 		t1 = fs_tsplit(cos_spd_id(), td_root, params2, strlen(params2), TOR_ALL, evt1);

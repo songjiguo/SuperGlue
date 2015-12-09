@@ -56,16 +56,17 @@ lock_take_contention(cos_lock_t *l, union cos_lock_atomic_struct *result,
 	unsigned long long infra_overhead_end;
 meas:
 	rdtscll(infra_overhead_start);
-	ret = lock_component_take(spdid, lock_id, owner);
-	if (cos_get_thd_id() == 13) {   // this is from the benchmark
-		rdtscll(infra_overhead_end);
-		printc("infra_overhead (lock_component_take) cost %llu\n",
-		       infra_overhead_end - infra_overhead_start);
-		goto meas;
-	}
-#else
-	ret = lock_component_take(spdid, lock_id, owner);
 #endif
+	
+	ret = lock_component_take(spdid, lock_id, owner);
+	
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_LOCK
+	rdtscll(infra_overhead_end);
+	printc("infra_overhead (lock_component_take) cost %llu\n",
+	       infra_overhead_end - infra_overhead_start);
+	goto meas;
+#endif
+	
 	return ret < 0 ? ret : 0;
 }
 

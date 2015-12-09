@@ -12,6 +12,8 @@
 #include <cbuf.h>
 #include <evt.h>
 
+#include <c3_test.h> 
+
 /* torrent descriptor */
 typedef int td_t;
 static const td_t td_null = 0, td_root = 1;
@@ -36,6 +38,11 @@ int trmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, char *ret
 int twmeta(spdid_t spdid, td_t td, const char *key, unsigned int klen, const char *val, unsigned int vlen);
 
 
+extern int fs_treadp(spdid_t spdid, td_t td, int len, int *off, int *sz);
+extern int fs_tread(spdid_t spdid, td_t td, int cbid, int sz);
+extern int fs_twritep(spdid_t spdid, td_t td, int cbid, int sz);
+extern int fs_twrite(spdid_t spdid, td_t td, int cbid, int sz);
+
 /* treadp/twritep version of pack -- using cbufp */
 static inline int
 treadp_pack(spdid_t spdid, td_t td, char *data, int len)
@@ -44,7 +51,7 @@ treadp_pack(spdid_t spdid, td_t td, char *data, int len)
 	char *d;
 	int off, sz;
 	
-	cb = treadp(spdid, td, len, &off, &sz);
+	cb = fs_treadp(spdid, td, len, &off, &sz);
 	/* printc("after treadp in tread_pack off %d sz %d\n", off, sz); */
 	if (!cb < 0) return 0;
 	d = cbufp2buf(cb, sz);
@@ -65,7 +72,23 @@ twritep_pack(spdid_t spdid, td_t td, char *data, int len)
 	if (!d) return -1;
 	cbufp_send(cb);
 	memcpy(d, data, len);
-	ret = twritep(spdid, td, cb, len);
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_RAMFS
+	unsigned long long infra_overhead_start;
+	unsigned long long infra_overhead_end;	
+meas:
+	rdtscll(infra_overhead_start);
+#endif
+
+	ret = fs_twritep(spdid, td, cb, len);
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_RAMFS
+	rdtscll(infra_overhead_end);
+	printc("infra_overhead (twritep) cost %llu\n", 
+	       infra_overhead_end - infra_overhead_start);
+	goto meas;
+#endif
+	
 	cbufp_deref(cb);
 	
 	return ret;
@@ -82,7 +105,7 @@ tread_pack(spdid_t spdid, td_t td, char *data, int len)
 	d = cbuf_alloc(len, &cb);
 	if (!d) return -1;
 
-	ret = tread(spdid, td, cb, len);
+	ret = fs_tread(spdid, td, cb, len);
         if (ret < 0) goto free;
         if (ret > len) {
                 ret = len; /* FIXME: this is broken, and we should figure out a better solution */
@@ -104,7 +127,22 @@ twrite_pack(spdid_t spdid, td_t td, char *data, int len)
 	if (!d) return -1;
 
 	memcpy(d, data, len);
-	ret = twrite(spdid, td, cb, len);
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_RAMFS
+	unsigned long long infra_overhead_start;
+	unsigned long long infra_overhead_end;	
+meas:
+	rdtscll(infra_overhead_start);
+#endif
+	ret = fs_twrite(spdid, td, cb, len);
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_RAMFS
+	rdtscll(infra_overhead_end);
+	printc("infra_overhead (twrite) cost %llu\n", 
+	       infra_overhead_end - infra_overhead_start);
+	goto meas;
+#endif
+
 	cbuf_free(cb);
 	
 	return ret;
@@ -124,7 +162,6 @@ twrite_pack(spdid_t spdid, td_t td, char *data, int len)
 /* }; */
 /* int twmeta(td_t td, int cbid, int sz); */
 
-/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
+/* IDL generated code ver 0.1 ---  Fri Nov 27 10:24:09 2015 */
 
-#include <c3_test.h> 
 #endif /* TORRENT_H */ 

@@ -16,6 +16,14 @@
 
 long passed_evtid;
 
+
+/****************************
+ _            _    
+| | ___   ___| | __
+| |/ _ \ / __| |/ /
+| | (_) | (__|   < 
+|_|\___/ \___|_|\_\
+****************************/
 #ifdef EXAMINE_LOCK
 static int low = 13;
 static int mid = 12;
@@ -105,7 +113,13 @@ cos_init(void)
 
 #endif
 
-
+/****************************
+            _   
+  _____   _| |_ 
+ / _ \ \ / / __|
+|  __/\ V /| |_ 
+ \___| \_/  \__|
+****************************/
 #ifdef EXAMINE_EVT
 
 // evt id is 1
@@ -255,6 +269,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		       cos_get_thd_id(), arg1, t, cos_spd_id());
 		break;
 	}
+#ifdef MM_C3
 	case COS_UPCALL_RECOVERY:
 	{
 		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",  */
@@ -276,6 +291,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		mem_mgr_cli_if_remove_upcall_subtree_entry((vaddr_t)arg1);
 		break;
 	}
+#endif
 	default:
 		return;
 	}

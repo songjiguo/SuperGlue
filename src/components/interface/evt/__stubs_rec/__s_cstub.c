@@ -84,8 +84,7 @@ long __sg_evt_wait(spdid_t spdid, long extern_evt)
 	return ret;
 }
 
-
-int __sg_evt_reflection(spdid_t spdid)
+void __ser_evt_client_fault_notification(int spdid)
 {
 	long ret = 0;
 	

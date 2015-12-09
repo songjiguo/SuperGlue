@@ -142,7 +142,7 @@ rd_update(unsigned int id, int state)
 		printc("rd->period %d rd->creation_ticks %d\n",
 		       rd->period, rd->creation_ticks);
 		assert(rd->state == PTE_CREATED);
-		periodic_wake_create_exist(cos_spd_id(), rd->period);
+		periodic_wake_create_exist(cos_spd_id(), rd->period, 0);
 		break;
 	default:
 		// now only allow above two state
@@ -271,7 +271,7 @@ CSTUB_FN(int, periodic_wake_wait)(struct usr_inv_cap *uc,
 	long fault = 0;
 	struct rec_data_pte *rd = NULL;
 redo:
-	printc("cli: periodic_wake_wait (thd %d)\n", cos_get_thd_id());
+	/* printc("cli: periodic_wake_wait (thd %d)\n", cos_get_thd_id()); */
         rd = rd_update(cos_get_thd_id(), PTE_WAIT);
 	assert(rd);
 

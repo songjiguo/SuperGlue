@@ -19,7 +19,7 @@ cos_asm_server_stub(sched_create_thread_default)
 cos_asm_server_stub_spdid(sched_thread_params)
 cos_asm_server_stub(sched_tick_freq)
 cos_asm_server_stub(sched_cyc_per_tick)
-cos_asm_server_stub(sched_timestamp)
+//cos_asm_server_stub(sched_timestamp)
 cos_asm_server_stub(sched_timer_stopclock)
 cos_asm_server_stub(sched_priority)
 
@@ -45,4 +45,8 @@ cos_asm_server_stub(sched_component_release)
 
 /* Jiguo: this is used to reflect the owner of a critical section. We
    do not need this on the noraml path. */
-cos_asm_server_stub(sched_reflection_component_owner)
+cos_asm_server_stub(sched_reflection_component_owner)	
+
+cos_asm_server_fn_stub_spdid(sched_client_fault_notification,__ser_sched_client_fault_notification)
+cos_asm_server_fn_stub_spdid(sched_timestamp,__ser_sched_save_data_sched_timestamp)
+cos_asm_server_fn_stub_spdid(sched_restore_data_sched_timestamp,__ser_sched_restore_data_sched_timestamp)

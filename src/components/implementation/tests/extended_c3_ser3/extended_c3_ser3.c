@@ -6,8 +6,8 @@
 #include <timed_blk.h>
 #include <evt.h>
 
-#include <valloc.h>
 #include <mem_mgr_large.h>
+#include <valloc.h>
 
 #include <c3_test.h>
 
@@ -37,6 +37,13 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		       cos_get_thd_id(), arg1, t, cos_spd_id());
 		break;
 	}
+/****************************
+ _ __ ___  _ __ ___  
+| '_ ` _ \| '_ ` _ \ 
+| | | | | | | | | | |
+|_| |_| |_|_| |_| |_|
+****************************/
+#ifdef MM_C3
 	case COS_UPCALL_RECOVERY:
 	{
 		/* printc("thread %d passing arg1 %p here (type %d spd %ld) to recover parent\n",  */
@@ -58,6 +65,7 @@ void cos_upcall_fn(upcall_type_t t, void *arg1, void *arg2, void *arg3)
 		mem_mgr_cli_if_remove_upcall_subtree_entry((vaddr_t)arg1);
 		break;
 	}
+#endif
 	default:
 		return;
 	}

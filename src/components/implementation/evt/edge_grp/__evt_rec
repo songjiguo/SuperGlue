@@ -178,10 +178,11 @@ __evt_trigger(spdid_t spdid, long eid)
 	/* } */
 	/* assert(e);	// remove this Jiguo. Then interface should handle this */
 
-	if (!e) {
-		printc("can not find event id %d\n", eid);
-	} else if(e->type != EVT_NORMAL) 
-		printc("event type is wrong\n");
+	/* if (!e) { */
+	/* 	printc("can not find event id %d\n", eid); */
+	/* } else if(e->type != EVT_NORMAL)  */
+	/* 	printc("event type is wrong\n"); */
+
 
 	/* can't trigger groups */
 	if (!e || e->type != EVT_NORMAL) return -EINVAL;
@@ -357,10 +358,6 @@ long evt_wait(spdid_t spdid, long evt_id)
 {
 	long ret;
 
-#ifdef BENCHMARK_MEAS_INV_OVERHEAD_EVT
-	if (cos_get_thd_id() == 13) return 0;
-#endif
-
 	do {
 		lock_take(&evt_lock);
 
@@ -375,6 +372,11 @@ long evt_wait(spdid_t spdid, long evt_id)
 
 		ret = __evt_wait(spdid, evt_id);
 		lock_release(&evt_lock);
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_EVT
+		if (cos_get_thd_id() == MEAS_EVT_THREAD) return 0;
+#endif
+
 		/* printc("thd %d waiting on evt %d\n",cos_get_thd_id(), evt_id); */
 		if (!ret && 0 > sched_block(cos_spd_id(), 0)) BUG();
 
@@ -474,6 +476,7 @@ rd_reflection()
 	 pass lock id, just use the owner thread id to identify the
 	 lock meta data structure?
 	 */
+
 	lock_client_fault_notification(cos_spd_id());
 
 	lock_release(&evt_lock);

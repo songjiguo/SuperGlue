@@ -73,11 +73,11 @@ __ser_trmeta(spdid_t spdid, cbuf_t cbid, int len)
         d = cbuf2buf(cbid, len);
         if (unlikely(!d)) return -5;
         /* mainly to inform the compiler that optimizations are possible */
-        if (unlikely(d->klen <= 0)) return -2; 
+        if (unlikely(d->klen <= 0)) return -2;
         if (unlikely(d->retval_len <= 0)) return -3;
         if (unlikely(d->td == 0)) return -EINVAL;
 
-        return trmeta(spdid, d->td, &d->data[0], d->klen, 
+        return trmeta(spdid, d->td, &d->data[0], d->klen,
                         &d->data[d->klen + 1], d->retval_len);
 }
 
@@ -94,11 +94,11 @@ __ser_twmeta(spdid_t spdid, cbuf_t cbid, int len)
         d = cbuf2buf(cbid, len);
         if (unlikely(!d)) return -5;
         /* mainly to inform the compiler that optimizations are possible */
-        if (unlikely(d->klen <= 0)) return -2; 
+        if (unlikely(d->klen <= 0)) return -2;
         if (unlikely(d->vlen <= 0)) return -2; // TODO: write "" to td->data?
         if (unlikely(d->td == 0)) return -EINVAL;
 
-        return twmeta(spdid, d->td, &d->data[0], d->klen, 
+        return twmeta(spdid, d->td, &d->data[0], d->klen,
                         &d->data[d->klen + 1], d->vlen);
 }
 

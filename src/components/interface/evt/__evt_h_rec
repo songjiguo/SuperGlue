@@ -27,7 +27,7 @@ int evt_set_prio(spdid_t spdid, long extern_evt, int prio);
 unsigned long *evt_stats(spdid_t spdid, unsigned long *stats);
 int evt_stats_len(spdid_t spdid);
 
-/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:57 2015 */
+/* IDL generated code ver 0.1 ---  Fri Nov 27 10:24:09 2015 */
 
 #include <c3_test.h> 
 long evt_split_exist(spdid_t spdid, long parent_evtid, int grp, long evtid);

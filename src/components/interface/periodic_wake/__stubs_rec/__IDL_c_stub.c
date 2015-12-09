@@ -1,4 +1,4 @@
-/* IDL generated code ver 0.1 ---  Wed Nov 25 18:10:58 2015 */
+/* IDL generated code ver 0.1 ---  Fri Nov 27 10:24:10 2015 */
 
 #include <cos_component.h>
 #include <sched.h>
@@ -330,6 +330,7 @@ CSTUB_FN(int, periodic_wake_wait)(struct usr_inv_cap * uc, spdid_t spdid) {
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_periodic_wake_wait(ret, spdid);
 
 	if (unlikely(ret == -ELOOP))
@@ -358,6 +359,7 @@ CSTUB_FN(int, periodic_wake_create)(struct usr_inv_cap * uc, spdid_t spdid,
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_periodic_wake_create(ret, spdid, period);
 
 	if (unlikely(ret == -ELOOP))
@@ -386,6 +388,7 @@ CSTUB_FN(int, periodic_wake_remove)(struct usr_inv_cap * uc, spdid_t spdid,
 			goto redo;
 		}
 	}
+
 	ret = block_cli_if_track_periodic_wake_remove(ret, spdid, thdid);
 
 	if (unlikely(ret == -ELOOP))

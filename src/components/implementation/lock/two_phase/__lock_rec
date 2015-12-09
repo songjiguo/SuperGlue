@@ -267,13 +267,6 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	struct blocked_thds blocked_desc = {.thd_id = curr};
 	int ret = -1;
 
-#ifdef BENCHMARK_MEAS_INV_OVERHEAD_LOCK
-	/* printc("called in lock_component_take passed in lock_id %lu (thd %d)\n", */
-	/*        lock_id, cos_get_thd_id()); */
-	// invocation overhead measure  Jiguo  :: hardcode the thread id here
-	if (cos_get_thd_id() == 13) return 0;
-#endif
-
 	ACT_RECORD(ACT_LOCK, spd, lock_id, cos_get_thd_id(), thd_id);
 
 	/* TAKE(spdid); */
@@ -285,6 +278,10 @@ int lock_component_take(spdid_t spd, unsigned long lock_id, unsigned short int t
 	} 
 
 	TAKE(spdid);
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_LOCK
+	if (cos_get_thd_id() == MEAS_LOCK_THREAD) goto error;
+#endif
 
 	WAIT_FAULT();
 

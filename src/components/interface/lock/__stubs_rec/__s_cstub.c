@@ -117,7 +117,7 @@ int __sg_lock_component_alloc(spdid_t spd)
 }
 
 
-int __sg_lock_reflect(spdid_t spdid)
+int __ser_lock_client_fault_notification(spdid_t spdid)
 {
 	long ret = 0;
 	struct track_lock *tl, *list_head, *tmp;

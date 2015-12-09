@@ -74,7 +74,7 @@ int __sg_sched_block(spdid_t spdid, int dependency_thd)
 	return ret;
 }
 
-int __sg_sched_reflection(spdid_t spdid)
+void __ser_sched_client_fault_notification(int spdid)
 {
 	struct blocked_thd *blk_thd;
 	int ret = 0;
@@ -116,7 +116,7 @@ done:
 }
 
 unsigned long thd_timestamp_track[MAX_NUM_THREADS];
-unsigned long __sg_sched_timestamp()
+unsigned long __ser_sched_save_data_sched_timestamp()
 {
 	unsigned long ret = 0;
 	printc("thd %d calling sched_timestamp\n", cos_get_thd_id());
@@ -129,7 +129,8 @@ unsigned long __sg_sched_timestamp()
 
 	return ret;
 }
-unsigned long __sg_sched_get_creation_timestamp()
+
+unsigned long __ser_sched_restore_data_sched_timestamp()
 {
 	printc("thd %d calling sched_get_creation_timestamp\n", cos_get_thd_id());
 	return thd_timestamp_track[cos_get_thd_id()];

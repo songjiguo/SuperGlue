@@ -249,6 +249,8 @@ long evt_wait_n(spdid_t spdid, long evt_id, int n) {
 	return -1;
 }
 
+#include <c3_test.h>
+
 long evt_wait(spdid_t spdid, long evt_id)
 {
 	long ret;
@@ -257,6 +259,10 @@ long evt_wait(spdid_t spdid, long evt_id)
 		lock_take(&evt_lock);
 		ret = __evt_wait(spdid, evt_id);
 		lock_release(&evt_lock);
+
+#ifdef BENCHMARK_MEAS_INV_OVERHEAD_EVT
+		if (cos_get_thd_id() == MEAS_EVT_THREAD) return 0;
+#endif
 		if (!ret && 0 > sched_block(cos_spd_id(), 0)) BUG();
 	} while (!ret);
 	return ret; 
